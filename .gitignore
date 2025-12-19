@@ -1,0 +1,29 @@
+.claude/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+
+# Environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database (development/testing)
+*.sqlite
+*.sqlite-journal
+
+# IDE
+.vscode/
+.idea/
+
+test-results/

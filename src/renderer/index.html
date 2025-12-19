@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>LUDI Music Player</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar for playlists (future feature) -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Library</h2>
+      </div>
+      <div class="playlist-list" id="playlistList">
+        <!-- Playlists will be rendered here -->
+      </div>
+    </aside>
+
+    <!-- Main panel with nested folder explorer -->
+    <main class="main-panel">
+      <div class="explorer-header">
+        <h1 id="currentListTitle">Main Library</h1>
+        <div class="explorer-controls">
+          <button id="collapseAllBtn" title="Collapse All">Collapse All</button>
+          <button id="expandAllBtn" title="Expand All">Expand All</button>
+        </div>
+      </div>
+
+      <div class="explorer-container" id="explorerContainer">
+        <div class="drop-indicator" id="dropIndicator"></div>
+        <ul class="explorer-tree" id="explorerTree" data-list-id="0">
+          <!-- Tree items will be rendered here -->
+        </ul>
+      </div>
+    </main>
+
+    <!-- Player controls at bottom -->
+    <footer class="player-controls">
+      <div class="player-info">
+        <div class="song-title" id="currentSongTitle">No song playing</div>
+        <div class="song-artist" id="currentSongArtist"></div>
+      </div>
+
+      <div class="playback-controls">
+        <button id="prevBtn" title="Previous" disabled>⏮</button>
+        <button id="playPauseBtn" title="Play/Pause" disabled>▶</button>
+        <button id="nextBtn" title="Next" disabled>⏭</button>
+      </div>
+
+      <div class="time-controls">
+        <span id="currentTime">0:00</span>
+        <input type="range" id="seekBar" min="0" max="100" value="0" disabled>
+        <span id="totalTime">0:00</span>
+      </div>
+
+      <div class="volume-controls">
+        <button id="muteBtn" title="Mute">🔊</button>
+        <input type="range" id="volumeSlider" min="0" max="100" value="100">
+      </div>
+    </footer>
+  </div>
+
+  <script src="howler.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

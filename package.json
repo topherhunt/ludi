@@ -1,0 +1,30 @@
+{
+  "name": "ludi-music",
+  "version": "0.1.0",
+  "description": "Fast, intuitive, lightweight MacOS music library & player",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "test": "playwright test",
+    "postinstall": "electron-rebuild"
+  },
+  "keywords": [
+    "music",
+    "player",
+    "electron",
+    "macos"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "electron": "^28.0.0",
+    "electron-rebuild": "^3.2.9",
+    "playwright": "^1.57.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.0",
+    "howler": "^2.2.4"
+  }
+}
