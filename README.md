@@ -118,4 +118,4 @@ Other:
 - Support playlists and saved searches.
 - Volume equalizer - when enabled, per-song volume is adjusted so all songs have the same max volume.
 - Ability to customize the path to your audio library, and scan / autodetect all files in that path and add them to your main playlist.
-- Right-click on a folder -> "Scan for duplicates of the same song" (in that list/folder). Opens a new window listing all duplicates found (for each, the song + the folder path). Click on any item to jump to it in the main window.
+- Right-click on a folder -> Scans -> "List duplicates of the same song" (in that list/folder). Opens a new window listing all duplicates found (for each, the song + the folder path). Click on any item to jump to it in the main window.

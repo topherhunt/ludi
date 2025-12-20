@@ -14,11 +14,23 @@ body {
 }
 
 .app-container {
+  position: relative;
   display: grid;
   grid-template-columns: 200px 1fr;
   grid-template-rows: 1fr 120px;
   height: 100vh;
-  padding-top: 20px; /* Account for macOS traffic lights */
+}
+
+/* Make top padding area draggable (sidebar only) */
+.app-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200px;
+  height: 20px;
+  -webkit-app-region: drag;
+  z-index: 1000;
 }
 
 /* Sidebar */
@@ -29,11 +41,13 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  padding-top: 20px; /* Account for macOS traffic lights */
 }
 
 .sidebar-header {
   padding: 16px;
   border-bottom: 1px solid #3e3e42;
+  -webkit-app-region: drag;
 }
 
 .sidebar-header h2 {
@@ -54,6 +68,7 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  -webkit-app-region: no-drag;
 }
 
 .playlist-item:hover {
@@ -80,6 +95,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  -webkit-app-region: drag; /* Make header draggable */
 }
 
 .explorer-header h1 {
@@ -96,6 +112,7 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
+  -webkit-app-region: no-drag; /* Keep buttons clickable */
 }
 
 .explorer-controls button:hover {
