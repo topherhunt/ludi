@@ -9,5 +9,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addSong: (data) => ipcRenderer.invoke('db:addSong', data),
   addSongToList: (data) => ipcRenderer.invoke('db:addSongToList', data),
   moveItem: (data) => ipcRenderer.invoke('db:moveItem', data),
-  deleteItem: (itemId) => ipcRenderer.invoke('db:deleteItem', itemId)
+  deleteItem: (itemId) => ipcRenderer.invoke('db:deleteItem', itemId),
+
+  // Settings operations
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
+  closeSettings: () => ipcRenderer.invoke('settings:close')
 });

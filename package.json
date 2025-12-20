@@ -1,5 +1,6 @@
 {
   "name": "ludi-music",
+  "productName": "Ludi",
   "version": "0.1.0",
   "description": "Fast, intuitive, lightweight MacOS music library & player",
   "main": "src/main/main.js",

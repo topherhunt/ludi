@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Settings - Ludi</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="settings-container">
+    <header class="settings-header">
+      <h1>Settings</h1>
+    </header>
+
+    <div class="settings-content">
+      <div class="setting-item">
+        <label class="setting-label">Database path</label>
+        <div class="setting-description">Location where Ludi stores your library database</div>
+        <input type="text" id="databasePath" class="setting-input" readonly>
+      </div>
+
+      <div class="setting-item">
+        <label class="setting-label">Library path</label>
+        <div class="setting-description">Location where audio files are stored</div>
+        <input type="text" id="libraryPath" class="setting-input">
+        <button id="browseBtn" class="browse-btn">Browse...</button>
+      </div>
+    </div>
+
+    <footer class="settings-footer">
+      <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+      <button id="saveBtn" class="btn btn-primary">Save</button>
+    </footer>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

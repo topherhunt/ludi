@@ -192,4 +192,16 @@ test.describe('LUDI Music Player', () => {
     expect(lists[0].title).toBe('Main Library');
     expect(lists[0].id).toBe(0);
   });
+
+  test('should have settings initialized with default values', async () => {
+    const settings = await window.evaluate(async () => {
+      return await window.electronAPI.getSettings();
+    });
+
+    expect(settings).toBeTruthy();
+    expect(settings.library_path).toBeTruthy();
+    expect(settings.library_path).toContain('Music/Ludi Library');
+    expect(settings.database_path).toBeTruthy();
+    expect(settings.database_path).toContain('.ludi/ludi-library.sqlite');
+  });
 });

@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 
 const DB_DIR = path.join(os.homedir(), '.ludi');
-const DB_PATH = path.join(DB_DIR, 'db.sqlite');
+const DB_PATH = path.join(DB_DIR, 'ludi-library.sqlite');
 
 let db;
 
@@ -30,6 +30,21 @@ function initialize() {
       INSERT INTO lists (id, title, is_subfolder, sidebar_position, inserted_at, updated_at)
       VALUES (0, 'Main Library', 0, 0, datetime('now'), datetime('now'))
     `).run();
+  }
+
+  // Initialize default settings
+  initializeDefaultSettings();
+}
+
+function initializeDefaultSettings() {
+  const defaultLibraryPath = path.join(os.homedir(), 'Music', 'Ludi Library');
+
+  const libraryPath = db.prepare('SELECT * FROM settings WHERE key = ?').get('library_path');
+  if (!libraryPath) {
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES ('library_path', ?, datetime('now'))
+    `).run(defaultLibraryPath);
   }
 }
 
@@ -80,6 +95,15 @@ function createTables() {
       file_path TEXT NOT NULL UNIQUE,
       duration_seconds INTEGER NOT NULL,
       inserted_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  // Settings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
   `);
@@ -262,6 +286,32 @@ function deleteItem(itemId) {
   })();
 }
 
+function getSettings() {
+  const settings = {};
+  const rows = db.prepare('SELECT key, value FROM settings').all();
+  rows.forEach(row => {
+    settings[row.key] = row.value;
+  });
+
+  // Add non-editable settings
+  settings.database_path = DB_PATH;
+
+  return settings;
+}
+
+function updateSetting(key, value) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?
+  `).run(key, value, now, value, now);
+}
+
+function getDbPath() {
+  return DB_PATH;
+}
+
 module.exports = {
   initialize,
   getLists,
@@ -271,5 +321,8 @@ module.exports = {
   addSong,
   addSongToList,
   moveItem,
-  deleteItem
+  deleteItem,
+  getSettings,
+  updateSetting,
+  getDbPath
 };
