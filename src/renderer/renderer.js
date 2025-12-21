@@ -4,7 +4,8 @@
 // State
 let currentListId = 0;
 let expandedFolders = new Set();
-let selectedItem = null;
+let selectedItems = new Set(); // Set of item IDs
+let lastSelectedItemId = null; // For SHIFT+click range selection
 let currentSound = null;
 let isPlaying = false;
 let currentPlaylist = [];
@@ -114,6 +115,9 @@ function renderTreeItem(item, parentElement) {
 
   const content = document.createElement('div');
   content.className = 'tree-item-content';
+  if (selectedItems.has(item.id)) {
+    content.classList.add('selected');
+  }
   content.dataset.itemId = item.id;
   content.dataset.isFolder = isFolder;
   if (isFolder) {
@@ -158,6 +162,11 @@ function renderTreeItem(item, parentElement) {
       toggleFolder(item.list_id, iconSpan, children);
     });
   }
+
+  // Click to select
+  content.addEventListener('click', (e) => {
+    handleItemClick(item.id, e);
+  });
 
   // Double-click to play
   content.addEventListener('dblclick', async () => {
@@ -206,6 +215,95 @@ async function toggleFolder(listId, iconElement, childrenElement) {
       });
     }
   }
+}
+
+// Handle item click for selection
+function handleItemClick(itemId, event) {
+  // Don't interfere with folder chevron clicks
+  if (event.target.closest('.tree-item-icon.chevron')) {
+    return;
+  }
+
+  const isCmdKey = event.metaKey || event.ctrlKey; // CMD on Mac, Ctrl on Windows
+  const isShiftKey = event.shiftKey;
+
+  if (isShiftKey && lastSelectedItemId !== null) {
+    // SHIFT+click: Select range from last selected to clicked item
+    const visibleItems = getVisibleItemIds();
+    const lastIndex = visibleItems.indexOf(lastSelectedItemId);
+    const clickedIndex = visibleItems.indexOf(itemId);
+
+    if (lastIndex !== -1 && clickedIndex !== -1) {
+      const start = Math.min(lastIndex, clickedIndex);
+      const end = Math.max(lastIndex, clickedIndex);
+
+      // Clear existing selection and select range
+      selectedItems.clear();
+      for (let i = start; i <= end; i++) {
+        selectedItems.add(visibleItems[i]);
+      }
+    }
+  } else if (isCmdKey) {
+    // CMD+click: Toggle selection
+    if (selectedItems.has(itemId)) {
+      selectedItems.delete(itemId);
+      // If we deselect the last selected item, update lastSelectedItemId
+      if (itemId === lastSelectedItemId) {
+        lastSelectedItemId = selectedItems.size > 0 ? Array.from(selectedItems)[selectedItems.size - 1] : null;
+      }
+    } else {
+      selectedItems.add(itemId);
+      lastSelectedItemId = itemId;
+    }
+  } else {
+    // Plain click: Clear all and select only this item
+    selectedItems.clear();
+    selectedItems.add(itemId);
+    lastSelectedItemId = itemId;
+  }
+
+  // Re-render to update selected classes
+  updateSelectionUI();
+}
+
+// Get all visible item IDs in order (for range selection)
+function getVisibleItemIds() {
+  const items = [];
+  const contentElements = document.querySelectorAll('.tree-item-content');
+
+  contentElements.forEach(element => {
+    // Only include items that are visible (not in collapsed folders)
+    const treeItem = element.closest('.tree-item');
+    let parent = treeItem.parentElement;
+    let isVisible = true;
+
+    // Check if any parent folder is collapsed
+    while (parent && parent !== explorerTree) {
+      if (parent.classList.contains('tree-item-children') && !parent.classList.contains('expanded')) {
+        isVisible = false;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+
+    if (isVisible) {
+      items.push(parseInt(element.dataset.itemId));
+    }
+  });
+
+  return items;
+}
+
+// Update selection UI without full re-render
+function updateSelectionUI() {
+  document.querySelectorAll('.tree-item-content').forEach(element => {
+    const itemId = parseInt(element.dataset.itemId);
+    if (selectedItems.has(itemId)) {
+      element.classList.add('selected');
+    } else {
+      element.classList.remove('selected');
+    }
+  });
 }
 
 // Collapse all folders
@@ -347,11 +445,32 @@ async function addFolder(parentListId, position, title) {
 
 // Drag and drop handlers
 let draggedItem = null;
+let draggedItems = []; // Array of item IDs being dragged
 
 function handleDragStart(e) {
   draggedItem = e.target;
+  const itemId = parseInt(e.target.dataset.itemId);
+
+  // If the dragged item is selected, drag all selected items
+  // Otherwise, just drag this one item
+  if (selectedItems.has(itemId)) {
+    draggedItems = Array.from(selectedItems);
+  } else {
+    draggedItems = [itemId];
+  }
+
   e.dataTransfer.effectAllowed = 'move';
   e.target.style.opacity = '0.5';
+
+  // Apply opacity to all selected items being dragged
+  if (draggedItems.length > 1) {
+    draggedItems.forEach(id => {
+      const element = document.querySelector(`[data-item-id="${id}"]`);
+      if (element && element !== e.target) {
+        element.style.opacity = '0.5';
+      }
+    });
+  }
 }
 
 function handleDragOver(e) {
@@ -376,8 +495,9 @@ function handleDragOver(e) {
     return false;
   }
 
-  // Don't allow dropping on itself
-  if (draggedItem === targetContent) {
+  // Don't allow dropping on itself or any of the dragged items
+  const targetItemId = parseInt(targetContent.dataset.itemId);
+  if (draggedItem === targetContent || draggedItems.includes(targetItemId)) {
     dropIndicator.classList.remove('visible');
     return false;
   }
@@ -396,6 +516,9 @@ function handleDragOver(e) {
 }
 
 async function handleDrop(e) {
+  // Save a copy of draggedItems immediately since dragEnd might clear it
+  const itemsToMove = [...draggedItems];
+
   // If this is an external file drop, don't handle it here - let it bubble to container
   if (e.dataTransfer.types.includes('Files')) {
     return; // Let the container handler deal with file drops
@@ -407,22 +530,17 @@ async function handleDrop(e) {
 
   dropIndicator.classList.remove('visible');
 
-  if (!draggedItem) {
+  if (!draggedItem || itemsToMove.length === 0) {
     return false;
   }
-
-  // Get dragged item info
-  const draggedItemId = parseInt(draggedItem.dataset.itemId);
 
   // Find the target content
   const targetContent = e.target.closest('.tree-item-content');
+  const targetItemId = parseInt(targetContent?.dataset.itemId);
 
-  if (!targetContent || draggedItem === targetContent) {
+  if (!targetContent || itemsToMove.includes(targetItemId)) {
     return false;
   }
-
-  // Get target item info
-  const targetItemId = parseInt(targetContent.dataset.itemId);
 
   // Calculate drop position (before or after target)
   const rect = targetContent.getBoundingClientRect();
@@ -430,36 +548,90 @@ async function handleDrop(e) {
   const insertBefore = e.clientY < midpoint;
 
   try {
-    // Get both items from the backend to determine their positions
-    const draggedItemData = await getItemById(draggedItemId);
+    // Get target item info
     const targetItemData = await getItemById(targetItemId);
 
-    if (!draggedItemData || !targetItemData) {
-      console.error('Could not find item data');
+    if (!targetItemData) {
+      console.error('Could not find target item data');
       return false;
     }
 
-    // Calculate new position
-    let newParentListId = targetItemData.parent_list_id;
-    let newPosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
+    const newParentListId = targetItemData.parent_list_id;
+    const basePosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
 
-    // If dragging within same parent and moving down, adjust for the item being removed
-    if (draggedItemData.parent_list_id === newParentListId &&
-        draggedItemData.position < newPosition) {
-      newPosition--;
+    if (itemsToMove.length === 1) {
+      // Simple case: single item
+      const draggedItemData = await getItemById(itemsToMove[0]);
+
+      if (!draggedItemData) {
+        console.error('Could not find dragged item data');
+        return false;
+      }
+
+      let newPosition = basePosition;
+
+      // If dragging within same parent and moving down, adjust for the item being removed
+      if (draggedItemData.parent_list_id === newParentListId &&
+          draggedItemData.position < newPosition) {
+        newPosition--;
+      }
+
+      await window.electronAPI.moveItem({
+        itemId: draggedItemData.id,
+        newParentListId,
+        newPosition
+      });
+    } else {
+      // Multiple items: move them maintaining their relative order
+      const draggedItemsData = await Promise.all(
+        itemsToMove.map(id => getItemById(id))
+      );
+
+      const validDraggedItems = draggedItemsData.filter(item => item !== null);
+
+      if (validDraggedItems.length === 0) {
+        console.error('No valid items to move');
+        return false;
+      }
+
+      // Sort to maintain relative order
+      validDraggedItems.sort((a, b) => {
+        if (a.parent_list_id === b.parent_list_id) {
+          return a.position - b.position;
+        }
+        return itemsToMove.indexOf(a.id) - itemsToMove.indexOf(b.id);
+      });
+
+      // Move in reverse order if moving down within same parent to avoid position conflicts
+      const sameParent = validDraggedItems.every(item => item.parent_list_id === newParentListId);
+      const movingDown = sameParent && validDraggedItems[0].position < basePosition;
+
+      if (movingDown) {
+        validDraggedItems.reverse();
+      }
+
+      for (let i = 0; i < validDraggedItems.length; i++) {
+        const itemData = validDraggedItems[i];
+        const offset = movingDown ? validDraggedItems.length - 1 - i : i;
+        let newPosition = basePosition + offset;
+
+        // Adjust for items being removed from before target position
+        if (itemData.parent_list_id === newParentListId && itemData.position < basePosition) {
+          newPosition--;
+        }
+
+        await window.electronAPI.moveItem({
+          itemId: itemData.id,
+          newParentListId,
+          newPosition
+        });
+      }
     }
-
-    // Call the moveItem API
-    await window.electronAPI.moveItem({
-      itemId: draggedItemId,
-      newParentListId,
-      newPosition
-    });
 
     // Refresh the tree
     await loadListItems(currentListId);
   } catch (error) {
-    console.error('Error moving item:', error);
+    console.error('Error moving items:', error);
   }
 
   return false;
@@ -468,6 +640,16 @@ async function handleDrop(e) {
 function handleDragEnd(e) {
   e.target.style.opacity = '1';
   dropIndicator.classList.remove('visible');
+
+  // Restore opacity for all dragged items
+  draggedItems.forEach(id => {
+    const element = document.querySelector(`[data-item-id="${id}"]`);
+    if (element) {
+      element.style.opacity = '1';
+    }
+  });
+
+  draggedItems = [];
 }
 
 // Playback functions
@@ -896,35 +1078,61 @@ async function handleExplorerTreeDrop(e) {
 
   const isExternalFileDrop = e.dataTransfer.files && e.dataTransfer.files.length > 0;
 
+  // Save a copy of draggedItems immediately since dragEnd might clear it
+  const itemsToMove = [...draggedItems];
+
   // Handle internal item drags
-  if (!isExternalFileDrop && draggedItem) {
-    const draggedItemId = parseInt(draggedItem.dataset.itemId);
+  if (!isExternalFileDrop && draggedItem && itemsToMove.length > 0) {
     const targetContent = e.target.closest('.tree-item-content');
 
     if (!targetContent) {
       // Dropping in empty space - move to the end of the current list
       try {
-        const draggedItemData = await getItemById(draggedItemId);
-        if (!draggedItemData) {
-          console.error('Could not find dragged item data');
-          return;
-        }
-
         // Get all items in the current list to find the last position
         const items = await window.electronAPI.getListItems(currentListId);
-        const newPosition = items.length - (draggedItemData.parent_list_id === currentListId ? 1 : 0);
 
-        // Call the moveItem API
-        await window.electronAPI.moveItem({
-          itemId: draggedItemId,
-          newParentListId: currentListId,
-          newPosition
-        });
+        // Get data for all dragged items
+        const draggedItemsData = await Promise.all(
+          itemsToMove.map(id => getItemById(id))
+        );
+
+        // Sort dragged items by their current position
+        const sortedDraggedItems = draggedItemsData
+          .filter(item => item !== null)
+          .sort((a, b) => {
+            if (a.parent_list_id === b.parent_list_id) {
+              return a.position - b.position;
+            }
+            return itemsToMove.indexOf(a.id) - itemsToMove.indexOf(b.id);
+          });
+
+        // Calculate base position at the end
+        let basePosition = items.length;
+
+        // Move items one by one
+        for (let i = 0; i < sortedDraggedItems.length; i++) {
+          const itemData = sortedDraggedItems[i];
+          let targetPos = basePosition + i;
+
+          // Adjust if moving within same parent
+          if (itemData.parent_list_id === currentListId) {
+            const movedBefore = sortedDraggedItems.slice(0, i).filter(
+              item => item.parent_list_id === currentListId
+            ).length;
+            targetPos = items.length - (sortedDraggedItems.length - i);
+          }
+
+          await window.electronAPI.moveItem({
+            itemId: itemData.id,
+            newParentListId: currentListId,
+            newPosition: targetPos
+          });
+        }
 
         // Refresh the tree
         await loadListItems(currentListId);
       } catch (error) {
-        console.error('Error moving item:', error);
+        console.error('Error moving items:', error);
       }
     }
     // If over an item, let the item's own handler deal with it

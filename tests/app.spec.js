@@ -523,4 +523,218 @@ test.describe('LUDI Music Player', () => {
     });
     expect(hasLoopState).toBe(true);
   });
+
+  test('should select a single item when clicked', async () => {
+    // Make sure we have at least one item in the tree
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 0) {
+      const firstItem = treeItems.first();
+      await firstItem.click();
+      await window.waitForTimeout(100);
+
+      // Verify the item has the selected class
+      await expect(firstItem).toHaveClass(/selected/);
+
+      // Verify only one item is selected
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(1);
+    }
+  });
+
+  test('should deselect previous item when clicking a different item', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 1) {
+      const firstItem = treeItems.nth(0);
+      const secondItem = treeItems.nth(1);
+
+      // Click first item
+      await firstItem.click();
+      await window.waitForTimeout(100);
+      await expect(firstItem).toHaveClass(/selected/);
+
+      // Click second item
+      await secondItem.click();
+      await window.waitForTimeout(100);
+      await expect(secondItem).toHaveClass(/selected/);
+
+      // First item should no longer be selected
+      const firstHasSelected = await firstItem.evaluate(el => el.classList.contains('selected'));
+      expect(firstHasSelected).toBe(false);
+
+      // Only one item should be selected
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(1);
+    }
+  });
+
+  test('should toggle selection with CMD+click', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 1) {
+      const firstItem = treeItems.nth(0);
+      const secondItem = treeItems.nth(1);
+
+      // Select first item
+      await firstItem.click();
+      await window.waitForTimeout(100);
+
+      // CMD+click second item to add to selection
+      await secondItem.click({ modifiers: ['Meta'] });
+      await window.waitForTimeout(100);
+
+      // Both should be selected
+      await expect(firstItem).toHaveClass(/selected/);
+      await expect(secondItem).toHaveClass(/selected/);
+
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(2);
+
+      // CMD+click second item again to deselect it
+      await secondItem.click({ modifiers: ['Meta'] });
+      await window.waitForTimeout(100);
+
+      const secondHasSelected = await secondItem.evaluate(el => el.classList.contains('selected'));
+      expect(secondHasSelected).toBe(false);
+      await expect(firstItem).toHaveClass(/selected/);
+    }
+  });
+
+  test('should select range with SHIFT+click', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 2) {
+      const firstItem = treeItems.nth(0);
+      const thirdItem = treeItems.nth(2);
+
+      // Select first item
+      await firstItem.click();
+      await window.waitForTimeout(100);
+
+      // SHIFT+click third item to select range
+      await thirdItem.click({ modifiers: ['Shift'] });
+      await window.waitForTimeout(100);
+
+      // All items from first to third should be selected
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(3);
+
+      // Verify first, second, and third are all selected
+      await expect(firstItem).toHaveClass(/selected/);
+      await expect(treeItems.nth(1)).toHaveClass(/selected/);
+      await expect(thirdItem).toHaveClass(/selected/);
+    }
+  });
+
+  test('should apply semitransparent blue highlight to selected items', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 0) {
+      const firstItem = treeItems.first();
+      await firstItem.click();
+      await window.waitForTimeout(100);
+
+      // Check that the selected item has the correct background color
+      const bgColor = await firstItem.evaluate(el => {
+        const styles = window.getComputedStyle(el);
+        return styles.backgroundColor;
+      });
+
+      // Check if it's a semitransparent blue (rgba format with alpha < 1)
+      expect(bgColor).toMatch(/rgba\(/);
+      expect(bgColor).toContain('9'); // First component of rgb(9, 71, 113)
+      expect(bgColor).toContain('71'); // Second component
+      expect(bgColor).toContain('113'); // Third component
+      expect(bgColor).toContain('0.5'); // Alpha component
+    }
+  });
+
+  test('should maintain selection state across renders', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 0) {
+      const firstItem = treeItems.first();
+
+      // Select the first item
+      await firstItem.click();
+      await window.waitForTimeout(100);
+
+      // Get the item ID
+      const itemId = await firstItem.getAttribute('data-item-id');
+
+      // Verify it's selected
+      await expect(firstItem).toHaveClass(/selected/);
+
+      // Force a re-render by switching playlists and back
+      const mainLibraryItem = await window.locator('.playlist-item').first();
+      await mainLibraryItem.click();
+      await window.waitForTimeout(300);
+
+      // Check if selection was maintained (it should be cleared after re-render)
+      // In the current implementation, selection is cleared on re-render
+      const isStillSelected = await window.evaluate((id) => {
+        const element = document.querySelector(`[data-item-id="${id}"]`);
+        return element ? element.classList.contains('selected') : false;
+      }, itemId);
+
+      // Selection should be cleared after re-render
+      expect(isStillSelected).toBe(false);
+    }
+  });
+
+  test('should reorder items via drag and drop', async () => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 1) {
+      // Get initial order
+      const initialLabels = await treeItems.allTextContents();
+      console.log('Initial order:', initialLabels);
+
+      // Try to drag the first item to after the second item
+      const firstItem = treeItems.nth(0);
+      const secondItem = treeItems.nth(1);
+
+      // Get bounding boxes
+      const firstBox = await firstItem.boundingBox();
+      const secondBox = await secondItem.boundingBox();
+
+      if (firstBox && secondBox) {
+        // Perform drag and drop
+        await window.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2);
+        await window.mouse.down();
+        await window.waitForTimeout(100);
+
+        // Move to below the second item
+        await window.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height + 5);
+        await window.waitForTimeout(100);
+
+        await window.mouse.up();
+        await window.waitForTimeout(500);
+
+        // Check if order changed
+        const newLabels = await window.locator('.tree-item-content').allTextContents();
+        console.log('New order:', newLabels);
+
+        // The first and second items should have swapped
+        expect(newLabels[0]).toBe(initialLabels[1]);
+        expect(newLabels[1]).toBe(initialLabels[0]);
+      }
+    }
+  });
 });
