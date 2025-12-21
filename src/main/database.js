@@ -46,6 +46,12 @@ function initializeDefaultSettings() {
       VALUES ('library_path', ?, datetime('now'))
     `).run(defaultLibraryPath);
   }
+
+  // Create library directory if it doesn't exist
+  const currentLibraryPath = libraryPath ? libraryPath.value : defaultLibraryPath;
+  if (!fs.existsSync(currentLibraryPath)) {
+    fs.mkdirSync(currentLibraryPath, { recursive: true });
+  }
 }
 
 function createTables() {
@@ -131,7 +137,14 @@ function getListItems(listId) {
 }
 
 function getSong(songId) {
-  return db.prepare('SELECT * FROM songs WHERE id = ?').get(songId);
+  const song = db.prepare('SELECT * FROM songs WHERE id = ?').get(songId);
+  if (song) {
+    // Get library path from settings
+    const settings = getSettings();
+    // Convert relative path to absolute path
+    song.file_path = path.join(settings.library_path, song.file_path);
+  }
+  return song;
 }
 
 function addFolder(parentListId, position, title) {

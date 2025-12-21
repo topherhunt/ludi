@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const db = require('./database');
+const { parseFile } = require('music-metadata');
 
 let mainWindow;
 let settingsWindow;
@@ -125,19 +127,29 @@ function createMenu() {
 }
 
 app.whenReady().then(() => {
-  // Initialize database
-  db.initialize();
+  try {
+    // Initialize database
+    db.initialize();
 
-  // Create menu
-  createMenu();
+    // Create menu
+    createMenu();
 
-  createWindow();
+    createWindow();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  } catch (error) {
+    console.error('Fatal error during app startup:', error);
+    console.error('Stack trace:', error.stack);
+    app.quit();
+  }
+}).catch(error => {
+  console.error('Fatal error in app.whenReady():', error);
+  console.error('Stack trace:', error.stack);
+  app.quit();
 });
 
 app.on('window-all-closed', () => {
@@ -177,6 +189,70 @@ ipcMain.handle('db:moveItem', (event, { itemId, newParentListId, newPosition }) 
 
 ipcMain.handle('db:deleteItem', (event, itemId) => {
   return db.deleteItem(itemId);
+});
+
+// File import IPC handler
+ipcMain.handle('files:import', async (event, { filePaths, parentListId, position }) => {
+  const supportedExtensions = ['.mp3', '.m4a', '.ogg'];
+  const settings = db.getSettings();
+  const libraryPath = settings.library_path;
+
+  const results = {
+    imported: [],
+    unsupported: [],
+    errors: []
+  };
+
+  for (let i = 0; i < filePaths.length; i++) {
+    const filePath = filePaths[i];
+    const ext = path.extname(filePath).toLowerCase();
+
+    // Check if file type is supported
+    if (!supportedExtensions.includes(ext)) {
+      results.unsupported.push(path.basename(filePath));
+      continue;
+    }
+
+    try {
+      // Extract metadata
+      const metadata = await parseFile(filePath);
+      const title = metadata.common.title || path.basename(filePath, ext);
+      const artist = metadata.common.artist || 'Unknown';
+      const album = metadata.common.album || 'Unknown';
+      const durationSeconds = Math.floor(metadata.format.duration || 0);
+
+      // Create destination directory
+      const destDir = path.join(libraryPath, artist, album);
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+
+      // Copy file to library
+      const fileName = path.basename(filePath);
+      const destPath = path.join(destDir, fileName);
+
+      // Get relative path from library root
+      const relativePath = path.relative(libraryPath, destPath);
+
+      // Copy file (skip if it already exists at destination)
+      if (!fs.existsSync(destPath)) {
+        fs.copyFileSync(filePath, destPath);
+      }
+
+      // Add song to database
+      const songId = db.addSong(relativePath, title, artist, album, durationSeconds);
+
+      // Add song to list at the appropriate position
+      db.addSongToList(songId, parentListId, position + i);
+
+      results.imported.push({ songId, title, artist, album });
+    } catch (error) {
+      console.error('Error importing file:', filePath, error);
+      results.errors.push({ file: path.basename(filePath), error: error.message });
+    }
+  }
+
+  return results;
 });
 
 // Settings IPC handlers

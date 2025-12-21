@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveItem: (data) => ipcRenderer.invoke('db:moveItem', data),
   deleteItem: (itemId) => ipcRenderer.invoke('db:deleteItem', itemId),
 
+  // File import operations
+  importFiles: (data) => ipcRenderer.invoke('files:import', data),
+
   // Settings operations
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),

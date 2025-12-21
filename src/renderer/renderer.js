@@ -519,25 +519,171 @@ function setupEventListeners() {
   collapseAllBtn.addEventListener('click', collapseAll);
   expandAllBtn.addEventListener('click', expandAll);
 
-  // External file drop for importing songs
-  document.addEventListener('drop', handleExternalDrop);
-  document.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  });
+  // Setup drag-and-drop for external files on explorer tree
+  explorerTree.addEventListener('drop', handleExplorerTreeDrop);
+  explorerTree.addEventListener('dragover', handleExplorerTreeDragOver);
+  explorerTree.addEventListener('dragleave', handleDragLeave);
+
+  // Setup drag-and-drop for playlist sidebar items
+  playlistList.addEventListener('drop', handlePlaylistSidebarDrop);
+  playlistList.addEventListener('dragover', handlePlaylistSidebarDragOver);
+  playlistList.addEventListener('dragleave', handleDragLeave);
 }
 
-async function handleExternalDrop(e) {
+let dropTarget = null;
+let dropPosition = 0;
+
+async function handleExplorerTreeDragOver(e) {
+  // Only handle external file drops
+  if (e.dataTransfer.types.includes('Files')) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+
+    // Find the tree item content we're hovering over
+    const treeItemContent = e.target.closest('.tree-item-content');
+    if (treeItemContent) {
+      const rect = treeItemContent.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const insertBefore = e.clientY < midpoint;
+
+      dropIndicator.style.top = (insertBefore ? rect.top : rect.bottom) + 'px';
+      dropIndicator.classList.add('visible');
+
+      dropTarget = treeItemContent;
+      dropPosition = insertBefore ? 0 : 1;
+    } else {
+      // Dropping in empty space at the end of the list
+      const lastItem = explorerTree.querySelector('.tree-item-content:last-child');
+      if (lastItem) {
+        const rect = lastItem.getBoundingClientRect();
+        dropIndicator.style.top = rect.bottom + 'px';
+      }
+      dropIndicator.classList.add('visible');
+      dropTarget = null;
+    }
+  }
+}
+
+async function handlePlaylistSidebarDragOver(e) {
+  // Only handle external file drops
+  if (e.dataTransfer.types.includes('Files')) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+function handleDragLeave(e) {
+  // Only hide indicator if we're leaving the drop zone entirely
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    dropIndicator.classList.remove('visible');
+  }
+}
+
+async function handleExplorerTreeDrop(e) {
+  e.preventDefault();
+  dropIndicator.classList.remove('visible');
+
+  // Only handle external file drops
+  if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
+    return;
+  }
+
+  // Get file paths
+  const filePaths = Array.from(e.dataTransfer.files).map(file => file.path);
+
+  // Calculate insertion position
+  let parentListId = currentListId;
+  let position = 0;
+
+  if (dropTarget) {
+    const itemId = parseInt(dropTarget.dataset.itemId);
+    const targetItem = await getItemById(itemId);
+    if (targetItem) {
+      parentListId = targetItem.parent_list_id;
+      position = dropPosition === 0 ? targetItem.position : targetItem.position + 1;
+    }
+  } else {
+    // Dropping at the end
+    const items = await window.electronAPI.getListItems(currentListId);
+    position = items.length;
+  }
+
+  // Import files
+  const results = await window.electronAPI.importFiles({
+    filePaths,
+    parentListId,
+    position
+  });
+
+  // Show warnings for unsupported files
+  if (results.unsupported.length > 0) {
+    alert(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
+  }
+
+  // Show errors
+  if (results.errors.length > 0) {
+    console.error('Import errors:', results.errors);
+    alert(`Errors importing ${results.errors.length} file(s). Check console for details.`);
+  }
+
+  // Refresh the list
+  await loadListItems(currentListId);
+
+  dropTarget = null;
+}
+
+async function handlePlaylistSidebarDrop(e) {
   e.preventDefault();
 
-  // TODO: Implement file import
-  // This requires:
-  // 1. Extract metadata from audio files (title, artist, album, duration)
-  // 2. Copy files to ~/.ludi/library/{artist}/{album}/
-  // 3. Add songs to database
-  // 4. Add songs to the list at the drop position
+  // Only handle external file drops
+  if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
+    return;
+  }
 
-  console.log('External files dropped:', e.dataTransfer.files);
+  // Find which playlist was dropped on
+  const playlistItem = e.target.closest('.playlist-item');
+  if (!playlistItem) {
+    return;
+  }
+
+  // Get the list ID (Main Library is always 0)
+  const listId = 0; // For now, we only have Main Library
+
+  // Get file paths
+  const filePaths = Array.from(e.dataTransfer.files).map(file => file.path);
+
+  // Get current items to find the end position
+  const items = await window.electronAPI.getListItems(listId);
+  const position = items.length;
+
+  // Import files at the end of the list
+  const results = await window.electronAPI.importFiles({
+    filePaths,
+    parentListId: listId,
+    position
+  });
+
+  // Show warnings for unsupported files
+  if (results.unsupported.length > 0) {
+    alert(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
+  }
+
+  // Show errors
+  if (results.errors.length > 0) {
+    console.error('Import errors:', results.errors);
+    alert(`Errors importing ${results.errors.length} file(s). Check console for details.`);
+  }
+
+  // Refresh the list if we're viewing Main Library
+  if (currentListId === listId) {
+    await loadListItems(currentListId);
+  }
+}
+
+// Helper function to get item by ID
+async function getItemById(itemId) {
+  const items = await window.electronAPI.getListItems(currentListId);
+  return items.find(item => item.id === itemId);
 }
 
 // Initialize the app

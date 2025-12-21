@@ -24,7 +24,7 @@ Fast, intuitive, lightweight, deceptively powerful MacOS music library & player 
 
 Architecture:
 
-- Electron (Tauri was my first choice but it's not functional on MacOS yet.)
+- Electron (Tauri was my first choice but it's not functional on MacOS yet)
 - SQLite for the music library DB
 - Howler.js for audio playback
 - ?? (TODO) for extracting title/artist/album tags from audiofiles
@@ -39,6 +39,9 @@ Features:
 - Changing shuffle and loop settings take effect immediately on next song play, unlike Swinsian which has a long-standing bug where those settings changes don't take effect until you select a different song to play.
 
 ## MILESTONES
+
+- ✅ Basic Electron app skeleton, basic integration test harness
+- [ ]
 
 ### 1. Proof-of-concept
 
