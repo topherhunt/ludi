@@ -167,6 +167,10 @@ ipcMain.handle('db:getListItems', (event, listId) => {
   return db.getListItems(listId);
 });
 
+ipcMain.handle('db:getItem', (event, itemId) => {
+  return db.getItem(itemId);
+});
+
 ipcMain.handle('db:getSong', (event, songId) => {
   return db.getSong(songId);
 });

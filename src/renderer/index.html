@@ -45,9 +45,11 @@
       </div>
 
       <div class="playback-controls">
+        <button id="shuffleBtn" title="Shuffle" class="toggle-btn">🔀</button>
         <button id="prevBtn" title="Previous" disabled>⏮</button>
         <button id="playPauseBtn" title="Play/Pause" disabled>▶</button>
         <button id="nextBtn" title="Next" disabled>⏭</button>
+        <button id="loopBtn" title="Loop: Off" class="toggle-btn">🔁</button>
       </div>
 
       <div class="time-controls">
@@ -61,6 +63,16 @@
         <input type="range" id="volumeSlider" min="0" max="100" value="100">
       </div>
     </footer>
+  </div>
+
+  <!-- Modal Dialog -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-content" id="modalContent"></div>
+      <div class="modal-buttons">
+        <button id="modalOkBtn" class="modal-btn">OK</button>
+      </div>
+    </div>
   </div>
 
   <script src="howler.min.js"></script>

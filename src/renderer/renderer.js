@@ -9,8 +9,17 @@ let currentSound = null;
 let isPlaying = false;
 let currentPlaylist = [];
 let currentTrackIndex = -1;
+let currentPlayingSongId = null;
+let shuffleEnabled = false;
+let loopMode = 'off'; // 'off', 'all', 'one'
+let shuffledIndices = []; // For shuffle mode, maps play order to actual playlist indices
+
+// Expose state for testing
+window.shuffleEnabled = shuffleEnabled;
+window.loopMode = loopMode;
 
 // DOM elements
+const explorerContainer = document.getElementById('explorerContainer');
 const explorerTree = document.getElementById('explorerTree');
 const playlistList = document.getElementById('playlistList');
 const currentListTitle = document.getElementById('currentListTitle');
@@ -19,6 +28,8 @@ const currentSongArtist = document.getElementById('currentSongArtist');
 const playPauseBtn = document.getElementById('playPauseBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const loopBtn = document.getElementById('loopBtn');
 const seekBar = document.getElementById('seekBar');
 const currentTime = document.getElementById('currentTime');
 const totalTime = document.getElementById('totalTime');
@@ -27,6 +38,26 @@ const muteBtn = document.getElementById('muteBtn');
 const collapseAllBtn = document.getElementById('collapseAllBtn');
 const expandAllBtn = document.getElementById('expandAllBtn');
 const dropIndicator = document.getElementById('dropIndicator');
+const modalOverlay = document.getElementById('modalOverlay');
+const modalContent = document.getElementById('modalContent');
+const modalOkBtn = document.getElementById('modalOkBtn');
+
+// Modal dialog helper
+function showModal(message) {
+  modalContent.textContent = message;
+  modalOverlay.classList.add('visible');
+}
+
+function hideModal() {
+  modalOverlay.classList.remove('visible');
+}
+
+modalOkBtn.addEventListener('click', hideModal);
+modalOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOverlay) {
+    hideModal();
+  }
+});
 
 // Initialize
 async function initialize() {
@@ -78,7 +109,8 @@ function renderTreeItem(item, parentElement) {
   li.dataset.itemId = item.id;
 
   const isFolder = item.list_id !== null;
-  const icon = isFolder ? '▸' : '♪';
+  const isPlaying = !isFolder && item.song_id === currentPlayingSongId;
+  const icon = isFolder ? '▸' : (isPlaying ? '▶' : '♪');
 
   const content = document.createElement('div');
   content.className = 'tree-item-content';
@@ -92,6 +124,9 @@ function renderTreeItem(item, parentElement) {
 
   const iconSpan = document.createElement('span');
   iconSpan.className = isFolder ? 'tree-item-icon chevron' : 'tree-item-icon';
+  if (isPlaying) {
+    iconSpan.classList.add('playing');
+  }
   iconSpan.textContent = icon;
 
   const label = document.createElement('span');
@@ -125,11 +160,12 @@ function renderTreeItem(item, parentElement) {
   }
 
   // Double-click to play
-  content.addEventListener('dblclick', () => {
+  content.addEventListener('dblclick', async () => {
     if (isFolder) {
       playFolder(item.list_id);
     } else {
-      playSong(item.song_id);
+      // When playing a song, build the playlist from the current list context
+      await playSongInContext(item.song_id, item.parent_list_id);
     }
   });
 
@@ -319,34 +355,109 @@ function handleDragStart(e) {
 }
 
 function handleDragOver(e) {
+  // If this is an external file drop, don't handle it here - let it bubble to container
+  if (e.dataTransfer.types.includes('Files')) {
+    return; // Let the container handler deal with file drops
+  }
+
   if (e.preventDefault) {
     e.preventDefault();
   }
   e.dataTransfer.dropEffect = 'move';
 
-  // Show drop indicator
-  const rect = e.target.getBoundingClientRect();
-  const midpoint = rect.top + rect.height / 2;
-  const dropPosition = e.clientY < midpoint ? 'before' : 'after';
+  // Find the closest tree-item-content
+  const targetContent = e.target.closest('.tree-item-content');
+  if (!targetContent) {
+    return false;
+  }
 
-  dropIndicator.style.top = (dropPosition === 'before' ? rect.top : rect.bottom) + 'px';
+  // Don't allow dropping on itself
+  if (draggedItem === targetContent) {
+    return false;
+  }
+
+  // Get the container's position for coordinate conversion
+  const containerRect = explorerContainer.getBoundingClientRect();
+
+  // Show drop indicator
+  const rect = targetContent.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  const insertBefore = e.clientY < midpoint;
+
+  // Convert viewport coordinates to container-relative coordinates
+  const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
+  dropIndicator.style.top = relativeTop + 'px';
   dropIndicator.classList.add('visible');
 
   return false;
 }
 
-function handleDrop(e) {
+async function handleDrop(e) {
+  // If this is an external file drop, don't handle it here - let it bubble to container
+  if (e.dataTransfer.types.includes('Files')) {
+    return; // Let the container handler deal with file drops
+  }
+
   if (e.stopPropagation) {
     e.stopPropagation();
   }
 
-  // TODO: Implement actual drop logic with position calculation
-  // This is a placeholder - full drag-drop implementation requires:
-  // 1. Calculate drop position (before/after, or inside for folders)
-  // 2. Call moveItem API
-  // 3. Refresh the tree
-
   dropIndicator.classList.remove('visible');
+
+  if (!draggedItem) {
+    return false;
+  }
+
+  // Find the target content
+  const targetContent = e.target.closest('.tree-item-content');
+  if (!targetContent || draggedItem === targetContent) {
+    return false;
+  }
+
+  // Get dragged item info
+  const draggedItemId = parseInt(draggedItem.dataset.itemId);
+
+  // Get target item info
+  const targetItemId = parseInt(targetContent.dataset.itemId);
+
+  // Calculate drop position (before or after target)
+  const rect = targetContent.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  const insertBefore = e.clientY < midpoint;
+
+  try {
+    // Get both items from the backend to determine their positions
+    const draggedItemData = await getItemById(draggedItemId);
+    const targetItemData = await getItemById(targetItemId);
+
+    if (!draggedItemData || !targetItemData) {
+      console.error('Could not find item data');
+      return false;
+    }
+
+    // Calculate new position
+    let newParentListId = targetItemData.parent_list_id;
+    let newPosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
+
+    // If dragging within same parent and moving down, adjust for the item being removed
+    if (draggedItemData.parent_list_id === newParentListId &&
+        draggedItemData.position < newPosition) {
+      newPosition--;
+    }
+
+    // Call the moveItem API
+    await window.electronAPI.moveItem({
+      itemId: draggedItemId,
+      newParentListId,
+      newPosition
+    });
+
+    // Refresh the tree
+    await loadListItems(currentListId);
+  } catch (error) {
+    console.error('Error moving item:', error);
+  }
+
   return false;
 }
 
@@ -360,18 +471,26 @@ async function playSong(songId) {
   const song = await window.electronAPI.getSong(songId);
   if (!song) return;
 
+  // Update currently playing song ID
+  currentPlayingSongId = songId;
+
   // Stop current playback
   if (currentSound) {
     currentSound.unload();
   }
 
+  // Convert file path to file:// URL for Howler
+  const fileUrl = 'file://' + song.file_path.replace(/\\/g, '/');
+
   currentSound = new Howl({
-    src: [song.file_path],
+    src: [fileUrl],
     html5: true,
     onplay: () => {
       isPlaying = true;
       playPauseBtn.textContent = '⏸';
       updatePlayerUI(song);
+      // Refresh tree to update playing indicator
+      loadListItems(currentListId);
     },
     onend: () => {
       playNext();
@@ -379,6 +498,12 @@ async function playSong(songId) {
     onpause: () => {
       isPlaying = false;
       playPauseBtn.textContent = '▶';
+    },
+    onloaderror: (id, error) => {
+      console.error('Error loading audio:', error, 'Path:', fileUrl);
+    },
+    onplayerror: (id, error) => {
+      console.error('Error playing audio:', error, 'Path:', fileUrl);
     }
   });
 
@@ -387,12 +512,51 @@ async function playSong(songId) {
   seekBar.disabled = false;
 }
 
+async function playSongInContext(songId, parentListId) {
+  // Build the playlist from the parent list
+  currentPlaylist = await buildPlaylistFromFolder(parentListId);
+
+  if (currentPlaylist.length > 0) {
+    // Find the index of this song in the playlist
+    const songIndex = currentPlaylist.findIndex(id => id === songId);
+
+    if (songIndex === -1) {
+      // Song not found, just play it standalone
+      await playSong(songId);
+      return;
+    }
+
+    // Apply shuffle if enabled
+    if (shuffleEnabled) {
+      shuffledIndices = shuffleArray([...Array(currentPlaylist.length).keys()]);
+      // Find where our song ended up in the shuffle
+      currentTrackIndex = shuffledIndices.findIndex(idx => idx === songIndex);
+    } else {
+      shuffledIndices = [];
+      currentTrackIndex = songIndex;
+    }
+
+    const playingSongId = getCurrentSongId(currentTrackIndex);
+    await playSong(playingSongId);
+    updateNavigationButtons();
+  }
+}
+
 async function playFolder(folderId) {
   // Build a flat playlist from the folder (depth-first)
   currentPlaylist = await buildPlaylistFromFolder(folderId);
   if (currentPlaylist.length > 0) {
     currentTrackIndex = 0;
-    await playSong(currentPlaylist[0]);
+
+    // Apply shuffle if enabled
+    if (shuffleEnabled) {
+      shuffledIndices = shuffleArray([...Array(currentPlaylist.length).keys()]);
+    } else {
+      shuffledIndices = [];
+    }
+
+    const songId = getCurrentSongId(0);
+    await playSong(songId);
     updateNavigationButtons();
   }
 }
@@ -412,6 +576,75 @@ async function buildPlaylistFromFolder(folderId) {
   }
 
   return playlist;
+}
+
+// Shuffle function - Fisher-Yates shuffle
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// Apply or remove shuffle
+function applyShuffleToPlaylist() {
+  if (shuffleEnabled && currentPlaylist.length > 0) {
+    // Create shuffled indices
+    shuffledIndices = shuffleArray([...Array(currentPlaylist.length).keys()]);
+
+    // Find where the current song is in the shuffled order
+    if (currentTrackIndex >= 0) {
+      const currentSongId = currentPlaylist[currentTrackIndex];
+      const newIndex = shuffledIndices.findIndex(idx => idx === currentTrackIndex);
+      currentTrackIndex = newIndex;
+    }
+  } else {
+    // Restore original order
+    if (shuffledIndices.length > 0 && currentTrackIndex >= 0) {
+      // Map back from shuffled index to original index
+      currentTrackIndex = shuffledIndices[currentTrackIndex];
+    }
+    shuffledIndices = [];
+  }
+  updateNavigationButtons();
+}
+
+// Get the actual song ID based on current play mode
+function getCurrentSongId(playIndex) {
+  if (shuffleEnabled && shuffledIndices.length > 0) {
+    const actualIndex = shuffledIndices[playIndex];
+    return currentPlaylist[actualIndex];
+  }
+  return currentPlaylist[playIndex];
+}
+
+// Toggle shuffle
+function toggleShuffle() {
+  shuffleEnabled = !shuffleEnabled;
+  window.shuffleEnabled = shuffleEnabled; // Expose for testing
+  shuffleBtn.classList.toggle('active', shuffleEnabled);
+  applyShuffleToPlaylist();
+}
+
+// Toggle loop mode
+function toggleLoop() {
+  if (loopMode === 'off') {
+    loopMode = 'all';
+    loopBtn.classList.add('active');
+    loopBtn.title = 'Loop: All';
+  } else if (loopMode === 'all') {
+    loopMode = 'one';
+    loopBtn.textContent = '🔂';
+    loopBtn.title = 'Loop: One';
+  } else {
+    loopMode = 'off';
+    loopBtn.classList.remove('active');
+    loopBtn.textContent = '🔁';
+    loopBtn.title = 'Loop: Off';
+  }
+  window.loopMode = loopMode; // Expose for testing
 }
 
 function updatePlayerUI(song) {
@@ -451,20 +684,41 @@ function playPause() {
 function playPrevious() {
   if (currentTrackIndex > 0) {
     currentTrackIndex--;
-    playSong(currentPlaylist[currentTrackIndex]);
+    const songId = getCurrentSongId(currentTrackIndex);
+    playSong(songId);
     updateNavigationButtons();
   }
 }
 
 function playNext() {
+  // Handle loop one mode - replay the same song
+  if (loopMode === 'one') {
+    const songId = getCurrentSongId(currentTrackIndex);
+    playSong(songId);
+    return;
+  }
+
+  // Move to next track
   if (currentTrackIndex < currentPlaylist.length - 1) {
     currentTrackIndex++;
-    playSong(currentPlaylist[currentTrackIndex]);
+    const songId = getCurrentSongId(currentTrackIndex);
+    playSong(songId);
     updateNavigationButtons();
   } else {
     // End of playlist
-    isPlaying = false;
-    playPauseBtn.textContent = '▶';
+    if (loopMode === 'all') {
+      // Loop back to the beginning
+      currentTrackIndex = 0;
+      const songId = getCurrentSongId(currentTrackIndex);
+      playSong(songId);
+      updateNavigationButtons();
+    } else {
+      // Stop playback
+      isPlaying = false;
+      playPauseBtn.textContent = '▶';
+      currentPlayingSongId = null;
+      loadListItems(currentListId);
+    }
   }
 }
 
@@ -506,6 +760,8 @@ function setupEventListeners() {
   playPauseBtn.addEventListener('click', playPause);
   prevBtn.addEventListener('click', playPrevious);
   nextBtn.addEventListener('click', playNext);
+  shuffleBtn.addEventListener('click', toggleShuffle);
+  loopBtn.addEventListener('click', toggleLoop);
 
   seekBar.addEventListener('input', (e) => {
     seek(e.target.value);
@@ -519,15 +775,29 @@ function setupEventListeners() {
   collapseAllBtn.addEventListener('click', collapseAll);
   expandAllBtn.addEventListener('click', expandAll);
 
-  // Setup drag-and-drop for external files on explorer tree
-  explorerTree.addEventListener('drop', handleExplorerTreeDrop);
-  explorerTree.addEventListener('dragover', handleExplorerTreeDragOver);
-  explorerTree.addEventListener('dragleave', handleDragLeave);
+  // Setup drag-and-drop for external files on explorer container (not tree, so it works when empty)
+  explorerContainer.addEventListener('drop', handleExplorerTreeDrop);
+  explorerContainer.addEventListener('dragover', handleExplorerTreeDragOver);
+  explorerContainer.addEventListener('dragleave', handleDragLeave);
 
   // Setup drag-and-drop for playlist sidebar items
   playlistList.addEventListener('drop', handlePlaylistSidebarDrop);
   playlistList.addEventListener('dragover', handlePlaylistSidebarDragOver);
   playlistList.addEventListener('dragleave', handleDragLeave);
+
+  // Prevent default dragover on document to prevent browser from opening files
+  document.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+    }
+  });
+
+  // Prevent default drop on document to prevent browser from opening files
+  document.addEventListener('drop', (e) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+    }
+  });
 }
 
 let dropTarget = null;
@@ -539,6 +809,9 @@ async function handleExplorerTreeDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
 
+    // Get the container's position for coordinate conversion
+    const containerRect = explorerContainer.getBoundingClientRect();
+
     // Find the tree item content we're hovering over
     const treeItemContent = e.target.closest('.tree-item-content');
     if (treeItemContent) {
@@ -546,20 +819,31 @@ async function handleExplorerTreeDragOver(e) {
       const midpoint = rect.top + rect.height / 2;
       const insertBefore = e.clientY < midpoint;
 
-      dropIndicator.style.top = (insertBefore ? rect.top : rect.bottom) + 'px';
+      // Convert viewport coordinates to container-relative coordinates
+      const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
+      dropIndicator.style.top = relativeTop + 'px';
       dropIndicator.classList.add('visible');
 
       dropTarget = treeItemContent;
       dropPosition = insertBefore ? 0 : 1;
     } else {
-      // Dropping in empty space at the end of the list
+      // Dropping in empty space - either at the end or in an empty list
       const lastItem = explorerTree.querySelector('.tree-item-content:last-child');
       if (lastItem) {
+        // Position after the last item
         const rect = lastItem.getBoundingClientRect();
-        dropIndicator.style.top = rect.bottom + 'px';
+        const relativeTop = rect.bottom - containerRect.top + explorerContainer.scrollTop;
+        dropIndicator.style.top = relativeTop + 'px';
+        dropIndicator.classList.add('visible');
+        dropTarget = null;
+      } else {
+        // Empty list - position at the top of the explorer tree
+        const treeRect = explorerTree.getBoundingClientRect();
+        const relativeTop = treeRect.top - containerRect.top + explorerContainer.scrollTop;
+        dropIndicator.style.top = relativeTop + 'px';
+        dropIndicator.classList.add('visible');
+        dropTarget = null;
       }
-      dropIndicator.classList.add('visible');
-      dropTarget = null;
     }
   }
 }
@@ -617,13 +901,29 @@ async function handleExplorerTreeDrop(e) {
 
   // Show warnings for unsupported files
   if (results.unsupported.length > 0) {
-    alert(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
+    showModal(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
   }
 
   // Show errors
   if (results.errors.length > 0) {
     console.error('Import errors:', results.errors);
-    alert(`Errors importing ${results.errors.length} file(s). Check console for details.`);
+
+    // Check if any errors are duplicate file errors
+    const duplicateErrors = results.errors.filter(err =>
+      err.error && err.error.includes('UNIQUE constraint')
+    );
+    const otherErrors = results.errors.filter(err =>
+      !err.error || !err.error.includes('UNIQUE constraint')
+    );
+
+    if (duplicateErrors.length > 0) {
+      const fileList = duplicateErrors.map(err => `  • ${err.file}`).join('\n');
+      showModal(`The following file(s) are already in your library:\n\n${fileList}\n\nTo import them again, please rename the file(s) first.`);
+    }
+
+    if (otherErrors.length > 0) {
+      showModal(`Errors importing ${otherErrors.length} file(s). Check console for details.`);
+    }
   }
 
   // Refresh the list
@@ -665,13 +965,29 @@ async function handlePlaylistSidebarDrop(e) {
 
   // Show warnings for unsupported files
   if (results.unsupported.length > 0) {
-    alert(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
+    showModal(`Unsupported file types (ignored):\n${results.unsupported.join('\n')}\n\nSupported formats: .mp3, .m4a, .ogg`);
   }
 
   // Show errors
   if (results.errors.length > 0) {
     console.error('Import errors:', results.errors);
-    alert(`Errors importing ${results.errors.length} file(s). Check console for details.`);
+
+    // Check if any errors are duplicate file errors
+    const duplicateErrors = results.errors.filter(err =>
+      err.error && err.error.includes('UNIQUE constraint')
+    );
+    const otherErrors = results.errors.filter(err =>
+      !err.error || !err.error.includes('UNIQUE constraint')
+    );
+
+    if (duplicateErrors.length > 0) {
+      const fileList = duplicateErrors.map(err => `  • ${err.file}`).join('\n');
+      showModal(`The following file(s) are already in your library:\n\n${fileList}\n\nTo import them again, please rename the file(s) first.`);
+    }
+
+    if (otherErrors.length > 0) {
+      showModal(`Errors importing ${otherErrors.length} file(s). Check console for details.`);
+    }
   }
 
   // Refresh the list if we're viewing Main Library
@@ -682,8 +998,7 @@ async function handlePlaylistSidebarDrop(e) {
 
 // Helper function to get item by ID
 async function getItemById(itemId) {
-  const items = await window.electronAPI.getListItems(currentListId);
-  return items.find(item => item.id === itemId);
+  return await window.electronAPI.getItem(itemId);
 }
 
 // Initialize the app

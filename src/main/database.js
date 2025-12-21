@@ -136,6 +136,22 @@ function getListItems(listId) {
   `).all(listId);
 }
 
+function getItem(itemId) {
+  return db.prepare(`
+    SELECT
+      li.*,
+      l.title as list_title,
+      s.title as song_title,
+      s.artist,
+      s.album,
+      s.duration_seconds
+    FROM list_items li
+    LEFT JOIN lists l ON li.list_id = l.id
+    LEFT JOIN songs s ON li.song_id = s.id
+    WHERE li.id = ?
+  `).get(itemId);
+}
+
 function getSong(songId) {
   const song = db.prepare('SELECT * FROM songs WHERE id = ?').get(songId);
   if (song) {
@@ -329,6 +345,7 @@ module.exports = {
   initialize,
   getLists,
   getListItems,
+  getItem,
   getSong,
   addFolder,
   addSong,

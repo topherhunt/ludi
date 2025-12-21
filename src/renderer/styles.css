@@ -17,7 +17,7 @@ body {
   position: relative;
   display: grid;
   grid-template-columns: 200px 1fr;
-  grid-template-rows: 1fr 120px;
+  grid-template-rows: 1fr auto;
   height: 100vh;
 }
 
@@ -133,7 +133,8 @@ body {
 
 .tree-item {
   position: relative;
-  margin: 2px 0;
+  /* No margin between playlist items (to avoid awkward mis-drops when dragging in new files) */
+  /* margin: 2px 0; */
 }
 
 .tree-item-content {
@@ -224,8 +225,8 @@ body {
   border-top: 1px solid #3e3e42;
   display: grid;
   grid-template-columns: 1fr auto 2fr auto;
-  gap: 20px;
-  padding: 16px 20px;
+  gap: 16px;
+  padding: 6px 20px;
   align-items: center;
 }
 
@@ -239,6 +240,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .song-artist {
@@ -248,6 +250,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
+  line-height: 1.2;
 }
 
 .playback-controls {
@@ -256,13 +259,13 @@ body {
 }
 
 .playback-controls button {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   background-color: transparent;
   border: none;
   border-radius: 50%;
   color: #d4d4d4;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -278,12 +281,23 @@ body {
   cursor: not-allowed;
 }
 
+.playback-controls button.toggle-btn {
+  opacity: 0.4;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.playback-controls button.toggle-btn.active {
+  opacity: 1;
+  background-color: #094771;
+}
+
 .time-controls {
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 12px;
   color: #858585;
+  line-height: 1;
 }
 
 #seekBar {
@@ -297,8 +311,8 @@ body {
 
 #seekBar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: #007acc;
   border-radius: 50%;
   cursor: pointer;
@@ -320,9 +334,12 @@ body {
   height: 28px;
   background-color: transparent;
   border: none;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .volume-controls button:hover {
@@ -340,8 +357,8 @@ body {
 
 #volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: #d4d4d4;
   border-radius: 50%;
   cursor: pointer;
@@ -393,4 +410,75 @@ body {
   height: 1px;
   background-color: #555;
   margin: 4px 0;
+}
+
+/* Modal Dialog */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-overlay.visible {
+  display: flex;
+}
+
+.modal-dialog {
+  background-color: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  min-width: 600px;
+  max-width: 800px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  padding: 24px;
+  color: #cccccc;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: left;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.modal-buttons {
+  padding: 16px 24px;
+  border-top: 1px solid #3e3e42;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  background-color: #0e639c;
+  color: #ffffff;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 2px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 80px;
+}
+
+.modal-btn:hover {
+  background-color: #1177bb;
+}
+
+.modal-btn:active {
+  background-color: #0d5a8f;
+}
+
+/* Playing indicator */
+.tree-item-icon.playing {
+  color: #4ec9b0;
+  font-size: 1.2em;
 }
