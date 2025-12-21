@@ -163,6 +163,15 @@ function getSong(songId) {
   return song;
 }
 
+function getSongByPath(filePath) {
+  return db.prepare('SELECT * FROM songs WHERE file_path = ?').get(filePath);
+}
+
+function isSongInList(songId, parentListId) {
+  const item = db.prepare('SELECT * FROM list_items WHERE song_id = ? AND parent_list_id = ?').get(songId, parentListId);
+  return item !== undefined;
+}
+
 function addFolder(parentListId, position, title) {
   const now = new Date().toISOString();
 
@@ -347,6 +356,8 @@ module.exports = {
   getListItems,
   getItem,
   getSong,
+  getSongByPath,
+  isSongInList,
   addFolder,
   addSong,
   addSongToList,

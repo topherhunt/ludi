@@ -44,11 +44,28 @@ test.describe('LUDI Music Player', () => {
       throw error;
     }
 
-    // Capture console errors
+    // Capture console messages
     window.on('console', msg => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
+      const type = msg.type();
+      const text = msg.text();
+      if (type === 'error') {
+        console.error('[Renderer error]:', text);
+        consoleErrors.push(text);
+      } else if (type === 'warning' || type === 'warn') {
+        console.warn('[Renderer warning]:', text);
       }
+    });
+
+    // Capture page errors
+    window.on('pageerror', error => {
+      console.error('[Renderer page error]:', error.message);
+      consoleErrors.push(error.message);
+    });
+
+    // Capture crashes
+    window.on('crash', () => {
+      console.error('[Renderer CRASHED]');
+      throw new Error('Renderer process crashed');
     });
 
     // Wait for the app to be ready

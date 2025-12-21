@@ -243,8 +243,31 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
         fs.copyFileSync(filePath, destPath);
       }
 
-      // Add song to database
-      const songId = db.addSong(relativePath, title, artist, album, durationSeconds);
+      let songId;
+      try {
+        // Add song to database
+        songId = db.addSong(relativePath, title, artist, album, durationSeconds);
+      } catch (dbError) {
+        // Check if this is a UNIQUE constraint error (song already exists)
+        if (dbError.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          // Get the existing song
+          const existingSong = db.getSongByPath(relativePath);
+          if (existingSong) {
+            songId = existingSong.id;
+            // Check if the song is already in this list
+            if (db.isSongInList(songId, parentListId)) {
+              // Song already exists in this list, skip it
+              results.errors.push({ file: path.basename(filePath), error: 'UNIQUE constraint failed: File already exists in this playlist' });
+              continue;
+            }
+            // Otherwise, we'll add it to the list below
+          } else {
+            throw dbError; // Re-throw if we can't find the song
+          }
+        } else {
+          throw dbError; // Re-throw if it's not a UNIQUE constraint error
+        }
+      }
 
       // Add song to list at the appropriate position
       db.addSongToList(songId, parentListId, position + i);

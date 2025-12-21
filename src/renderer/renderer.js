@@ -365,19 +365,22 @@ function handleDragOver(e) {
   }
   e.dataTransfer.dropEffect = 'move';
 
+  // Get the container's position for coordinate conversion
+  const containerRect = explorerContainer.getBoundingClientRect();
+
   // Find the closest tree-item-content
   const targetContent = e.target.closest('.tree-item-content');
+
   if (!targetContent) {
+    // This shouldn't happen since this handler is on items, but just in case
     return false;
   }
 
   // Don't allow dropping on itself
   if (draggedItem === targetContent) {
+    dropIndicator.classList.remove('visible');
     return false;
   }
-
-  // Get the container's position for coordinate conversion
-  const containerRect = explorerContainer.getBoundingClientRect();
 
   // Show drop indicator
   const rect = targetContent.getBoundingClientRect();
@@ -408,14 +411,15 @@ async function handleDrop(e) {
     return false;
   }
 
+  // Get dragged item info
+  const draggedItemId = parseInt(draggedItem.dataset.itemId);
+
   // Find the target content
   const targetContent = e.target.closest('.tree-item-content');
+
   if (!targetContent || draggedItem === targetContent) {
     return false;
   }
-
-  // Get dragged item info
-  const draggedItemId = parseInt(draggedItem.dataset.itemId);
 
   // Get target item info
   const targetItemId = parseInt(targetContent.dataset.itemId);
@@ -775,7 +779,7 @@ function setupEventListeners() {
   collapseAllBtn.addEventListener('click', collapseAll);
   expandAllBtn.addEventListener('click', expandAll);
 
-  // Setup drag-and-drop for external files on explorer container (not tree, so it works when empty)
+  // Setup drag-and-drop on explorer container (handles both external files and internal items, including empty space)
   explorerContainer.addEventListener('drop', handleExplorerTreeDrop);
   explorerContainer.addEventListener('dragover', handleExplorerTreeDragOver);
   explorerContainer.addEventListener('dragleave', handleDragLeave);
@@ -804,8 +808,10 @@ let dropTarget = null;
 let dropPosition = 0;
 
 async function handleExplorerTreeDragOver(e) {
-  // Only handle external file drops
-  if (e.dataTransfer.types.includes('Files')) {
+  const isExternalFileDrop = e.dataTransfer.types.includes('Files');
+
+  // Handle external file drops
+  if (isExternalFileDrop) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
 
@@ -828,7 +834,8 @@ async function handleExplorerTreeDragOver(e) {
       dropPosition = insertBefore ? 0 : 1;
     } else {
       // Dropping in empty space - either at the end or in an empty list
-      const lastItem = explorerTree.querySelector('.tree-item-content:last-child');
+      // Get the last item at the root level (not nested in folders)
+      const lastItem = explorerTree.querySelector(':scope > li.tree-item:last-child > .tree-item-content');
       if (lastItem) {
         // Position after the last item
         const rect = lastItem.getBoundingClientRect();
@@ -845,6 +852,26 @@ async function handleExplorerTreeDragOver(e) {
         dropTarget = null;
       }
     }
+  } else if (draggedItem) {
+    // Handle internal item drags
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const containerRect = explorerContainer.getBoundingClientRect();
+    const treeItemContent = e.target.closest('.tree-item-content');
+
+    if (!treeItemContent) {
+      // Dragging over empty space - position at the end of the list
+      // Get the last item at the root level (not nested in folders)
+      const lastItem = explorerTree.querySelector(':scope > li.tree-item:last-child > .tree-item-content');
+      if (lastItem) {
+        const rect = lastItem.getBoundingClientRect();
+        const relativeTop = rect.bottom - containerRect.top + explorerContainer.scrollTop;
+        dropIndicator.style.top = relativeTop + 'px';
+        dropIndicator.classList.add('visible');
+      }
+    }
+    // If over an item, let the item's own handler deal with it
   }
 }
 
@@ -867,8 +894,45 @@ async function handleExplorerTreeDrop(e) {
   e.preventDefault();
   dropIndicator.classList.remove('visible');
 
-  // Only handle external file drops
-  if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
+  const isExternalFileDrop = e.dataTransfer.files && e.dataTransfer.files.length > 0;
+
+  // Handle internal item drags
+  if (!isExternalFileDrop && draggedItem) {
+    const draggedItemId = parseInt(draggedItem.dataset.itemId);
+    const targetContent = e.target.closest('.tree-item-content');
+
+    if (!targetContent) {
+      // Dropping in empty space - move to the end of the current list
+      try {
+        const draggedItemData = await getItemById(draggedItemId);
+        if (!draggedItemData) {
+          console.error('Could not find dragged item data');
+          return;
+        }
+
+        // Get all items in the current list to find the last position
+        const items = await window.electronAPI.getListItems(currentListId);
+        const newPosition = items.length - (draggedItemData.parent_list_id === currentListId ? 1 : 0);
+
+        // Call the moveItem API
+        await window.electronAPI.moveItem({
+          itemId: draggedItemId,
+          newParentListId: currentListId,
+          newPosition
+        });
+
+        // Refresh the tree
+        await loadListItems(currentListId);
+      } catch (error) {
+        console.error('Error moving item:', error);
+      }
+    }
+    // If over an item, let the item's own handler deal with it
+    return;
+  }
+
+  // Handle external file drops
+  if (!isExternalFileDrop) {
     return;
   }
 
