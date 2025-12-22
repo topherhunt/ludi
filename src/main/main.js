@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
@@ -33,6 +33,30 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // Register media keys
+  registerMediaKeys();
+}
+
+function registerMediaKeys() {
+  // Register global shortcuts for media keys
+  globalShortcut.register('MediaPlayPause', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('media-key', 'play-pause');
+    }
+  });
+
+  globalShortcut.register('MediaNextTrack', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('media-key', 'next');
+    }
+  });
+
+  globalShortcut.register('MediaPreviousTrack', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('media-key', 'previous');
+    }
   });
 }
 
@@ -156,6 +180,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  // Unregister all shortcuts
+  globalShortcut.unregisterAll();
 });
 
 // IPC handlers

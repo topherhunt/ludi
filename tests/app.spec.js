@@ -348,8 +348,9 @@ test.describe('LUDI Music Player', () => {
       };
     });
 
-    // Footer should be reasonably compact (less than 50px total height)
-    expect(footerDimensions.footer.height).toBeLessThan(50);
+    // Footer should be reasonably compact (less than 60px total height)
+    // Updated from 50px to 60px to accommodate 1.5x larger playback buttons (42px instead of 28px)
+    expect(footerDimensions.footer.height).toBeLessThan(60);
   });
 
   test('should import audio file into empty playlist via drag-and-drop', async () => {

@@ -259,13 +259,13 @@ body {
 }
 
 .playback-controls button {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   background-color: transparent;
   border: none;
   border-radius: 50%;
   color: #d4d4d4;
-  font-size: 14px;
+  font-size: 21px;
   cursor: pointer;
   display: flex;
   align-items: center;

@@ -20,5 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
-  closeSettings: () => ipcRenderer.invoke('settings:close')
+  closeSettings: () => ipcRenderer.invoke('settings:close'),
+
+  // Media key events
+  onMediaKey: (callback) => {
+    ipcRenderer.on('media-key', (event, action) => callback(action));
+  }
 });

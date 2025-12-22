@@ -1102,6 +1102,21 @@ function setupEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', handleKeyDown);
+
+  // Media key shortcuts
+  window.electronAPI.onMediaKey((action) => {
+    switch (action) {
+      case 'play-pause':
+        playPause();
+        break;
+      case 'next':
+        playNext();
+        break;
+      case 'previous':
+        playPrevious();
+        break;
+    }
+  });
 }
 
 let dropTarget = null;
