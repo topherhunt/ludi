@@ -494,9 +494,9 @@ test.describe('LUDI Music Player', () => {
     expect(loopMode).toBe('one');
     await expect(loopBtn).toHaveClass(/active/);
 
-    // Check if button text changed to loop one icon
-    const loopOneText = await loopBtn.textContent();
-    expect(loopOneText).toBe('🔂');
+    // Check if button icon changed to loop one (bi-repeat-1)
+    const loopOneIcon = loopBtn.locator('i.bi-repeat-1');
+    await expect(loopOneIcon).toBeVisible();
 
     // Click to set loop mode to 'off'
     await loopBtn.click();
@@ -507,9 +507,9 @@ test.describe('LUDI Music Player', () => {
     });
     expect(loopMode).toBe('off');
 
-    // Check if button text changed back to loop icon
-    const loopOffText = await loopBtn.textContent();
-    expect(loopOffText).toBe('🔁');
+    // Check if button icon changed back to loop (bi-repeat)
+    const loopOffIcon = loopBtn.locator('i.bi-repeat');
+    await expect(loopOffIcon).toBeVisible();
   });
 
   test('should have shuffle and loop state accessible from window', async () => {
@@ -702,6 +702,12 @@ test.describe('LUDI Music Player', () => {
     const treeItems = await window.locator('.tree-item-content');
     const count = await treeItems.count();
 
+    // Helper to extract item name without the item count (for folders)
+    const getItemName = (label) => {
+      // Remove trailing item count like "13 items" or "1 item"
+      return label.replace(/\d+ items?$/, '').trim();
+    };
+
     if (count > 1) {
       // Get initial order
       const initialLabels = await treeItems.allTextContents();
@@ -732,9 +738,9 @@ test.describe('LUDI Music Player', () => {
         const newLabels = await window.locator('.tree-item-content').allTextContents();
         console.log('New order:', newLabels);
 
-        // The first and second items should have swapped
-        expect(newLabels[0]).toBe(initialLabels[1]);
-        expect(newLabels[1]).toBe(initialLabels[0]);
+        // The first and second items should have swapped (compare names without item counts)
+        expect(getItemName(newLabels[0])).toBe(getItemName(initialLabels[1]));
+        expect(getItemName(newLabels[1])).toBe(getItemName(initialLabels[0]));
       }
     }
   });

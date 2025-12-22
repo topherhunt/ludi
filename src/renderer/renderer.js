@@ -995,7 +995,7 @@ async function playSong(songId) {
     html5: true,
     onplay: () => {
       isPlaying = true;
-      playPauseBtn.textContent = '⏸';
+      playPauseBtn.innerHTML = '<i class="bi bi-pause-circle-fill"></i>';
       updatePlayerUI(song);
       // Refresh tree to update playing indicator
       loadListItems(currentListId);
@@ -1005,7 +1005,7 @@ async function playSong(songId) {
     },
     onpause: () => {
       isPlaying = false;
-      playPauseBtn.textContent = '▶';
+      playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
     },
     onloaderror: (id, error) => {
       console.error('Error loading audio:', error, 'Path:', fileUrl);
@@ -1084,7 +1084,7 @@ function clearPlayback() {
   shuffledIndices = [];
 
   // Reset UI
-  playPauseBtn.textContent = '▶';
+  playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
   playPauseBtn.disabled = true;
   seekBar.disabled = true;
   seekBar.value = 0;
@@ -1172,12 +1172,12 @@ function toggleLoop() {
     loopBtn.title = 'Loop: All';
   } else if (loopMode === 'all') {
     loopMode = 'one';
-    loopBtn.textContent = '🔂';
+    loopBtn.innerHTML = '<i class="bi bi-repeat-1"></i>';
     loopBtn.title = 'Loop: One';
   } else {
     loopMode = 'off';
     loopBtn.classList.remove('active');
-    loopBtn.textContent = '🔁';
+    loopBtn.innerHTML = '<i class="bi bi-repeat"></i>';
     loopBtn.title = 'Loop: Off';
   }
   window.loopMode = loopMode; // Expose for testing
@@ -1254,7 +1254,7 @@ function playNext() {
         currentSound.stop();
       }
       isPlaying = false;
-      playPauseBtn.textContent = '▶';
+      playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
       currentPlayingSongId = null;
       loadListItems(currentListId);
     }

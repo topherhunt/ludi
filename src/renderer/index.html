@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' data: file:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' data: file:; font-src 'self'">
   <title>LUDI Music Player</title>
+  <link rel="stylesheet" href="bootstrap-icons.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -49,11 +50,11 @@
       </div>
 
       <div class="playback-controls">
-        <button id="shuffleBtn" title="Shuffle" class="toggle-btn">🔀</button>
-        <button id="prevBtn" title="Previous" disabled>⏮</button>
-        <button id="playPauseBtn" title="Play/Pause" disabled>▶</button>
-        <button id="nextBtn" title="Next" disabled>⏭</button>
-        <button id="loopBtn" title="Loop: Off" class="toggle-btn">🔁</button>
+        <button id="shuffleBtn" title="Shuffle" class="toggle-btn"><i class="bi bi-shuffle"></i></button>
+        <button id="prevBtn" title="Previous" disabled><i class="bi bi-skip-backward-circle-fill"></i></button>
+        <button id="playPauseBtn" title="Play/Pause" disabled><i class="bi bi-play-circle-fill"></i></button>
+        <button id="nextBtn" title="Next" disabled><i class="bi bi-skip-forward-circle-fill"></i></button>
+        <button id="loopBtn" title="Loop: Off" class="toggle-btn"><i class="bi bi-repeat"></i></button>
       </div>
 
       <div class="time-controls">
