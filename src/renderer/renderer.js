@@ -441,6 +441,17 @@ function updateSelectionUI() {
   });
 }
 
+// Scroll the first selected item into view
+function scrollSelectedIntoView() {
+  if (selectedItems.size === 0) return;
+
+  const firstSelectedId = Array.from(selectedItems)[0];
+  const element = document.querySelector(`.tree-item-content[data-item-id="${firstSelectedId}"]`);
+  if (element) {
+    element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
 // Collapse all folders
 async function collapseAll() {
   const allFolders = document.querySelectorAll('[data-folder-id]');
@@ -1229,6 +1240,111 @@ async function handleKeyDown(e) {
     }
 
     await handleDeleteSelected();
+    return;
+  }
+
+  // Arrow key navigation (only when focus is in the playlist panel)
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+
+    const visibleItems = getVisibleItemIds();
+    if (visibleItems.length === 0) return;
+
+    if (selectedItems.size === 0) {
+      // Nothing selected, select first item
+      const targetId = e.key === 'ArrowDown' ? visibleItems[0] : visibleItems[visibleItems.length - 1];
+      selectedItems.add(targetId);
+      lastSelectedItemId = targetId;
+    } else {
+      // Find the first (topmost) selected item
+      let firstSelectedIndex = -1;
+      for (let i = 0; i < visibleItems.length; i++) {
+        if (selectedItems.has(visibleItems[i])) {
+          firstSelectedIndex = i;
+          break;
+        }
+      }
+
+      if (firstSelectedIndex !== -1) {
+        const newIndex = e.key === 'ArrowDown'
+          ? Math.min(firstSelectedIndex + 1, visibleItems.length - 1)
+          : Math.max(firstSelectedIndex - 1, 0);
+
+        selectedItems.clear();
+        selectedItems.add(visibleItems[newIndex]);
+        lastSelectedItemId = visibleItems[newIndex];
+      }
+    }
+
+    updateSelectionUI();
+    scrollSelectedIntoView();
+    return;
+  }
+
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+
+    // Check if any selected items are folders
+    let hasSelectedFolder = false;
+    for (const itemId of selectedItems) {
+      const element = document.querySelector(`.tree-item-content[data-item-id="${itemId}"]`);
+      if (element && element.dataset.isFolder === 'true') {
+        hasSelectedFolder = true;
+        break;
+      }
+    }
+
+    if (hasSelectedFolder) {
+      // Collapse (left) or expand (right) selected folders
+      for (const itemId of selectedItems) {
+        const element = document.querySelector(`.tree-item-content[data-item-id="${itemId}"]`);
+        if (element && element.dataset.isFolder === 'true') {
+          const folderId = parseInt(element.dataset.folderId);
+          const iconElement = element.querySelector('.tree-item-icon.chevron');
+          const childrenElement = element.parentElement.querySelector('.tree-item-children');
+
+          const isExpanded = iconElement.classList.contains('expanded');
+          const shouldExpand = e.key === 'ArrowRight';
+
+          if (shouldExpand && !isExpanded) {
+            await toggleFolder(folderId, iconElement, childrenElement);
+          } else if (!shouldExpand && isExpanded) {
+            await toggleFolder(folderId, iconElement, childrenElement);
+          }
+        }
+      }
+    } else if (currentSound) {
+      // No folder selected, seek in current song if playing/paused
+      const currentPos = currentSound.seek() || 0;
+      const duration = currentSound.duration();
+      const seekAmount = e.key === 'ArrowRight' ? 5 : -5;
+      const newPos = Math.max(0, Math.min(duration, currentPos + seekAmount));
+      currentSound.seek(newPos);
+    }
+    return;
+  }
+
+  // Enter or Space to play selected item
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+
+    if (selectedItems.size === 0) return;
+
+    const firstSelectedId = Array.from(selectedItems)[0];
+    const element = document.querySelector(`.tree-item-content[data-item-id="${firstSelectedId}"]`);
+    if (!element) return;
+
+    if (element.dataset.isFolder === 'true') {
+      const folderId = parseInt(element.dataset.folderId);
+      playFolder(folderId);
+    } else {
+      const songId = parseInt(element.dataset.songId);
+      const item = await getItemById(firstSelectedId);
+      if (item) {
+        await playSongInContext(songId, item.parent_list_id);
+      }
+    }
+    return;
   }
 }
 
