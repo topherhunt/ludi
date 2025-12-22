@@ -1301,7 +1301,24 @@ async function handleKeyDown(e) {
     return;
   }
 
+  // Check if any modal is open (except for Escape key which can close modals)
+  const modalOpen = modalOverlay.classList.contains('visible') ||
+                    renameModalOverlay.classList.contains('visible');
+  if (modalOpen && e.key !== 'Escape') {
+    return;
+  }
+
   if (e.key === 'Escape') {
+    // Close modals if open
+    if (renameModalOverlay.classList.contains('visible')) {
+      renameModalOverlay.classList.remove('visible');
+      return;
+    }
+    if (modalOverlay.classList.contains('visible')) {
+      modalOverlay.classList.remove('visible');
+      return;
+    }
+
     // Close dropdown menu if open
     if (addLibraryDropdown.classList.contains('visible')) {
       addLibraryDropdown.classList.remove('visible');
