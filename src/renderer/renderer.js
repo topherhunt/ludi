@@ -519,6 +519,18 @@ function showContextMenu(x, y, item) {
   });
   menu.appendChild(addFolderAfter);
 
+  // Move into new folder (when items are selected)
+  if (selectedItems.size > 0) {
+    const moveIntoNewFolder = document.createElement('div');
+    moveIntoNewFolder.className = 'context-menu-item';
+    moveIntoNewFolder.textContent = 'Move into New Folder...';
+    moveIntoNewFolder.addEventListener('click', () => {
+      menu.remove();
+      handleMoveIntoNewFolder();
+    });
+    menu.appendChild(moveIntoNewFolder);
+  }
+
   if (isFolder) {
     menu.appendChild(createSeparator());
 
@@ -603,10 +615,11 @@ function createSeparator() {
   return sep;
 }
 
-// Add folder
+// Add folder (returns the new folder's list ID)
 async function addFolder(parentListId, position, title) {
-  await window.electronAPI.addFolder({ parentListId, position, title });
+  const folderId = await window.electronAPI.addFolder({ parentListId, position, title });
   await loadListItems(currentListId);
+  return folderId;
 }
 
 // Add folder with rename prompt
@@ -636,6 +649,57 @@ async function handleNewFolderFromDropdown() {
   }
 
   await addFolderWithRename(parentListId, position);
+}
+
+// Move selected items into a new folder
+async function handleMoveIntoNewFolder() {
+  if (selectedItems.size === 0) return;
+
+  // Get all selected items and sort by position to find the first one
+  const selectedItemIds = Array.from(selectedItems);
+  const itemsData = [];
+  for (const itemId of selectedItemIds) {
+    const item = await getItemById(itemId);
+    if (item) {
+      itemsData.push(item);
+    }
+  }
+
+  if (itemsData.length === 0) return;
+
+  // Sort by position to find the first selected item
+  itemsData.sort((a, b) => a.position - b.position);
+  const firstItem = itemsData[0];
+
+  // Show rename modal to get folder name
+  showRenameModal('New Folder', async (folderName) => {
+    // Create new folder at the position of the first selected item
+    const newFolderId = await window.electronAPI.addFolder({
+      parentListId: firstItem.parent_list_id,
+      position: firstItem.position,
+      title: folderName
+    });
+
+    // Move all selected items into the new folder
+    // Sort by original position descending to avoid position conflicts when moving
+    itemsData.sort((a, b) => b.position - a.position);
+
+    for (let i = 0; i < itemsData.length; i++) {
+      const item = itemsData[i];
+      // Insert at position 0, but since we're going in reverse order,
+      // each item will push the previous ones down, resulting in original order
+      await window.electronAPI.moveItem({
+        itemId: item.id,
+        newParentListId: newFolderId,
+        newPosition: 0
+      });
+    }
+
+    // Clear selection and refresh
+    selectedItems.clear();
+    lastSelectedItemId = null;
+    await loadListItems(currentListId);
+  });
 }
 
 // Drag and drop handlers
@@ -1002,7 +1066,35 @@ async function playFolder(folderId) {
     const songId = getCurrentSongId(0);
     await playSong(songId);
     updateNavigationButtons();
+  } else {
+    // Empty folder - clear playback
+    clearPlayback();
   }
+}
+
+function clearPlayback() {
+  if (currentSound) {
+    currentSound.unload();
+    currentSound = null;
+  }
+  isPlaying = false;
+  currentPlayingSongId = null;
+  currentPlaylist = [];
+  currentTrackIndex = 0;
+  shuffledIndices = [];
+
+  // Reset UI
+  playPauseBtn.textContent = '▶';
+  playPauseBtn.disabled = true;
+  seekBar.disabled = true;
+  seekBar.value = 0;
+  currentTime.textContent = '0:00';
+  totalTime.textContent = '0:00';
+  currentSongTitle.textContent = 'No song playing';
+  currentSongArtist.textContent = '';
+
+  // Refresh tree to update playing indicators
+  loadListItems(currentListId);
 }
 
 async function buildPlaylistFromFolder(folderId) {
