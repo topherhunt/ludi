@@ -738,4 +738,37 @@ test.describe('LUDI Music Player', () => {
       }
     }
   });
+
+  test('should delete a folder', async () => {
+    // Create a new folder using the + button
+    await window.click('#addLibraryBtn');
+    await window.waitForTimeout(100);
+    await window.click('#newFolderMenuItem');
+    await window.waitForTimeout(100);
+
+    // Enter folder name in the modal
+    await window.fill('#renameInput', 'Test Folder to Delete');
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(300);
+
+    // Find the folder we just created
+    const folderContent = await window.locator('.tree-item-content:has-text("Test Folder to Delete")').first();
+    expect(await folderContent.isVisible()).toBe(true);
+
+    // Select the folder
+    await folderContent.click();
+    await window.waitForTimeout(100);
+
+    // Press Backspace to delete
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+
+    // Click Yes in the confirmation modal
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(300);
+
+    // Verify the folder is gone
+    const deletedFolder = await window.locator('.tree-item-content:has-text("Test Folder to Delete")').count();
+    expect(deletedFolder).toBe(0);
+  });
 });

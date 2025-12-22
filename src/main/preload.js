@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addSongToList: (data) => ipcRenderer.invoke('db:addSongToList', data),
   moveItem: (data) => ipcRenderer.invoke('db:moveItem', data),
   deleteItem: (itemId) => ipcRenderer.invoke('db:deleteItem', itemId),
+  renameFolder: (data) => ipcRenderer.invoke('db:renameFolder', data),
+  updateFolderExpanded: (data) => ipcRenderer.invoke('db:updateFolderExpanded', data),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
 
   // File import operations

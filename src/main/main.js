@@ -224,6 +224,14 @@ ipcMain.handle('db:deleteItem', (event, itemId) => {
   return db.deleteItem(itemId);
 });
 
+ipcMain.handle('db:renameFolder', (event, { listId, newTitle }) => {
+  return db.renameFolder(listId, newTitle);
+});
+
+ipcMain.handle('db:updateFolderExpanded', (event, { listId, isExpanded }) => {
+  return db.updateFolderExpanded(listId, isExpanded);
+});
+
 ipcMain.handle('db:deleteItemWithFiles', (event, itemId) => {
   const fs = require('fs');
 

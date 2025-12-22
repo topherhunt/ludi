@@ -13,6 +13,10 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <h2>Library</h2>
+        <button id="addLibraryBtn" class="add-btn" title="Add">+</button>
+        <div id="addLibraryDropdown" class="dropdown-menu">
+          <div class="dropdown-item" id="newFolderMenuItem">New Folder</div>
+        </div>
       </div>
       <div class="playlist-list" id="playlistList">
         <!-- Playlists will be rendered here -->
@@ -71,6 +75,20 @@
       <div class="modal-content" id="modalContent"></div>
       <div class="modal-buttons" id="modalButtons">
         <button id="modalOkBtn" class="modal-btn">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div id="renameModalOverlay" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <label for="renameInput">Folder Name:</label>
+        <input type="text" id="renameInput" class="modal-input" placeholder="Enter folder name">
+      </div>
+      <div class="modal-buttons">
+        <button id="renameCancelBtn" class="modal-btn modal-btn-secondary">Cancel</button>
+        <button id="renameOkBtn" class="modal-btn">OK</button>
       </div>
     </div>
   </div>

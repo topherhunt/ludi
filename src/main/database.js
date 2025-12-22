@@ -62,6 +62,7 @@ function createTables() {
       title TEXT NOT NULL,
       is_subfolder INTEGER NOT NULL,
       sidebar_position INTEGER,
+      is_expanded INTEGER DEFAULT 0,
       inserted_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
@@ -113,6 +114,13 @@ function createTables() {
       updated_at TEXT NOT NULL
     )
   `);
+
+  // Migrations - Add is_expanded column if it doesn't exist
+  const columns = db.prepare("PRAGMA table_info(lists)").all();
+  const hasExpandedColumn = columns.some(col => col.name === 'is_expanded');
+  if (!hasExpandedColumn) {
+    db.exec(`ALTER TABLE lists ADD COLUMN is_expanded INTEGER DEFAULT 0`);
+  }
 }
 
 function getLists() {
@@ -124,6 +132,7 @@ function getListItems(listId) {
     SELECT
       li.*,
       l.title as list_title,
+      l.is_expanded as list_is_expanded,
       s.title as song_title,
       s.artist,
       s.album,
@@ -307,13 +316,15 @@ function deleteItem(itemId) {
       for (const child of childItems) {
         deleteItem(child.id);
       }
-
-      // Delete the folder (list) itself
-      db.prepare('DELETE FROM lists WHERE id = ?').run(item.list_id);
     }
 
-    // Delete the list_item entry
+    // Delete the list_item entry first (before deleting the list itself to avoid FK constraint)
     db.prepare('DELETE FROM list_items WHERE id = ?').run(itemId);
+
+    // If it's a folder, delete the folder (list) itself after the list_item is gone
+    if (item.list_id !== null) {
+      db.prepare('DELETE FROM lists WHERE id = ?').run(item.list_id);
+    }
 
     // Shift positions of items after this one up
     db.prepare(`
@@ -394,6 +405,24 @@ function updateSetting(key, value) {
   `).run(key, value, now, value, now);
 }
 
+function renameFolder(listId, newTitle) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE lists
+    SET title = ?, updated_at = ?
+    WHERE id = ?
+  `).run(newTitle, now, listId);
+}
+
+function updateFolderExpanded(listId, isExpanded) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE lists
+    SET is_expanded = ?, updated_at = ?
+    WHERE id = ?
+  `).run(isExpanded ? 1 : 0, now, listId);
+}
+
 function getDbPath() {
   return DB_PATH;
 }
@@ -412,6 +441,8 @@ module.exports = {
   moveItem,
   deleteItem,
   deleteItemWithFiles,
+  renameFolder,
+  updateFolderExpanded,
   getSettings,
   updateSetting,
   getDbPath

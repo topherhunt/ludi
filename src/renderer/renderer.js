@@ -3,7 +3,6 @@
 
 // State
 let currentListId = 0;
-let expandedFolders = new Set();
 let selectedItems = new Set(); // Set of item IDs
 let lastSelectedItemId = null; // For SHIFT+click range selection
 let currentSound = null;
@@ -43,6 +42,13 @@ const modalOverlay = document.getElementById('modalOverlay');
 const modalContent = document.getElementById('modalContent');
 const modalButtons = document.getElementById('modalButtons');
 const modalOkBtn = document.getElementById('modalOkBtn');
+const addLibraryBtn = document.getElementById('addLibraryBtn');
+const addLibraryDropdown = document.getElementById('addLibraryDropdown');
+const newFolderMenuItem = document.getElementById('newFolderMenuItem');
+const renameModalOverlay = document.getElementById('renameModalOverlay');
+const renameInput = document.getElementById('renameInput');
+const renameOkBtn = document.getElementById('renameOkBtn');
+const renameCancelBtn = document.getElementById('renameCancelBtn');
 
 // Modal dialog helpers
 function showModal(message) {
@@ -106,6 +112,56 @@ modalOkBtn.addEventListener('click', hideModal);
 modalOverlay.addEventListener('click', (e) => {
   if (e.target === modalOverlay) {
     hideModal();
+  }
+});
+
+// Rename modal helpers
+function showRenameModal(defaultName, onConfirm) {
+  renameInput.value = defaultName;
+  renameModalOverlay.classList.add('visible');
+  renameInput.focus();
+  renameInput.select();
+
+  const handleOk = () => {
+    const newName = renameInput.value.trim();
+    if (newName) {
+      hideRenameModal();
+      onConfirm(newName);
+    }
+    cleanup();
+  };
+
+  const handleCancel = () => {
+    hideRenameModal();
+    cleanup();
+  };
+
+  const handleEnter = (e) => {
+    if (e.key === 'Enter') {
+      handleOk();
+    } else if (e.key === 'Escape') {
+      handleCancel();
+    }
+  };
+
+  const cleanup = () => {
+    renameOkBtn.removeEventListener('click', handleOk);
+    renameCancelBtn.removeEventListener('click', handleCancel);
+    renameInput.removeEventListener('keydown', handleEnter);
+  };
+
+  renameOkBtn.addEventListener('click', handleOk);
+  renameCancelBtn.addEventListener('click', handleCancel);
+  renameInput.addEventListener('keydown', handleEnter);
+}
+
+function hideRenameModal() {
+  renameModalOverlay.classList.remove('visible');
+}
+
+renameModalOverlay.addEventListener('click', (e) => {
+  if (e.target === renameModalOverlay) {
+    hideRenameModal();
   }
 });
 
@@ -205,6 +261,14 @@ function renderTreeItem(item, parentElement) {
     children.dataset.listId = item.list_id;
     li.appendChild(children);
 
+    // Apply expanded state from database
+    if (item.list_is_expanded) {
+      iconSpan.classList.add('expanded');
+      children.classList.add('expanded');
+      // Load children if expanded
+      loadFolderChildren(item.list_id, children);
+    }
+
     // Chevron click to expand/collapse
     iconSpan.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -243,27 +307,36 @@ function renderTreeItem(item, parentElement) {
   parentElement.appendChild(li);
 }
 
+// Load folder children
+async function loadFolderChildren(listId, childrenElement) {
+  if (childrenElement.children.length === 0) {
+    const items = await window.electronAPI.getListItems(listId);
+    items.forEach(item => {
+      renderTreeItem(item, childrenElement);
+    });
+  }
+}
+
 // Toggle folder expansion
 async function toggleFolder(listId, iconElement, childrenElement) {
-  if (expandedFolders.has(listId)) {
-    // Collapse
-    expandedFolders.delete(listId);
-    iconElement.classList.remove('expanded');
-    childrenElement.classList.remove('expanded');
-  } else {
+  const isCurrentlyExpanded = iconElement.classList.contains('expanded');
+  const newExpandedState = !isCurrentlyExpanded;
+
+  if (newExpandedState) {
     // Expand
-    expandedFolders.add(listId);
     iconElement.classList.add('expanded');
     childrenElement.classList.add('expanded');
 
     // Load children if not already loaded
-    if (childrenElement.children.length === 0) {
-      const items = await window.electronAPI.getListItems(listId);
-      items.forEach(item => {
-        renderTreeItem(item, childrenElement);
-      });
-    }
+    await loadFolderChildren(listId, childrenElement);
+  } else {
+    // Collapse
+    iconElement.classList.remove('expanded');
+    childrenElement.classList.remove('expanded');
   }
+
+  // Save expanded state to database
+  await window.electronAPI.updateFolderExpanded({ listId, isExpanded: newExpandedState });
 }
 
 // Handle item click for selection
@@ -356,14 +429,19 @@ function updateSelectionUI() {
 }
 
 // Collapse all folders
-function collapseAll() {
-  expandedFolders.clear();
-  document.querySelectorAll('.tree-item-icon.chevron').forEach(icon => {
-    icon.classList.remove('expanded');
-  });
-  document.querySelectorAll('.tree-item-children').forEach(children => {
-    children.classList.remove('expanded');
-  });
+async function collapseAll() {
+  const allFolders = document.querySelectorAll('[data-folder-id]');
+  for (const folderElement of allFolders) {
+    const folderId = parseInt(folderElement.dataset.folderId);
+    const iconElement = folderElement.querySelector('.tree-item-icon.chevron');
+    const childrenElement = folderElement.parentElement.querySelector('.tree-item-children');
+
+    if (iconElement.classList.contains('expanded')) {
+      iconElement.classList.remove('expanded');
+      childrenElement.classList.remove('expanded');
+      await window.electronAPI.updateFolderExpanded({ listId: folderId, isExpanded: false });
+    }
+  }
 }
 
 // Expand all folders
@@ -374,7 +452,7 @@ async function expandAll() {
     const iconElement = folderElement.querySelector('.tree-item-icon.chevron');
     const childrenElement = folderElement.parentElement.querySelector('.tree-item-children');
 
-    if (!expandedFolders.has(folderId)) {
+    if (!iconElement.classList.contains('expanded')) {
       await toggleFolder(folderId, iconElement, childrenElement);
     }
   }
@@ -455,6 +533,21 @@ function showContextMenu(x, y, item) {
 
   menu.appendChild(createSeparator());
 
+  // Rename (for folders only)
+  if (isFolder) {
+    const renameItem = document.createElement('div');
+    renameItem.className = 'context-menu-item';
+    renameItem.textContent = 'Rename';
+    renameItem.addEventListener('click', () => {
+      menu.remove();
+      showRenameModal(item.list_title, async (newName) => {
+        await window.electronAPI.renameFolder({ listId: item.list_id, newTitle: newName });
+        await loadListItems(currentListId);
+      });
+    });
+    menu.appendChild(renameItem);
+  }
+
   // Delete
   const deleteItem = document.createElement('div');
   deleteItem.className = 'context-menu-item';
@@ -490,6 +583,35 @@ function createSeparator() {
 async function addFolder(parentListId, position, title) {
   await window.electronAPI.addFolder({ parentListId, position, title });
   await loadListItems(currentListId);
+}
+
+// Add folder with rename prompt
+async function addFolderWithRename(parentListId, position) {
+  showRenameModal('New Folder', async (folderName) => {
+    await addFolder(parentListId, position, folderName);
+  });
+}
+
+// Handle "New Folder" from dropdown
+async function handleNewFolderFromDropdown() {
+  let position = 0;
+  let parentListId = currentListId;
+
+  // If there's a selected item, add the folder below it
+  if (selectedItems.size === 1) {
+    const selectedItemId = Array.from(selectedItems)[0];
+    const selectedItem = await getItemById(selectedItemId);
+    if (selectedItem) {
+      parentListId = selectedItem.parent_list_id;
+      position = selectedItem.position + 1;
+    }
+  } else {
+    // Otherwise, add at the end of the current list
+    const items = await window.electronAPI.getListItems(currentListId);
+    position = items.length;
+  }
+
+  await addFolderWithRename(parentListId, position);
 }
 
 // Drag and drop handlers
@@ -608,9 +730,27 @@ async function handleDrop(e) {
     const newParentListId = targetItemData.parent_list_id;
     const basePosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
 
+    // Check if any dragged items are folders and prevent moving into their own descendants
+    const draggedItemsData = await Promise.all(
+      itemsToMove.map(id => getItemById(id))
+    );
+
+    for (const draggedItemData of draggedItemsData) {
+      if (!draggedItemData) continue;
+
+      // If the dragged item is a folder
+      if (draggedItemData.list_id !== null) {
+        // Check if we're trying to move it into itself or one of its descendants
+        if (await isDescendantFolder(draggedItemData.list_id, newParentListId)) {
+          showModal("Sorry, you can't move a folder inside of itself, it causes too much damage to the spacetime continuum.");
+          return false;
+        }
+      }
+    }
+
     if (itemsToMove.length === 1) {
       // Simple case: single item
-      const draggedItemData = await getItemById(itemsToMove[0]);
+      const draggedItemData = draggedItemsData[0];
 
       if (!draggedItemData) {
         console.error('Could not find dragged item data');
@@ -632,10 +772,6 @@ async function handleDrop(e) {
       });
     } else {
       // Multiple items: move them maintaining their relative order
-      const draggedItemsData = await Promise.all(
-        itemsToMove.map(id => getItemById(id))
-      );
-
       const validDraggedItems = draggedItemsData.filter(item => item !== null);
 
       if (validDraggedItems.length === 0) {
@@ -1013,10 +1149,39 @@ async function handleDeleteSelected() {
   const currentListName = currentListTitle.textContent;
   const isMainLibrary = currentListId === 0;
 
+  // Check if any selected items are songs (to determine if we need to warn about audio files)
+  let hasSongs = false;
+  let itemDescription = `${itemCount} item${itemCount > 1 ? 's' : ''}`;
+
+  // If deleting a single item, get its name
+  if (itemCount === 1) {
+    const itemId = Array.from(selectedItems)[0];
+    const item = await getItemById(itemId);
+    if (item) {
+      const itemName = item.list_id !== null ? item.list_title : item.song_title;
+      // Truncate at 50 characters
+      const truncatedName = itemName.length > 50 ? itemName.substring(0, 50) + '...' : itemName;
+      itemDescription = `"${truncatedName}"`;
+
+      if (item.song_id !== null) {
+        hasSongs = true;
+      }
+    }
+  } else if (isMainLibrary) {
+    // For multiple items, check if any are songs
+    for (const itemId of selectedItems) {
+      const item = await getItemById(itemId);
+      if (item && item.song_id !== null) {
+        hasSongs = true;
+        break;
+      }
+    }
+  }
+
   // Build confirmation message
-  let message = `Really delete ${itemCount} item${itemCount > 1 ? 's' : ''} from ${currentListName}?`;
-  if (isMainLibrary) {
-    message += '\n\nThis will also delete the source audio files.';
+  let message = `Really delete ${itemDescription} from ${currentListName}?`;
+  if (isMainLibrary && hasSongs) {
+    message += '\n\nThis will also delete the source audio files for any songs.';
   }
 
   showConfirmModal(message, async () => {
@@ -1025,14 +1190,18 @@ async function handleDeleteSelected() {
 
       // Delete all selected items
       for (const itemId of selectedItems) {
-        if (isMainLibrary) {
-          // For Main Library, delete with audio files
+        const item = await getItemById(itemId);
+        if (!item) continue;
+
+        // Check if this is a song in the Main Library
+        if (isMainLibrary && item.song_id !== null) {
+          // For songs in Main Library, delete with audio files
           const result = await window.electronAPI.deleteItemWithFiles(itemId);
           if (result.errors && result.errors.length > 0) {
             allErrors.push(...result.errors);
           }
         } else {
-          // For other lists, just remove from list
+          // For folders or items in other lists, just remove from list
           await window.electronAPI.deleteItem(itemId);
         }
       }
@@ -1075,6 +1244,22 @@ function setupEventListeners() {
   muteBtn.addEventListener('click', toggleMute);
   collapseAllBtn.addEventListener('click', collapseAll);
   expandAllBtn.addEventListener('click', expandAll);
+
+  // Add library dropdown
+  addLibraryBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addLibraryDropdown.classList.toggle('visible');
+  });
+
+  newFolderMenuItem.addEventListener('click', async () => {
+    addLibraryDropdown.classList.remove('visible');
+    await handleNewFolderFromDropdown();
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', () => {
+    addLibraryDropdown.classList.remove('visible');
+  });
 
   // Setup drag-and-drop on explorer container (handles both external files and internal items, including empty space)
   explorerContainer.addEventListener('drop', handleExplorerTreeDrop);
@@ -1228,6 +1413,20 @@ async function handleExplorerTreeDrop(e) {
         const draggedItemsData = await Promise.all(
           itemsToMove.map(id => getItemById(id))
         );
+
+        // Check if any dragged items are folders and prevent moving into their own descendants
+        for (const draggedItemData of draggedItemsData) {
+          if (!draggedItemData) continue;
+
+          // If the dragged item is a folder
+          if (draggedItemData.list_id !== null) {
+            // Check if we're trying to move it into itself or one of its descendants
+            if (await isDescendantFolder(draggedItemData.list_id, currentListId)) {
+              showModal("Sorry, you can't move a folder inside of itself, it causes too much damage to the spacetime continuum.");
+              return;
+            }
+          }
+        }
 
         // Sort dragged items by their current position
         const sortedDraggedItems = draggedItemsData
@@ -1404,6 +1603,32 @@ async function handlePlaylistSidebarDrop(e) {
 // Helper function to get item by ID
 async function getItemById(itemId) {
   return await window.electronAPI.getItem(itemId);
+}
+
+// Check if targetListId is a descendant of sourceListId
+async function isDescendantFolder(sourceListId, targetListId) {
+  if (sourceListId === targetListId) {
+    return true; // A folder is considered its own descendant for this check
+  }
+
+  // Get all items in the SOURCE list (to check its descendants)
+  const items = await window.electronAPI.getListItems(sourceListId);
+
+  for (const item of items) {
+    // Check if this item is a folder
+    if (item.list_id !== null) {
+      // If this folder is the target folder, we found it as a descendant of source
+      if (item.list_id === targetListId) {
+        return true;
+      }
+      // Recursively check this folder's children
+      if (await isDescendantFolder(item.list_id, targetListId)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // Initialize the app
