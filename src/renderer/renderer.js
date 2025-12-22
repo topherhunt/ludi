@@ -39,6 +39,7 @@ const collapseAllBtn = document.getElementById('collapseAllBtn');
 const expandAllBtn = document.getElementById('expandAllBtn');
 const dropIndicator = document.getElementById('dropIndicator');
 const modalOverlay = document.getElementById('modalOverlay');
+const modalTitle = document.getElementById('modalTitle');
 const modalContent = document.getElementById('modalContent');
 const modalButtons = document.getElementById('modalButtons');
 const modalOkBtn = document.getElementById('modalOkBtn');
@@ -60,8 +61,9 @@ function showModal(message) {
   modalOverlay.classList.add('visible');
 }
 
-function showConfirmModal(message, onConfirm) {
-  modalContent.textContent = message;
+function showConfirmModal(title, message, onConfirm) {
+  modalTitle.textContent = title;
+  modalContent.innerHTML = message;
   // Set up Yes/No buttons
   modalButtons.innerHTML = `
     <button id="modalNoBtn" class="modal-btn modal-btn-secondary">No</button>
@@ -245,6 +247,16 @@ async function renderTreeItem(item, parentElement) {
 
   content.appendChild(iconSpan);
   content.appendChild(label);
+
+  if (isFolder) {
+    const itemCount = document.createElement('span');
+    itemCount.className = 'tree-item-count';
+    // Load count asynchronously to avoid blocking render
+    getFolderItemCount(item.list_id).then(count => {
+      itemCount.textContent = `${count} item${count !== 1 ? 's' : ''}`;
+    });
+    label.appendChild(itemCount);
+  }
 
   if (!isFolder && item.duration_seconds) {
     const duration = document.createElement('span');
@@ -480,8 +492,8 @@ function showContextMenu(x, y, item) {
     addFolderInside.className = 'context-menu-item';
     addFolderInside.textContent = 'Add Folder Inside';
     addFolderInside.addEventListener('click', () => {
-      addFolder(item.list_id, 0, 'New Folder');
       menu.remove();
+      addFolderWithRename(item.list_id, 0);
     });
     menu.appendChild(addFolderInside);
   }
@@ -491,8 +503,8 @@ function showContextMenu(x, y, item) {
   addFolderAfter.className = 'context-menu-item';
   addFolderAfter.textContent = 'Add Folder After';
   addFolderAfter.addEventListener('click', () => {
-    addFolder(item.parent_list_id, item.position + 1, 'New Folder');
     menu.remove();
+    addFolderWithRename(item.parent_list_id, item.position + 1);
   });
   menu.appendChild(addFolderAfter);
 
@@ -1181,8 +1193,35 @@ function formatTime(seconds) {
 
 // Keyboard event handler
 async function handleKeyDown(e) {
-  // Only handle Backspace when not in an input field
-  if (e.key === 'Backspace' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+  // Only handle keyboard shortcuts when not in an input field
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    // Close dropdown menu if open
+    if (addLibraryDropdown.classList.contains('visible')) {
+      addLibraryDropdown.classList.remove('visible');
+      return;
+    }
+
+    // Close context menu if open
+    const contextMenu = document.querySelector('.context-menu');
+    if (contextMenu) {
+      contextMenu.remove();
+      return;
+    }
+
+    // Clear selection if items are selected
+    if (selectedItems.size > 0) {
+      selectedItems.clear();
+      lastSelectedItemId = null;
+      updateSelectionUI();
+    }
+    return;
+  }
+
+  if (e.key === 'Backspace') {
     e.preventDefault();
 
     if (selectedItems.size === 0) {
@@ -1239,14 +1278,18 @@ async function handleDeleteSelected() {
 
   // Build confirmation message
   let message = `Really delete ${itemDescription} from ${currentListName}?`;
+  const warnings = [];
   if (hasFolders) {
-    message += '\n\nAll songs contained in any deleted folders will also be deleted.';
+    warnings.push('All songs contained in any deleted folders will also be deleted.');
   }
   if (isMainLibrary && (hasSongs || hasFolders)) {
-    message += '\n\nThis will also delete the source audio files for any songs.';
+    warnings.push('This will also delete the source audio files for any songs.');
+  }
+  if (warnings.length > 0) {
+    message += '<ul class="modal-warnings">' + warnings.map(w => `<li>${w}</li>`).join('') + '</ul>';
   }
 
-  showConfirmModal(message, async () => {
+  showConfirmModal('Delete Items', message, async () => {
     try {
       const allErrors = [];
 
@@ -1751,6 +1794,20 @@ async function folderContainsSong(folderId, songId) {
   }
 
   return false;
+}
+
+// Count all items in a folder recursively (including items in subfolders)
+async function getFolderItemCount(folderId) {
+  const items = await window.electronAPI.getListItems(folderId);
+  let count = items.length;
+
+  for (const item of items) {
+    if (item.list_id !== null) {
+      count += await getFolderItemCount(item.list_id);
+    }
+  }
+
+  return count;
 }
 
 // Initialize the app

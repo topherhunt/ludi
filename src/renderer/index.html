@@ -72,6 +72,7 @@
   <!-- Modal Dialog -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-dialog">
+      <div class="modal-title" id="modalTitle"></div>
       <div class="modal-content" id="modalContent"></div>
       <div class="modal-buttons" id="modalButtons">
         <button id="modalOkBtn" class="modal-btn">OK</button>
@@ -81,8 +82,9 @@
 
   <!-- Rename Modal -->
   <div id="renameModalOverlay" class="modal-overlay">
-    <div class="modal-dialog">
-      <div class="modal-content">
+    <div class="modal-dialog rename-dialog">
+      <div class="modal-title" id="renameModalTitle">New Folder</div>
+      <div class="modal-content rename-content">
         <label for="renameInput">Folder Name:</label>
         <input type="text" id="renameInput" class="modal-input" placeholder="Enter folder name">
       </div>
