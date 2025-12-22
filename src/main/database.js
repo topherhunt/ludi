@@ -374,12 +374,19 @@ function deleteItemWithFiles(itemId) {
     deleteItem(itemId);
 
     // Now delete the song records from the songs table
-    for (const songId of songIds) {
-      db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
+    // Only delete songs that have no remaining list_item references
+    const filesToDelete = [];
+    for (let i = 0; i < songIds.length; i++) {
+      const songId = songIds[i];
+      const refCount = db.prepare('SELECT COUNT(*) as count FROM list_items WHERE song_id = ?').get(songId);
+      if (refCount.count === 0) {
+        db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
+        filesToDelete.push(filePaths[i]);
+      }
     }
 
-    // Return the file paths so the caller can delete the actual files
-    return filePaths;
+    // Return only the file paths for songs that were actually deleted
+    return filesToDelete;
   })();
 }
 
