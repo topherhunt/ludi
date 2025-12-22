@@ -32,7 +32,7 @@ Architecture:
 
 Features:
 
-- Instead of a playlists sidebar in the style of iTunes or Swinsian, the main interface panel uses a "nested folders" metaphor, like a Finder / File Explorer window, where each folder can be expanded to reveal the subfolders
+- Instead of a playlists sidebar in the style of iTunes or Swinsian, the main interface panel uses a "nested folders" metaphor, like a Finder / File Explorer window, where each folder can be expanded to reveal the subfolders. (This song explorer/organization view is virtual, stored in the .sqlite db, and does NOT correspond to where songs' audiofiles are stored on-disk.)
 - Songs and folders can easily be rearranged via drag and drop to reorder them.
 - There IS a left-hand sidebar, but it's only used for defining playlists and saved searches.
 - You can right-click on any folder (either in the main view or within a playlist) and click "Play this folder".
@@ -41,23 +41,17 @@ Features:
 ## MILESTONES
 
 - ✅ Basic Electron app skeleton, basic integration test harness
-- [ ]
+- ✅ Drag-and-drop import, playback, drag-and-drop reordering, selecting & deleting songs
+- ✅ Media buttons support
+- [ ] Folders
+- [ ] Arrow keys up/down to change selection, left/right to collapse/expand
+- [ ] Searching & filtering
 
 ### 1. Proof-of-concept
 
 Before I stress about nailing down the UI details, I should first do a spike to confirm that the basic mechanic works. This proof-of-concept should support:
 
-- It's a lightweight Electron app, with the music library stored as a .sqlite DB at ~/.ludi/db.sqlite
-- No "playlists" or "searching". Just a main panel which has a nested Explorer view of collapsible folders with all songs listed, like VS Code's File Explorer sidebar.
-  - Supports drag-and-drop to move or reorder songs & folders.
-  - Right-click on a list -> "Add folder inside" to add a folder as 1st child inside it.
-  - Right-click on a song or folder -> "Add folder after" to add a folder AFTER it.
-  - Right-click on a list or folder -> "Collapse all" and "Expand all" options, collapse/expand all (sub)folders in that item.
-  - This organizes songs' "virtual locations" in the app, is stored in the .sqlite DB and DOES NOT REFLECT the underlying audiofiles' actual on-disk paths.
 - Drag songs into the main panel in order to import them. Doing so will:
-  - Make a COPY of each audiofile in ~/.ludi/library/{ARTIST_NAME}/{ALBUM_NAME}/. Artist & album should default to "Unknown" if blank. (NOTE: This is the audiofile organization structure which is mostly irrelevant, and is NOT REFLECTED in the in-app tree folder structure.)
-  - Insert the song record, and add it to the main nested-list structure (in the .sqlite db) at the position the user dragged it to. Store the RELATIVE path to the song within the music library.
-  - When dragging songs (from inside the app or from an external app) a blue line indicates where the item(s) will be dropped.
   - Warning message if any unsupported filetypes were dragged in, listing them and saying they'll be ignored.
   - Supports the common song formats (case-insensitive): .mp3, .m4a, .ogg.
 - Double-click any SONG in the Explorer to start playback at that point, looping through my whole collection. Or double-click a FOLDER to start playback of just the songs in that folder (incl subfolders).

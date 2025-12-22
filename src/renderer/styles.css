@@ -216,6 +216,11 @@ body {
   border: 1px solid #007acc;
 }
 
+.tree-item-content.drop-into {
+  border: 2px solid #007acc;
+  background-color: rgba(0, 122, 204, 0.1);
+}
+
 .tree-item-icon {
   width: 16px;
   height: 16px;
@@ -229,10 +234,16 @@ body {
 .tree-item-icon.chevron {
   cursor: pointer;
   transition: transform 0.2s;
+  font-size: 20px;
+  line-height: 16px;
+  position: relative;
+  left: 0px;
+  top: -1px;
 }
 
 .tree-item-icon.chevron.expanded {
   transform: rotate(90deg);
+  left: 2px;
 }
 
 .tree-item-label {

@@ -203,19 +203,20 @@ async function loadListItems(listId) {
   explorerTree.innerHTML = '';
   explorerTree.dataset.listId = listId;
 
-  items.forEach(item => {
-    renderTreeItem(item, explorerTree);
-  });
+  for (const item of items) {
+    await renderTreeItem(item, explorerTree);
+  }
 }
 
 // Render a tree item
-function renderTreeItem(item, parentElement) {
+async function renderTreeItem(item, parentElement) {
   const li = document.createElement('li');
   li.className = 'tree-item';
   li.dataset.itemId = item.id;
 
   const isFolder = item.list_id !== null;
   const isPlaying = !isFolder && item.song_id === currentPlayingSongId;
+  const isFolderWithPlayingSong = isFolder && await folderContainsSong(item.list_id, currentPlayingSongId);
   const icon = isFolder ? '▸' : (isPlaying ? '▶' : '♪');
 
   const content = document.createElement('div');
@@ -233,7 +234,7 @@ function renderTreeItem(item, parentElement) {
 
   const iconSpan = document.createElement('span');
   iconSpan.className = isFolder ? 'tree-item-icon chevron' : 'tree-item-icon';
-  if (isPlaying) {
+  if (isPlaying || isFolderWithPlayingSong) {
     iconSpan.classList.add('playing');
   }
   iconSpan.textContent = icon;
@@ -311,9 +312,9 @@ function renderTreeItem(item, parentElement) {
 async function loadFolderChildren(listId, childrenElement) {
   if (childrenElement.children.length === 0) {
     const items = await window.electronAPI.getListItems(listId);
-    items.forEach(item => {
-      renderTreeItem(item, childrenElement);
-    });
+    for (const item of items) {
+      await renderTreeItem(item, childrenElement);
+    }
   }
 }
 
@@ -670,18 +671,37 @@ function handleDragOver(e) {
   const targetItemId = parseInt(targetContent.dataset.itemId);
   if (draggedItem === targetContent || draggedItems.includes(targetItemId)) {
     dropIndicator.classList.remove('visible');
+    // Remove drop-into class from all items
+    document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+      el.classList.remove('drop-into');
+    });
     return false;
   }
 
-  // Show drop indicator
   const rect = targetContent.getBoundingClientRect();
-  const midpoint = rect.top + rect.height / 2;
-  const insertBefore = e.clientY < midpoint;
+  const relativeY = e.clientY - rect.top;
+  const heightPercent = relativeY / rect.height;
 
-  // Convert viewport coordinates to container-relative coordinates
-  const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
-  dropIndicator.style.top = relativeTop + 'px';
-  dropIndicator.classList.add('visible');
+  // Check if target is a folder and we're in the middle 50%
+  const isFolder = targetContent.dataset.isFolder === 'true';
+  const inMiddle50 = heightPercent >= 0.25 && heightPercent <= 0.75;
+
+  // Remove drop-into class from all items
+  document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+    el.classList.remove('drop-into');
+  });
+
+  if (isFolder && inMiddle50) {
+    // Drop INTO the folder - show border
+    targetContent.classList.add('drop-into');
+    dropIndicator.classList.remove('visible');
+  } else {
+    // Drop BEFORE/AFTER - show indicator line
+    const insertBefore = e.clientY < rect.top + rect.height / 2;
+    const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
+    dropIndicator.style.top = relativeTop + 'px';
+    dropIndicator.classList.add('visible');
+  }
 
   return false;
 }
@@ -702,6 +722,10 @@ async function handleDrop(e) {
   dropIndicator.classList.remove('visible');
 
   if (!draggedItem || itemsToMove.length === 0) {
+    // Remove drop-into class
+    document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+      el.classList.remove('drop-into');
+    });
     return false;
   }
 
@@ -710,13 +734,20 @@ async function handleDrop(e) {
   const targetItemId = parseInt(targetContent?.dataset.itemId);
 
   if (!targetContent || itemsToMove.includes(targetItemId)) {
+    // Remove drop-into class
+    document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+      el.classList.remove('drop-into');
+    });
     return false;
   }
 
-  // Calculate drop position (before or after target)
-  const rect = targetContent.getBoundingClientRect();
-  const midpoint = rect.top + rect.height / 2;
-  const insertBefore = e.clientY < midpoint;
+  // Check if we're dropping INTO a folder (has drop-into class)
+  const isDropIntoFolder = targetContent.classList.contains('drop-into');
+
+  // Remove drop-into class
+  document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+    el.classList.remove('drop-into');
+  });
 
   try {
     // Get target item info
@@ -727,8 +758,22 @@ async function handleDrop(e) {
       return false;
     }
 
-    const newParentListId = targetItemData.parent_list_id;
-    const basePosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
+    let newParentListId;
+    let basePosition;
+
+    if (isDropIntoFolder) {
+      // Dropping INTO the folder - use folder's list_id as parent, position at end
+      newParentListId = targetItemData.list_id;
+      const folderItems = await window.electronAPI.getListItems(newParentListId);
+      basePosition = folderItems.length;
+    } else {
+      // Dropping BEFORE/AFTER - use original logic
+      const rect = targetContent.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const insertBefore = e.clientY < midpoint;
+      newParentListId = targetItemData.parent_list_id;
+      basePosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
+    }
 
     // Check if any dragged items are folders and prevent moving into their own descendants
     const draggedItemsData = await Promise.all(
@@ -825,6 +870,11 @@ async function handleDrop(e) {
 function handleDragEnd(e) {
   e.target.style.opacity = '1';
   dropIndicator.classList.remove('visible');
+
+  // Remove drop-into class from all items
+  document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+    el.classList.remove('drop-into');
+  });
 
   // Restore opacity for all dragged items
   draggedItems.forEach(id => {
@@ -1085,6 +1135,9 @@ function playNext() {
       updateNavigationButtons();
     } else {
       // Stop playback
+      if (currentSound) {
+        currentSound.stop();
+      }
       isPlaying = false;
       playPauseBtn.textContent = '▶';
       currentPlayingSongId = null;
@@ -1149,8 +1202,9 @@ async function handleDeleteSelected() {
   const currentListName = currentListTitle.textContent;
   const isMainLibrary = currentListId === 0;
 
-  // Check if any selected items are songs (to determine if we need to warn about audio files)
+  // Check if any selected items are songs or folders (to determine if we need to warn about audio files)
   let hasSongs = false;
+  let hasFolders = false;
   let itemDescription = `${itemCount} item${itemCount > 1 ? 's' : ''}`;
 
   // If deleting a single item, get its name
@@ -1165,22 +1219,30 @@ async function handleDeleteSelected() {
 
       if (item.song_id !== null) {
         hasSongs = true;
+      } else if (item.list_id !== null) {
+        hasFolders = true;
       }
     }
-  } else if (isMainLibrary) {
-    // For multiple items, check if any are songs
+  } else {
+    // For multiple items, check if any are songs or folders
     for (const itemId of selectedItems) {
       const item = await getItemById(itemId);
-      if (item && item.song_id !== null) {
-        hasSongs = true;
-        break;
+      if (item) {
+        if (item.song_id !== null) {
+          hasSongs = true;
+        } else if (item.list_id !== null) {
+          hasFolders = true;
+        }
       }
     }
   }
 
   // Build confirmation message
   let message = `Really delete ${itemDescription} from ${currentListName}?`;
-  if (isMainLibrary && hasSongs) {
+  if (hasFolders) {
+    message += '\n\nAll songs contained in any deleted folders will also be deleted.';
+  }
+  if (isMainLibrary && (hasSongs || hasFolders)) {
     message += '\n\nThis will also delete the source audio files for any songs.';
   }
 
@@ -1322,16 +1384,37 @@ async function handleExplorerTreeDragOver(e) {
     const treeItemContent = e.target.closest('.tree-item-content');
     if (treeItemContent) {
       const rect = treeItemContent.getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-      const insertBefore = e.clientY < midpoint;
+      const relativeY = e.clientY - rect.top;
+      const heightPercent = relativeY / rect.height;
 
-      // Convert viewport coordinates to container-relative coordinates
-      const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
-      dropIndicator.style.top = relativeTop + 'px';
-      dropIndicator.classList.add('visible');
+      // Check if target is a folder and we're in the middle 50%
+      const isFolder = treeItemContent.dataset.isFolder === 'true';
+      const inMiddle50 = heightPercent >= 0.25 && heightPercent <= 0.75;
 
-      dropTarget = treeItemContent;
-      dropPosition = insertBefore ? 0 : 1;
+      // Remove drop-into class from all items
+      document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+        el.classList.remove('drop-into');
+      });
+
+      if (isFolder && inMiddle50) {
+        // Drop INTO the folder - show border
+        treeItemContent.classList.add('drop-into');
+        dropIndicator.classList.remove('visible');
+        dropTarget = treeItemContent;
+        dropPosition = -1; // Special marker for "drop into folder"
+      } else {
+        // Drop BEFORE/AFTER - show indicator line
+        const midpoint = rect.top + rect.height / 2;
+        const insertBefore = e.clientY < midpoint;
+
+        // Convert viewport coordinates to container-relative coordinates
+        const relativeTop = (insertBefore ? rect.top : rect.bottom) - containerRect.top + explorerContainer.scrollTop;
+        dropIndicator.style.top = relativeTop + 'px';
+        dropIndicator.classList.add('visible');
+
+        dropTarget = treeItemContent;
+        dropPosition = insertBefore ? 0 : 1;
+      }
     } else {
       // Dropping in empty space - either at the end or in an empty list
       // Get the last item at the root level (not nested in folders)
@@ -1387,12 +1470,21 @@ function handleDragLeave(e) {
   // Only hide indicator if we're leaving the drop zone entirely
   if (!e.currentTarget.contains(e.relatedTarget)) {
     dropIndicator.classList.remove('visible');
+    // Remove drop-into class from all items
+    document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+      el.classList.remove('drop-into');
+    });
   }
 }
 
 async function handleExplorerTreeDrop(e) {
   e.preventDefault();
   dropIndicator.classList.remove('visible');
+
+  // Remove drop-into class from all items
+  document.querySelectorAll('.tree-item-content.drop-into').forEach(el => {
+    el.classList.remove('drop-into');
+  });
 
   const isExternalFileDrop = e.dataTransfer.files && e.dataTransfer.files.length > 0;
 
@@ -1487,8 +1579,16 @@ async function handleExplorerTreeDrop(e) {
     const itemId = parseInt(dropTarget.dataset.itemId);
     const targetItem = await getItemById(itemId);
     if (targetItem) {
-      parentListId = targetItem.parent_list_id;
-      position = dropPosition === 0 ? targetItem.position : targetItem.position + 1;
+      if (dropPosition === -1) {
+        // Dropping INTO a folder
+        parentListId = targetItem.list_id;
+        const folderItems = await window.electronAPI.getListItems(parentListId);
+        position = folderItems.length;
+      } else {
+        // Dropping BEFORE/AFTER
+        parentListId = targetItem.parent_list_id;
+        position = dropPosition === 0 ? targetItem.position : targetItem.position + 1;
+      }
     }
   } else {
     // Dropping at the end
@@ -1623,6 +1723,28 @@ async function isDescendantFolder(sourceListId, targetListId) {
       }
       // Recursively check this folder's children
       if (await isDescendantFolder(item.list_id, targetListId)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Check if a folder contains a specific song (recursively checking subfolders)
+async function folderContainsSong(folderId, songId) {
+  if (!songId) return false;
+
+  const items = await window.electronAPI.getListItems(folderId);
+
+  for (const item of items) {
+    // Check if this item is the song we're looking for
+    if (item.song_id === songId) {
+      return true;
+    }
+    // If this is a folder, recursively check it
+    if (item.list_id !== null) {
+      if (await folderContainsSong(item.list_id, songId)) {
         return true;
       }
     }
