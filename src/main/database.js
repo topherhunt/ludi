@@ -324,6 +324,54 @@ function deleteItem(itemId) {
   })();
 }
 
+// Helper function to collect all song IDs and file paths that will be deleted
+function collectSongsToDelete(itemId, results = { songIds: [], filePaths: [] }) {
+  const item = db.prepare('SELECT * FROM list_items WHERE id = ?').get(itemId);
+
+  if (!item) {
+    return results;
+  }
+
+  if (item.song_id !== null) {
+    // This is a song - collect its ID and file path
+    const song = db.prepare('SELECT file_path FROM songs WHERE id = ?').get(item.song_id);
+    if (song) {
+      results.songIds.push(item.song_id);
+      const settings = getSettings();
+      const absolutePath = path.join(settings.library_path, song.file_path);
+      results.filePaths.push(absolutePath);
+    }
+  } else if (item.list_id !== null) {
+    // This is a folder - recursively collect from children
+    const childItems = db.prepare('SELECT id FROM list_items WHERE parent_list_id = ?').all(item.list_id);
+    for (const child of childItems) {
+      collectSongsToDelete(child.id, results);
+    }
+  }
+
+  return results;
+}
+
+// Delete item and its associated audio files
+function deleteItemWithFiles(itemId) {
+  return db.transaction(() => {
+    // First collect all songs to delete
+    const { songIds, filePaths } = collectSongsToDelete(itemId);
+
+    // Delete from database using the existing deleteItem function
+    // This handles list_items, lists, and position adjustments
+    deleteItem(itemId);
+
+    // Now delete the song records from the songs table
+    for (const songId of songIds) {
+      db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
+    }
+
+    // Return the file paths so the caller can delete the actual files
+    return filePaths;
+  })();
+}
+
 function getSettings() {
   const settings = {};
   const rows = db.prepare('SELECT key, value FROM settings').all();
@@ -363,6 +411,7 @@ module.exports = {
   addSongToList,
   moveItem,
   deleteItem,
+  deleteItemWithFiles,
   getSettings,
   updateSetting,
   getDbPath

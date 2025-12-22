@@ -41,12 +41,61 @@ const expandAllBtn = document.getElementById('expandAllBtn');
 const dropIndicator = document.getElementById('dropIndicator');
 const modalOverlay = document.getElementById('modalOverlay');
 const modalContent = document.getElementById('modalContent');
+const modalButtons = document.getElementById('modalButtons');
 const modalOkBtn = document.getElementById('modalOkBtn');
 
-// Modal dialog helper
+// Modal dialog helpers
 function showModal(message) {
   modalContent.textContent = message;
+  // Reset to OK button only
+  modalButtons.innerHTML = '<button id="modalOkBtn" class="modal-btn">OK</button>';
+  const newOkBtn = document.getElementById('modalOkBtn');
+  newOkBtn.addEventListener('click', hideModal);
   modalOverlay.classList.add('visible');
+}
+
+function showConfirmModal(message, onConfirm) {
+  modalContent.textContent = message;
+  // Set up Yes/No buttons
+  modalButtons.innerHTML = `
+    <button id="modalNoBtn" class="modal-btn modal-btn-secondary">No</button>
+    <button id="modalYesBtn" class="modal-btn">Yes</button>
+  `;
+
+  const yesBtn = document.getElementById('modalYesBtn');
+  const noBtn = document.getElementById('modalNoBtn');
+
+  const handleYes = () => {
+    hideModal();
+    onConfirm();
+    cleanup();
+  };
+
+  const handleNo = () => {
+    hideModal();
+    cleanup();
+  };
+
+  const handleEnter = (e) => {
+    if (e.key === 'Enter') {
+      handleYes();
+    } else if (e.key === 'Escape') {
+      handleNo();
+    }
+  };
+
+  const cleanup = () => {
+    yesBtn.removeEventListener('click', handleYes);
+    noBtn.removeEventListener('click', handleNo);
+    document.removeEventListener('keydown', handleEnter);
+  };
+
+  yesBtn.addEventListener('click', handleYes);
+  noBtn.addEventListener('click', handleNo);
+  document.addEventListener('keydown', handleEnter);
+
+  modalOverlay.classList.add('visible');
+  yesBtn.focus(); // Focus Yes button so Enter works
 }
 
 function hideModal() {
@@ -941,6 +990,72 @@ function formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Keyboard event handler
+async function handleKeyDown(e) {
+  // Only handle Backspace when not in an input field
+  if (e.key === 'Backspace' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+
+    if (selectedItems.size === 0) {
+      return; // Nothing selected
+    }
+
+    await handleDeleteSelected();
+  }
+}
+
+// Delete selected items
+async function handleDeleteSelected() {
+  const itemCount = selectedItems.size;
+  if (itemCount === 0) return;
+
+  // Get the current list name
+  const currentListName = currentListTitle.textContent;
+  const isMainLibrary = currentListId === 0;
+
+  // Build confirmation message
+  let message = `Really delete ${itemCount} item${itemCount > 1 ? 's' : ''} from ${currentListName}?`;
+  if (isMainLibrary) {
+    message += '\n\nThis will also delete the source audio files.';
+  }
+
+  showConfirmModal(message, async () => {
+    try {
+      const allErrors = [];
+
+      // Delete all selected items
+      for (const itemId of selectedItems) {
+        if (isMainLibrary) {
+          // For Main Library, delete with audio files
+          const result = await window.electronAPI.deleteItemWithFiles(itemId);
+          if (result.errors && result.errors.length > 0) {
+            allErrors.push(...result.errors);
+          }
+        } else {
+          // For other lists, just remove from list
+          await window.electronAPI.deleteItem(itemId);
+        }
+      }
+
+      // Clear selection
+      selectedItems.clear();
+      lastSelectedItemId = null;
+
+      // Refresh the tree
+      await loadListItems(currentListId);
+
+      // Show errors if any occurred
+      if (allErrors.length > 0) {
+        const errorMessages = allErrors.map(e => `${e.filePath}: ${e.error}`).join('\n');
+        showModal(`Items deleted from library, but ${allErrors.length} file(s) could not be deleted:\n\n${errorMessages}`);
+      }
+    } catch (error) {
+      console.error('Error deleting items:', error);
+      showModal(`Error deleting items: ${error.message}`);
+    }
+  });
+}
+
 // Event listeners
 function setupEventListeners() {
   playPauseBtn.addEventListener('click', playPause);
@@ -984,6 +1099,9 @@ function setupEventListeners() {
       e.preventDefault();
     }
   });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleKeyDown);
 }
 
 let dropTarget = null;

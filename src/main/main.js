@@ -195,6 +195,70 @@ ipcMain.handle('db:deleteItem', (event, itemId) => {
   return db.deleteItem(itemId);
 });
 
+ipcMain.handle('db:deleteItemWithFiles', (event, itemId) => {
+  const fs = require('fs');
+
+  // Get file paths and delete from database
+  const filePaths = db.deleteItemWithFiles(itemId);
+
+  // Delete the actual audio files
+  const errors = [];
+  let deletedCount = 0;
+  const settings = db.getSettings();
+  const libraryPath = settings.library_path;
+
+  // TODO: Performance optimization - when deleting a large selection, we check each
+  // parent folder multiple times if multiple files are from the same folder.
+  // Should collect unique parent folders and check each only once.
+
+  for (const filePath of filePaths) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Deleted audio file:', filePath);
+        deletedCount++;
+
+        // Clean up empty parent directories
+        let currentDir = path.dirname(filePath);
+        console.log('Checking parent directories starting from:', currentDir);
+        console.log('Library path:', libraryPath);
+
+        while (currentDir !== libraryPath && currentDir.startsWith(libraryPath)) {
+          try {
+            const dirContents = fs.readdirSync(currentDir);
+            console.log(`Directory ${currentDir} contains:`, dirContents);
+
+            if (dirContents.length === 0) {
+              fs.rmdirSync(currentDir);
+              console.log('Deleted empty directory:', currentDir);
+              currentDir = path.dirname(currentDir);
+            } else {
+              // Directory not empty, stop checking parents
+              console.log('Directory not empty, stopping cleanup');
+              break;
+            }
+          } catch (dirError) {
+            console.warn('Could not check/delete directory:', currentDir, dirError.message);
+            break;
+          }
+        }
+      } else {
+        console.warn('Audio file not found:', filePath);
+        errors.push({ filePath, error: 'File not found' });
+      }
+    } catch (error) {
+      console.error('Error deleting audio file:', filePath, error);
+      errors.push({ filePath, error: error.message });
+    }
+  }
+
+  return {
+    totalFiles: filePaths.length,
+    deletedFiles: deletedCount,
+    errors: errors
+  };
+});
+
 // File import IPC handler
 ipcMain.handle('files:import', async (event, { filePaths, parentListId, position }) => {
   const supportedExtensions = ['.mp3', '.m4a', '.ogg'];

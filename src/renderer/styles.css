@@ -477,6 +477,18 @@ body {
   background-color: #0d5a8f;
 }
 
+.modal-btn-secondary {
+  background-color: #3e3e42;
+}
+
+.modal-btn-secondary:hover {
+  background-color: #505050;
+}
+
+.modal-btn-secondary:active {
+  background-color: #2d2d30;
+}
+
 /* Playing indicator */
 .tree-item-icon.playing {
   color: #4ec9b0;
