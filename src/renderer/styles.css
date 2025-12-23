@@ -236,6 +236,11 @@ body {
   font-size: 1.5em;
 }
 
+.tree-item-icon.paused {
+  color: #e69500;
+  font-size: 1.5em;
+}
+
 .tree-item-icon.chevron {
   cursor: pointer;
   transition: transform 0.2s;
@@ -359,6 +364,14 @@ body {
 .playback-controls button:disabled {
   color: #505050;
   cursor: not-allowed;
+}
+
+.playback-controls button.playing {
+  color: #4ec9b0;
+}
+
+.playback-controls button.paused {
+  color: #e69500;
 }
 
 .playback-controls button.toggle-btn {

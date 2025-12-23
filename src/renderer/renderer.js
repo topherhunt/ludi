@@ -226,7 +226,7 @@ async function renderTreeItem(item, parentElement) {
   li.dataset.itemId = item.id;
 
   const isFolder = item.list_id !== null;
-  const isPlaying = !isFolder && item.song_id === currentPlayingSongId;
+  const isCurrentSong = !isFolder && item.song_id === currentPlayingSongId;
   const isFolderWithPlayingSong = isFolder && await folderContainsSong(item.list_id, currentPlayingSongId);
 
   const content = document.createElement('div');
@@ -244,14 +244,14 @@ async function renderTreeItem(item, parentElement) {
 
   const iconSpan = document.createElement('span');
   iconSpan.className = isFolder ? 'tree-item-icon chevron' : 'tree-item-icon';
-  if (isPlaying || isFolderWithPlayingSong) {
-    iconSpan.classList.add('playing');
+  if (isCurrentSong || isFolderWithPlayingSong) {
+    iconSpan.classList.add(isPlaying ? 'playing' : 'paused');
   }
   // Use Bootstrap icons
   if (isFolder) {
     iconSpan.innerHTML = '<i class="bi bi-caret-right-fill"></i>';
-  } else if (isPlaying) {
-    iconSpan.innerHTML = '<i class="bi bi-play-fill"></i>';
+  } else if (isCurrentSong) {
+    iconSpan.innerHTML = isPlaying ? '<i class="bi bi-play-fill"></i>' : '<i class="bi bi-pause-fill"></i>';
   } else {
     iconSpan.innerHTML = '<i class="bi bi-music-note"></i>';
   }
@@ -1016,6 +1016,8 @@ async function playSong(songId) {
     onplay: () => {
       isPlaying = true;
       playPauseBtn.innerHTML = '<i class="bi bi-pause-circle-fill"></i>';
+      playPauseBtn.classList.add('playing');
+      playPauseBtn.classList.remove('paused');
       updatePlayerUI(song);
       // Refresh tree to update playing indicator
       loadListItems(currentListId);
@@ -1026,6 +1028,10 @@ async function playSong(songId) {
     onpause: () => {
       isPlaying = false;
       playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
+      playPauseBtn.classList.remove('playing');
+      playPauseBtn.classList.add('paused');
+      // Refresh tree to update playing indicator to paused state
+      loadListItems(currentListId);
     },
     onloaderror: (id, error) => {
       console.error('Error loading audio:', error, 'Path:', fileUrl);
@@ -1105,6 +1111,7 @@ function clearPlayback() {
 
   // Reset UI
   playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
+  playPauseBtn.classList.remove('playing', 'paused');
   playPauseBtn.disabled = true;
   seekBar.disabled = true;
   seekBar.value = 0;
@@ -1275,6 +1282,7 @@ function playNext() {
       }
       isPlaying = false;
       playPauseBtn.innerHTML = '<i class="bi bi-play-circle-fill"></i>';
+      playPauseBtn.classList.remove('playing', 'paused');
       currentPlayingSongId = null;
       loadListItems(currentListId);
     }
