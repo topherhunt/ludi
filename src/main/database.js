@@ -121,6 +121,9 @@ function createTables() {
   if (!hasExpandedColumn) {
     db.exec(`ALTER TABLE lists ADD COLUMN is_expanded INTEGER DEFAULT 0`);
   }
+
+  // Drop the unique index if it was previously created (we want to allow duplicates for playlists)
+  db.exec(`DROP INDEX IF EXISTS idx_list_items_unique_song_in_list`);
 }
 
 function getLists() {

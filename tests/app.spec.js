@@ -702,16 +702,17 @@ test.describe('LUDI Music Player', () => {
     const treeItems = await window.locator('.tree-item-content');
     const count = await treeItems.count();
 
-    // Helper to extract item name without the item count (for folders)
+    // Helper to extract item name without the item count (for folders) or duration (for songs)
     const getItemName = (label) => {
       // Remove trailing item count like "13 items" or "1 item"
-      return label.replace(/\d+ items?$/, '').trim();
+      // Remove trailing duration like "2:33" or "12:45"
+      return label.replace(/\d+ items?$/, '').replace(/\d+:\d{2}$/, '').trim();
     };
 
     if (count > 1) {
       // Get initial order
       const initialLabels = await treeItems.allTextContents();
-      console.log('Initial order:', initialLabels);
+      // console.log('Initial order:', initialLabels);
 
       // Try to drag the first item to after the second item
       const firstItem = treeItems.nth(0);
@@ -736,7 +737,7 @@ test.describe('LUDI Music Player', () => {
 
         // Check if order changed
         const newLabels = await window.locator('.tree-item-content').allTextContents();
-        console.log('New order:', newLabels);
+        // console.log('New order:', newLabels);
 
         // The first and second items should have swapped (compare names without item counts)
         expect(getItemName(newLabels[0])).toBe(getItemName(initialLabels[1]));

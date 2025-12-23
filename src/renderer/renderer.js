@@ -118,7 +118,14 @@ modalOverlay.addEventListener('click', (e) => {
 });
 
 // Rename modal helpers
+let renameModalCleanup = null;
+
 function showRenameModal(defaultName, onConfirm) {
+  // Clean up any previous listeners first
+  if (renameModalCleanup) {
+    renameModalCleanup();
+  }
+
   renameInput.value = defaultName;
   renameModalOverlay.classList.add('visible');
   renameInput.focus();
@@ -130,12 +137,10 @@ function showRenameModal(defaultName, onConfirm) {
       hideRenameModal();
       onConfirm(newName);
     }
-    cleanup();
   };
 
   const handleCancel = () => {
     hideRenameModal();
-    cleanup();
   };
 
   const handleEnter = (e) => {
@@ -146,10 +151,11 @@ function showRenameModal(defaultName, onConfirm) {
     }
   };
 
-  const cleanup = () => {
+  renameModalCleanup = () => {
     renameOkBtn.removeEventListener('click', handleOk);
     renameCancelBtn.removeEventListener('click', handleCancel);
     renameInput.removeEventListener('keydown', handleEnter);
+    renameModalCleanup = null;
   };
 
   renameOkBtn.addEventListener('click', handleOk);
@@ -159,6 +165,9 @@ function showRenameModal(defaultName, onConfirm) {
 
 function hideRenameModal() {
   renameModalOverlay.classList.remove('visible');
+  if (renameModalCleanup) {
+    renameModalCleanup();
+  }
 }
 
 renameModalOverlay.addEventListener('click', (e) => {
@@ -219,7 +228,6 @@ async function renderTreeItem(item, parentElement) {
   const isFolder = item.list_id !== null;
   const isPlaying = !isFolder && item.song_id === currentPlayingSongId;
   const isFolderWithPlayingSong = isFolder && await folderContainsSong(item.list_id, currentPlayingSongId);
-  const icon = isFolder ? '▸' : (isPlaying ? '▶' : '♪');
 
   const content = document.createElement('div');
   content.className = 'tree-item-content';
@@ -239,7 +247,14 @@ async function renderTreeItem(item, parentElement) {
   if (isPlaying || isFolderWithPlayingSong) {
     iconSpan.classList.add('playing');
   }
-  iconSpan.textContent = icon;
+  // Use Bootstrap icons
+  if (isFolder) {
+    iconSpan.innerHTML = '<i class="bi bi-caret-right-fill"></i>';
+  } else if (isPlaying) {
+    iconSpan.innerHTML = '<i class="bi bi-play-fill"></i>';
+  } else {
+    iconSpan.innerHTML = '<i class="bi bi-music-note"></i>';
+  }
 
   const label = document.createElement('span');
   label.className = 'tree-item-label';
@@ -705,9 +720,11 @@ async function handleMoveIntoNewFolder() {
 // Drag and drop handlers
 let draggedItem = null;
 let draggedItems = []; // Array of item IDs being dragged
+let isInternalDrag = false; // Flag to prevent file imports during internal drags
 
 function handleDragStart(e) {
   draggedItem = e.target;
+  isInternalDrag = true; // Mark this as an internal drag
   const itemId = parseInt(e.target.dataset.itemId);
 
   // If the dragged item is selected, drag all selected items
@@ -971,7 +988,10 @@ function handleDragEnd(e) {
     }
   });
 
+  // Reset drag state
+  draggedItem = null;
   draggedItems = [];
+  isInternalDrag = false;
 }
 
 // Playback functions
@@ -1279,10 +1299,10 @@ function toggleMute() {
     const isMuted = currentSound.volume() === 0;
     if (isMuted) {
       currentSound.volume(volumeSlider.value / 100);
-      muteBtn.textContent = '🔊';
+      muteBtn.innerHTML = '<i class="bi bi-volume-up-fill"></i>';
     } else {
       currentSound.volume(0);
-      muteBtn.textContent = '🔇';
+      muteBtn.innerHTML = '<i class="bi bi-volume-mute-fill"></i>';
     }
   }
 }
@@ -1831,8 +1851,8 @@ async function handleExplorerTreeDrop(e) {
     return;
   }
 
-  // Handle external file drops
-  if (!isExternalFileDrop) {
+  // Handle external file drops - but never during internal drags
+  if (!isExternalFileDrop || isInternalDrag) {
     return;
   }
 
