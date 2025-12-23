@@ -208,8 +208,8 @@ ipcMain.handle('db:addFolder', (event, { parentListId, position, title }) => {
   return db.addFolder(parentListId, position, title);
 });
 
-ipcMain.handle('db:addSong', (event, { filePath, title, artist, album, durationSeconds }) => {
-  return db.addSong(filePath, title, artist, album, durationSeconds);
+ipcMain.handle('db:addSong', (event, { filePath, title, artist, album, durationSeconds, trackNumber }) => {
+  return db.addSong(filePath, title, artist, album, durationSeconds, trackNumber);
 });
 
 ipcMain.handle('db:addSongToList', (event, { songId, parentListId, position }) => {
@@ -325,6 +325,7 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
       const artist = metadata.common.artist || 'Unknown';
       const album = metadata.common.album || 'Unknown';
       const durationSeconds = Math.floor(metadata.format.duration || 0);
+      const trackNumber = metadata.common.track?.no || null;
 
       // Create destination directory
       const destDir = path.join(libraryPath, artist, album);
@@ -348,7 +349,7 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
       let isNewSong = false;
       try {
         // Add song to database
-        songId = db.addSong(relativePath, title, artist, album, durationSeconds);
+        songId = db.addSong(relativePath, title, artist, album, durationSeconds, trackNumber);
         isNewSong = true;
       } catch (dbError) {
         // Check if this is a UNIQUE constraint error (song already exists)
@@ -414,5 +415,11 @@ ipcMain.handle('settings:selectDirectory', async () => {
 ipcMain.handle('settings:close', () => {
   if (settingsWindow) {
     settingsWindow.close();
+  }
+});
+
+ipcMain.handle('settings:columnsChanged', (event, settings) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('column-settings-changed', settings);
   }
 });

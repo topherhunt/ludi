@@ -178,14 +178,15 @@ body {
 
 .explorer-container {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 20px;
+  overflow: auto;
+  padding: 0;
   position: relative;
 }
 
 /* Tree View */
 .explorer-tree {
   list-style: none;
+  padding: 8px;
 }
 
 .tree-item {
@@ -194,15 +195,7 @@ body {
   /* margin: 2px 0; */
 }
 
-.tree-item-content {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
+/* Tree item states - moved base styles to column layout section */
 .tree-item-content:hover {
   background-color: #2a2d2e;
 }
@@ -224,7 +217,6 @@ body {
 .tree-item-icon {
   width: 16px;
   height: 16px;
-  margin-right: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -244,41 +236,29 @@ body {
 .tree-item-icon.chevron {
   cursor: pointer;
   transition: transform 0.2s;
-  font-size: 20px;
+  font-size: 1em;
   line-height: 16px;
   position: relative;
-  left: 0px;
-  top: -1px;
-  font-size: 1em;
 }
 
 .tree-item-icon.chevron.expanded {
   transform: rotate(90deg);
-  left: 2px;
 }
 
 .tree-item-label {
-  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tree-item-duration {
-  font-size: 12px;
-  color: #858585;
-  margin-left: 8px;
-}
-
 .tree-item-count {
   font-size: 11px;
   color: #6e6e6e;
-  margin-left: 1rem;
+  margin-left: 0.5rem;
 }
 
 .tree-item-children {
   list-style: none;
-  margin-left: 20px;
   display: none;
 }
 
@@ -300,6 +280,103 @@ body {
 
 .drop-indicator.visible {
   display: block;
+}
+
+/* Column Layout - defaults before JS applies settings */
+.column-headers {
+  display: grid;
+  grid-template-columns: 300px 40px 50px 150px 150px 100px;
+  min-width: fit-content;
+  padding: 4px 8px;
+  background-color: #252526;
+  font-size: 11px;
+  font-weight: 600;
+  color: #858585;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.col-header {
+  padding: 4px 8px;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-header.col-icon {
+  padding: 0;
+}
+
+.col-header.col-hidden {
+  display: none;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent 2px, #3e3e42 2px, #3e3e42 3px, transparent 3px);
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: linear-gradient(to right, transparent 1px, #007acc 1px, #007acc 4px, transparent 4px);
+}
+
+
+/* Grid layout for tree items */
+.tree-item-content {
+  display: grid;
+  grid-template-columns: 300px 40px 50px 150px 150px 100px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tree-item-content > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+/* Title column contains icon + text */
+.tree-item-content .col-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 0;
+}
+
+.tree-item-content .tree-item-icon {
+  flex-shrink: 0;
+}
+
+.col-track,
+.col-duration {
+  color: #858585;
+  font-size: 12px;
+}
+
+.col-artist,
+.col-album,
+.col-tags {
+  color: #999;
+  font-size: 13px;
+}
+
+/* Hidden columns */
+.col-hidden {
+  display: none !important;
 }
 
 /* Player Controls */

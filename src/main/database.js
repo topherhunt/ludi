@@ -122,6 +122,13 @@ function createTables() {
     db.exec(`ALTER TABLE lists ADD COLUMN is_expanded INTEGER DEFAULT 0`);
   }
 
+  // Migration - Add track_number column to songs table if it doesn't exist
+  const songColumns = db.prepare("PRAGMA table_info(songs)").all();
+  const hasTrackNumber = songColumns.some(col => col.name === 'track_number');
+  if (!hasTrackNumber) {
+    db.exec(`ALTER TABLE songs ADD COLUMN track_number INTEGER`);
+  }
+
   // Drop the unique index if it was previously created (we want to allow duplicates for playlists)
   db.exec(`DROP INDEX IF EXISTS idx_list_items_unique_song_in_list`);
 }
@@ -139,7 +146,8 @@ function getListItems(listId) {
       s.title as song_title,
       s.artist,
       s.album,
-      s.duration_seconds
+      s.duration_seconds,
+      s.track_number
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
@@ -156,7 +164,8 @@ function getItem(itemId) {
       s.title as song_title,
       s.artist,
       s.album,
-      s.duration_seconds
+      s.duration_seconds,
+      s.track_number
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
@@ -213,13 +222,13 @@ function addFolder(parentListId, position, title) {
   })();
 }
 
-function addSong(filePath, title, artist, album, durationSeconds) {
+function addSong(filePath, title, artist, album, durationSeconds, trackNumber = null) {
   const now = new Date().toISOString();
 
   const result = db.prepare(`
-    INSERT INTO songs (title, artist, album, file_path, duration_seconds, inserted_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(title, artist, album, filePath, durationSeconds, now, now);
+    INSERT INTO songs (title, artist, album, file_path, duration_seconds, track_number, inserted_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(title, artist, album, filePath, durationSeconds, trackNumber, now, now);
 
   return result.lastInsertRowid;
 }

@@ -43,8 +43,8 @@ Features:
 - ✅ Basic Electron app skeleton, basic integration test harness
 - ✅ Drag-and-drop import, playback, drag-and-drop reordering, selecting & deleting songs
 - ✅ Media buttons support
-- [ ] Folders
-- [ ] Arrow keys up/down to change selection, left/right to collapse/expand
+- ✅ Folders
+- ✅ Hotkeys for playlist navigation & playback
 - [ ] Searching & filtering
 
 ### 1. Proof-of-concept

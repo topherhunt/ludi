@@ -23,9 +23,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
   closeSettings: () => ipcRenderer.invoke('settings:close'),
+  notifyColumnSettingsChanged: (settings) => ipcRenderer.invoke('settings:columnsChanged', settings),
 
   // Media key events
   onMediaKey: (callback) => {
     ipcRenderer.on('media-key', (event, action) => callback(action));
+  },
+
+  // Column settings refresh
+  onColumnSettingsChanged: (callback) => {
+    ipcRenderer.on('column-settings-changed', (event, settings) => callback(settings));
   }
 });

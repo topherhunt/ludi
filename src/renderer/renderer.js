@@ -220,7 +220,7 @@ async function loadListItems(listId) {
 }
 
 // Render a tree item
-async function renderTreeItem(item, parentElement) {
+async function renderTreeItem(item, parentElement, depth = 0) {
   const li = document.createElement('li');
   li.className = 'tree-item';
   li.dataset.itemId = item.id;
@@ -242,12 +242,19 @@ async function renderTreeItem(item, parentElement) {
     content.dataset.songId = item.song_id;
   }
 
+  // Title column (contains icon + label, like original tree view)
+  const titleContainer = document.createElement('span');
+  titleContainer.className = 'col-title';
+  // Indent based on nesting depth
+  if (depth > 0) {
+    titleContainer.style.paddingLeft = `${depth * 20}px`;
+  }
+
   const iconSpan = document.createElement('span');
   iconSpan.className = isFolder ? 'tree-item-icon chevron' : 'tree-item-icon';
   if (isCurrentSong || isFolderWithPlayingSong) {
     iconSpan.classList.add(isPlaying ? 'playing' : 'paused');
   }
-  // Use Bootstrap icons
   if (isFolder) {
     iconSpan.innerHTML = '<i class="bi bi-caret-right-fill"></i>';
   } else if (isCurrentSong) {
@@ -255,30 +262,61 @@ async function renderTreeItem(item, parentElement) {
   } else {
     iconSpan.innerHTML = '<i class="bi bi-music-note"></i>';
   }
+  titleContainer.appendChild(iconSpan);
 
-  const label = document.createElement('span');
-  label.className = 'tree-item-label';
-  label.textContent = isFolder ? item.list_title : item.song_title;
-
-  content.appendChild(iconSpan);
-  content.appendChild(label);
-
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'tree-item-label';
+  labelSpan.textContent = isFolder ? item.list_title : item.song_title;
   if (isFolder) {
     const itemCount = document.createElement('span');
     itemCount.className = 'tree-item-count';
-    // Load count asynchronously to avoid blocking render
     getFolderItemCount(item.list_id).then(count => {
       itemCount.textContent = `${count} item${count !== 1 ? 's' : ''}`;
     });
-    label.appendChild(itemCount);
+    labelSpan.appendChild(itemCount);
   }
+  titleContainer.appendChild(labelSpan);
+  content.appendChild(titleContainer);
 
-  if (!isFolder && item.duration_seconds) {
-    const duration = document.createElement('span');
-    duration.className = 'tree-item-duration';
-    duration.textContent = formatTime(item.duration_seconds);
-    content.appendChild(duration);
+  // Track number column
+  const trackSpan = document.createElement('span');
+  trackSpan.className = 'col-track';
+  if (!isFolder && item.track_number) {
+    trackSpan.textContent = item.track_number;
   }
+  content.appendChild(trackSpan);
+
+  // Duration column
+  const durationSpan = document.createElement('span');
+  durationSpan.className = 'col-duration';
+  if (!isFolder && item.duration_seconds) {
+    durationSpan.textContent = formatTime(item.duration_seconds);
+  }
+  content.appendChild(durationSpan);
+
+  // Artist column
+  const artistSpan = document.createElement('span');
+  artistSpan.className = 'col-artist';
+  if (!isFolder && item.artist && item.artist !== 'Unknown') {
+    artistSpan.textContent = item.artist;
+  }
+  content.appendChild(artistSpan);
+
+  // Album column
+  const albumSpan = document.createElement('span');
+  albumSpan.className = 'col-album';
+  if (!isFolder && item.album && item.album !== 'Unknown') {
+    albumSpan.textContent = item.album;
+  }
+  content.appendChild(albumSpan);
+
+  // Tags column (empty for now)
+  const tagsSpan = document.createElement('span');
+  tagsSpan.className = 'col-tags';
+  content.appendChild(tagsSpan);
+
+  // Apply column visibility (must be after all cells are added)
+  applyColumnVisibility(content);
 
   li.appendChild(content);
 
@@ -287,6 +325,7 @@ async function renderTreeItem(item, parentElement) {
     const children = document.createElement('ul');
     children.className = 'tree-item-children';
     children.dataset.listId = item.list_id;
+    children.dataset.depth = depth + 1;
     li.appendChild(children);
 
     // Apply expanded state from database
@@ -294,7 +333,7 @@ async function renderTreeItem(item, parentElement) {
       iconSpan.classList.add('expanded');
       children.classList.add('expanded');
       // Load children if expanded
-      loadFolderChildren(item.list_id, children);
+      loadFolderChildren(item.list_id, children, depth + 1);
     }
 
     // Chevron click to expand/collapse
@@ -336,11 +375,11 @@ async function renderTreeItem(item, parentElement) {
 }
 
 // Load folder children
-async function loadFolderChildren(listId, childrenElement) {
+async function loadFolderChildren(listId, childrenElement, depth = 1) {
   if (childrenElement.children.length === 0) {
     const items = await window.electronAPI.getListItems(listId);
     for (const item of items) {
-      await renderTreeItem(item, childrenElement);
+      await renderTreeItem(item, childrenElement, depth);
     }
   }
 }
@@ -356,7 +395,8 @@ async function toggleFolder(listId, iconElement, childrenElement) {
     childrenElement.classList.add('expanded');
 
     // Load children if not already loaded
-    await loadFolderChildren(listId, childrenElement);
+    const depth = parseInt(childrenElement.dataset.depth || '1', 10);
+    await loadFolderChildren(listId, childrenElement, depth);
   } else {
     // Collapse
     iconElement.classList.remove('expanded');
@@ -2063,5 +2103,180 @@ async function getFolderItemCount(folderId) {
   return count;
 }
 
+// Column settings
+const columnHeaders = document.getElementById('columnHeaders');
+
+// Column visibility state
+let columnSettings = {
+  visibility: {
+    track: true,
+    duration: true,
+    artist: true,
+    album: true,
+    tags: true
+  },
+  widths: {
+    title: 300,
+    track: 40,
+    duration: 50,
+    artist: 150,
+    album: 150,
+    tags: 100
+  }
+};
+
+// Load column settings from localStorage
+function loadColumnSettings() {
+  const saved = localStorage.getItem('ludi-column-settings');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      // Deep merge to preserve defaults for missing keys
+      columnSettings = {
+        visibility: { ...columnSettings.visibility, ...parsed.visibility },
+        widths: { ...columnSettings.widths, ...parsed.widths }
+      };
+    } catch (e) {
+      console.error('Error loading column settings:', e);
+    }
+  }
+  applyColumnSettings();
+}
+
+// Save column settings to localStorage
+function saveColumnSettings() {
+  localStorage.setItem('ludi-column-settings', JSON.stringify(columnSettings));
+}
+
+// Build the grid-template-columns string based on visible columns
+function buildGridTemplateColumns() {
+  // Column order: title, track, duration, artist, album, tags
+  // All columns use fixed pixel widths for proper resizing behavior
+  const columns = [
+    { id: 'title', width: columnSettings.widths.title || 300, alwaysVisible: true },
+    { id: 'track', width: columnSettings.widths.track || 40 },
+    { id: 'duration', width: columnSettings.widths.duration || 50 },
+    { id: 'artist', width: columnSettings.widths.artist || 150 },
+    { id: 'album', width: columnSettings.widths.album || 150 },
+    { id: 'tags', width: columnSettings.widths.tags || 100 }
+  ];
+
+  return columns
+    .filter(col => col.alwaysVisible || columnSettings.visibility[col.id])
+    .map(col => `${col.width}px`)
+    .join(' ');
+}
+
+// Apply column settings to the UI
+function applyColumnSettings() {
+  const gridTemplate = buildGridTemplateColumns();
+
+  // Apply visibility to headers
+  Object.keys(columnSettings.visibility).forEach(col => {
+    const isVisible = columnSettings.visibility[col];
+    const headerCol = columnHeaders.querySelector(`.col-${col}`);
+
+    if (headerCol) {
+      headerCol.classList.toggle('col-hidden', !isVisible);
+    }
+  });
+
+  // Apply grid template to column headers
+  columnHeaders.style.gridTemplateColumns = gridTemplate;
+
+  // Refresh tree items to apply visibility and grid template
+  document.querySelectorAll('.tree-item-content').forEach(content => {
+    applyColumnVisibility(content);
+  });
+}
+
+// Apply column visibility to a tree item content element
+function applyColumnVisibility(content) {
+  const gridTemplate = buildGridTemplateColumns();
+  content.style.gridTemplateColumns = gridTemplate;
+
+  Object.keys(columnSettings.visibility).forEach(col => {
+    const isVisible = columnSettings.visibility[col];
+
+    // Hide the column cells
+    const cell = content.querySelector(`.col-${col}`);
+    if (cell) {
+      cell.classList.toggle('col-hidden', !isVisible);
+    }
+  });
+}
+
+// Column resize state
+let resizing = null;
+let startX = 0;
+let startWidth = 0;
+
+function setupColumnResize() {
+  const resizeHandles = columnHeaders.querySelectorAll('.resize-handle');
+
+  resizeHandles.forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const header = handle.parentElement;
+      const columnClass = Array.from(header.classList).find(c => c.startsWith('col-') && c !== 'col-header');
+      if (!columnClass) return;
+
+      const columnId = columnClass.replace('col-', '');
+      resizing = columnId;
+      startX = e.clientX;
+      startWidth = header.offsetWidth;
+
+      handle.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+
+    const diff = e.clientX - startX;
+    const newWidth = Math.max(30, startWidth + diff); // Minimum 30px
+
+    columnSettings.widths[resizing] = newWidth;
+
+    // Reapply grid template to all elements
+    const gridTemplate = buildGridTemplateColumns();
+    columnHeaders.style.gridTemplateColumns = gridTemplate;
+    document.querySelectorAll('.tree-item-content').forEach(content => {
+      content.style.gridTemplateColumns = gridTemplate;
+    });
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (resizing) {
+      const handle = columnHeaders.querySelector(`.col-${resizing} .resize-handle`);
+      if (handle) {
+        handle.classList.remove('resizing');
+      }
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      saveColumnSettings();
+      resizing = null;
+    }
+  });
+}
+
+// Listen for column settings changes from Settings window
+window.electronAPI.onColumnSettingsChanged((settings) => {
+  if (settings) {
+    // Deep merge received settings and save to our localStorage
+    columnSettings = {
+      visibility: { ...columnSettings.visibility, ...settings.visibility },
+      widths: { ...columnSettings.widths, ...settings.widths }
+    };
+    saveColumnSettings();
+    applyColumnSettings();
+  }
+});
+
 // Initialize the app
+loadColumnSettings();
+setupColumnResize();
 initialize();
