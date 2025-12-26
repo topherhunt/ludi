@@ -7,7 +7,11 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --enable-logging",
+    "vite": "vite",
+    "vite:build": "vite build",
+    "dev:solid": "concurrently \"vite\" \"wait-on http://localhost:5173/solid.html && SOLID_DEV=true electron .\"",
     "test": "playwright test",
+    "test:unit": "vitest",
     "postinstall": "electron-rebuild"
   },
   "keywords": [
@@ -20,14 +24,22 @@
   "license": "MIT",
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@solidjs/testing-library": "^0.8.10",
+    "concurrently": "^9.2.1",
     "electron": "^28.0.0",
     "electron-rebuild": "^3.2.9",
-    "playwright": "^1.57.0"
+    "jsdom": "^27.3.0",
+    "playwright": "^1.57.0",
+    "vite": "^7.3.0",
+    "vite-plugin-solid": "^2.11.10",
+    "vitest": "^4.0.16",
+    "wait-on": "^9.0.3"
   },
   "dependencies": {
     "better-sqlite3": "^9.2.0",
     "bootstrap-icons": "^1.13.1",
     "howler": "^2.2.4",
-    "music-metadata": "^7.14.0"
+    "music-metadata": "^7.14.0",
+    "solid-js": "^1.9.10"
   }
 }

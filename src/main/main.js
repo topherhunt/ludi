@@ -7,6 +7,9 @@ const { parseFile } = require('music-metadata');
 let mainWindow;
 let settingsWindow;
 
+// Check if running in SolidJS development mode
+const isSolidDev = process.env.SOLID_DEV === 'true';
+
 function createWindow() {
   const isTest = process.env.NODE_ENV === 'test';
 
@@ -24,10 +27,15 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  // Load from Vite dev server in Solid development mode, otherwise load static file
+  if (isSolidDev) {
+    mainWindow.loadURL('http://localhost:5173/solid.html');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  }
 
-  // Open DevTools in development
-  if (process.argv.includes('--enable-logging')) {
+  // Open DevTools in development (but not during tests, as it interferes with Playwright)
+  if ((process.argv.includes('--enable-logging') || isSolidDev) && !isTest) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -82,7 +90,12 @@ function createSettingsWindow() {
     modal: false
   });
 
-  settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
+  // Load from Vite dev server in Solid development mode, otherwise load static file
+  if (isSolidDev) {
+    settingsWindow.loadURL('http://localhost:5173/settings.solid.html');
+  } else {
+    settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
+  }
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;

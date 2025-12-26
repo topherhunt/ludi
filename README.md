@@ -45,19 +45,11 @@ Features:
 - ✅ Media buttons support
 - ✅ Folders
 - ✅ Hotkeys for playlist navigation & playback
+- ✅ Configurable columns for track #, duration, artist, album, and tags
+- [ ] Refactor all UI to SolidJS for performance & easier maintenance
 - [ ] Searching & filtering
 
-### 1. Proof-of-concept
-
-Before I stress about nailing down the UI details, I should first do a spike to confirm that the basic mechanic works. This proof-of-concept should support:
-
-- Drag songs into the main panel in order to import them. Doing so will:
-  - Warning message if any unsupported filetypes were dragged in, listing them and saying they'll be ignored.
-  - Supports the common song formats (case-insensitive): .mp3, .m4a, .ogg.
-- Double-click any SONG in the Explorer to start playback at that point, looping through my whole collection. Or double-click a FOLDER to start playback of just the songs in that folder (incl subfolders).
-  - Playback traverses depth-first. So if the playback cursor reaches a folder, it enters the folder and plays the first item inside it.
-
-#### The SQLite DB schema:
+## The SQLite DB schema:
 
 - `lists`
   *Represents a playlist (such as the mandatory "Main Library" list) or a subfolder within a list. The app auto-creates one mandatory playlist with id=0, position=0, and title="Main Library". For now, root-level playlists will be ordered in the sidebar using the `sidebar_position` field but long-term we may need a `sidebar_items` table.*
@@ -92,7 +84,7 @@ Notes on implementation:
 
 - No DB-layer deletion cascade. Handle this via JS app logic.
 
-### Wishlist (later steps)
+## Wishlist (later steps)
 
 "Utilities" menu with some useful utilities:
 
@@ -103,16 +95,14 @@ Notes on implementation:
 
 Other:
 
-- Right-click a selection of songs/folders -> "Move into new subfolder", opens a pop-up to type in the new folder's name. The new folder will be inserted above the 1st selected item, and then all selected items will be moved into it.
-- Shuffle and loop functions. Shuffle just takes the current scope as a flat list, randomly shuffles all songs, and plays in that order.
 - Detect/Prevent the app from being opened twice at the same time, to avoid conflicting writes to the sqlite DB.
 - Add full support for playlists. In the proof-of-concept, the DB schema allows for this but there's no playlist creation/mgmt UI added.
-- Right-hand sidebar for editing title, artist, album, and "tags" -- comma-separated labels that I can use for rich searching.
+- Sidebar section for editing title, artist, album, and "tags" -- comma-separated labels that I can use for rich searching.
 - Support searching:
   - Support tagging songs (one, or a selection, or a whole folder at once)
   - Can filter by playlist inclusion/exclusion, artist / album / title has/doesn't have, tag inclusion/exclusion
   - Supports "and" and "or" nested subgroups
 - Support playlists and saved searches.
 - Volume equalizer - when enabled, per-song volume is adjusted so all songs have the same max volume.
-- Ability to customize the path to your audio library, and scan / autodetect all files in that path and add them to your main playlist.
+- Ability to scan / autodetect all files in your Music Library path, and add them to your library DB.
 - Right-click on a folder -> Scans -> "List duplicates of the same song" (in that list/folder). Opens a new window listing all duplicates found (for each, the song + the folder path). Click on any item to jump to it in the main window.
