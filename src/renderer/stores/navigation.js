@@ -1,16 +1,56 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal, createMemo, createRoot } from 'solid-js';
 
-// Current list being viewed (0 = Main Library)
-const [currentListId, setCurrentListId] = createSignal(0);
+// Create store signals inside createRoot to avoid "computations created outside createRoot" warnings
+// These are intentionally global and live for the app lifetime
+const {
+  currentListId,
+  setCurrentListId,
+  selectedItemIds,
+  setSelectedItemIds,
+  lastSelectedItemId,
+  setLastSelectedItemId,
+  visibleItemIds,
+  setVisibleItemIds,
+  hasMultipleSelected,
+  selectedCount,
+} = createRoot(() => {
+  // Current list being viewed (0 = Main Library)
+  const [currentListId, setCurrentListId] = createSignal(0);
 
-// Set of selected item IDs
-const [selectedItemIds, setSelectedItemIds] = createSignal(new Set());
+  // Set of selected item IDs
+  const [selectedItemIds, setSelectedItemIds] = createSignal(new Set());
 
-// Last selected item ID (for shift-click range selection)
-const [lastSelectedItemId, setLastSelectedItemId] = createSignal(null);
+  // Last selected item ID (for shift-click range selection)
+  const [lastSelectedItemId, setLastSelectedItemId] = createSignal(null);
 
-// Flat list of visible item IDs in order (for range selection)
-const [visibleItemIds, setVisibleItemIds] = createSignal([]);
+  // Flat list of visible item IDs in order (for range selection)
+  const [visibleItemIds, setVisibleItemIds] = createSignal([]);
+
+  /**
+   * Check if multiple items are selected
+   * @returns {boolean}
+   */
+  const hasMultipleSelected = createMemo(() => selectedItemIds().size > 1);
+
+  /**
+   * Get count of selected items
+   * @returns {number}
+   */
+  const selectedCount = createMemo(() => selectedItemIds().size);
+
+  return {
+    currentListId,
+    setCurrentListId,
+    selectedItemIds,
+    setSelectedItemIds,
+    lastSelectedItemId,
+    setLastSelectedItemId,
+    visibleItemIds,
+    setVisibleItemIds,
+    hasMultipleSelected,
+    selectedCount,
+  };
+});
 
 /**
  * Check if an item is selected
@@ -110,18 +150,6 @@ function getSelectedItemIds() {
 }
 
 /**
- * Check if multiple items are selected
- * @returns {boolean}
- */
-const hasMultipleSelected = createMemo(() => selectedItemIds().size > 1);
-
-/**
- * Get count of selected items
- * @returns {number}
- */
-const selectedCount = createMemo(() => selectedItemIds().size);
-
-/**
  * Select a range of items given an array of visible IDs
  * @param {number} itemId - The end of the range
  * @param {number[]} visibleIds - Array of visible item IDs
@@ -149,6 +177,16 @@ function rangeSelect(itemId, visibleIds) {
   setSelectedItemIds(new Set(rangeIds));
 }
 
+/**
+ * Select all items given an array of visible IDs
+ * @param {number[]} visibleIds - Array of visible item IDs
+ */
+function selectAll(visibleIds) {
+  if (visibleIds.length === 0) return;
+  setSelectedItemIds(new Set(visibleIds));
+  setLastSelectedItemId(visibleIds[0]);
+}
+
 export {
   // Signals
   currentListId,
@@ -170,6 +208,7 @@ export {
   toggleItemSelection,
   selectRange,
   rangeSelect,
+  selectAll,
   handleItemClick,
   clearSelection,
   getSelectedItemIds,

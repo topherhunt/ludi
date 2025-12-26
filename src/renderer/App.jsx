@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, createEffect } from 'solid-js';
+import { createSignal, onMount, onCleanup, Show, createRoot } from 'solid-js';
 import { Sidebar } from './components/Sidebar.jsx';
 import { Explorer } from './components/Explorer.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
@@ -7,6 +7,7 @@ import {
   alertModalState,
   confirmModalState,
   renameModalState,
+  showRenameModal,
   hideAlertModal,
   hideConfirmModal,
   hideRenameModal,
@@ -16,6 +17,7 @@ import {
   setCurrentListId,
   clearSelection,
 } from './stores/navigation.js';
+import { applySettingsFromIPC } from './stores/columns.js';
 import {
   playlist,
   setPlaylist,
@@ -28,19 +30,13 @@ import {
   hasNextTrack,
   hasPreviousTrack,
 } from './stores/playback.js';
-import { createAudioPlayer, getAudioPlayer } from './hooks/useAudio.js';
-import { getSongsInList, getSongPath } from './utils/api.js';
+import { getAudioPlayer } from './hooks/useAudio.js';
+import { getSongsInList, getSong } from './utils/api.js';
 
 /**
  * Main App component
  */
 export function App() {
-  // Audio player state
-  const [currentTime, setCurrentTime] = createSignal(0);
-  const [duration, setDuration] = createSignal(0);
-  const [volume, setVolume] = createSignal(1);
-  const [isMuted, setIsMuted] = createSignal(false);
-
   // Current song info for display
   const [songTitle, setSongTitle] = createSignal('');
   const [songArtist, setSongArtist] = createSignal('');
@@ -48,21 +44,28 @@ export function App() {
   // List title for explorer header
   const [listTitle, setListTitle] = createSignal('Main Library');
 
-  // Create audio player
+  // Explorer refetch function (captured when Explorer is ready)
+  let explorerRefetch = null;
+
+  // Get audio player (singleton)
+  const player = getAudioPlayer();
+
+  // Set up audio player callbacks
   onMount(() => {
-    createAudioPlayer({
-      onTimeUpdate: setCurrentTime,
-      onDurationChange: setDuration,
-      onEnd: handleTrackEnd,
-      onError: (err) => console.error('Audio error:', err),
+    player.onEnd(handleTrackEnd);
+    player.onError((err) => console.error('Audio error:', err));
+  });
+
+  // Listen for column settings changes from Settings window
+  onMount(() => {
+    const cleanup = window.electronAPI?.onColumnSettingsChanged?.((settings) => {
+      applySettingsFromIPC(settings);
     });
+    onCleanup(() => cleanup?.());
   });
 
   // Handle track end - play next or stop
   const handleTrackEnd = () => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
     if (hasNextTrack()) {
       handleNext();
     } else {
@@ -71,25 +74,18 @@ export function App() {
     }
   };
 
-  // Play a song by loading it
+  // Play a song by ID
   const playSong = async (song) => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
     try {
-      const filePath = await getSongPath(song.id);
-      if (!filePath) {
-        console.error('Could not get song path');
-        return;
-      }
-
-      player.load(filePath);
-      player.play();
-
+      // Update display info
       setSongTitle(song.title || 'Unknown');
       setSongArtist(song.artist || '');
-      setCurrentPlayingSongId(song.id);
-      setIsPlaying(true);
+
+      // Use the audio player's playSong method which handles loading and playing
+      const success = await player.playSong(song.id);
+      if (!success) {
+        console.error('Failed to play song:', song.id);
+      }
     } catch (err) {
       console.error('Error playing song:', err);
     }
@@ -132,19 +128,14 @@ export function App() {
 
   // Toggle play/pause
   const togglePlayPause = () => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
     if (isPlaying()) {
       player.pause();
-      setIsPlaying(false);
     } else if (playlist().length > 0) {
       if (currentTrackIndex() < 0) {
         setCurrentTrackIndex(0);
         playCurrentTrack();
       } else {
         player.play();
-        setIsPlaying(true);
       }
     }
   };
@@ -165,54 +156,25 @@ export function App() {
 
   // Seek to percentage
   const seekToPercent = (percent) => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
-    const dur = duration();
-    if (dur > 0) {
-      const newTime = (percent / 100) * dur;
-      player.seek(newTime);
-      setCurrentTime(newTime);
-    }
+    player.seekToPercent(percent);
   };
 
   // Handle seek from keyboard (relative seek in seconds)
   const handleSeek = (seconds) => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
-    const current = currentTime();
-    const dur = duration();
+    const current = player.currentTime();
+    const dur = player.duration();
     const newTime = Math.max(0, Math.min(dur, current + seconds));
     player.seek(newTime);
-    setCurrentTime(newTime);
   };
 
   // Set volume percentage
   const setVolumePercent = (percent) => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
-    const vol = percent / 100;
-    player.setVolume(vol);
-    setVolume(vol);
-    if (vol > 0) {
-      setIsMuted(false);
-    }
+    player.setVolumePercent(percent);
   };
 
   // Toggle mute
   const toggleMute = () => {
-    const player = getAudioPlayer();
-    if (!player) return;
-
-    if (isMuted()) {
-      player.setVolume(volume());
-      setIsMuted(false);
-    } else {
-      player.setVolume(0);
-      setIsMuted(true);
-    }
+    player.toggleMute();
   };
 
   // Handle list change from sidebar
@@ -232,8 +194,19 @@ export function App() {
 
   // Handle new folder from sidebar
   const handleNewFolder = async () => {
-    // This will be handled by Explorer component
-    // Just need to trigger refetch after
+    // Get position for new folder (end of current list)
+    const items = await window.electronAPI?.getListItems?.(currentListId()) || [];
+    const position = items.length;
+
+    showRenameModal('New Folder', async (folderName) => {
+      await window.electronAPI?.addFolder?.({
+        parentListId: currentListId(),
+        position,
+        title: folderName,
+      });
+      explorerRefetch?.();
+      hideRenameModal();
+    });
   };
 
   return (
@@ -248,15 +221,16 @@ export function App() {
         onPlayFolder={handlePlayFolder}
         onPlaySong={handlePlaySong}
         onSeek={handleSeek}
+        onRefetchReady={(fn) => { explorerRefetch = fn; }}
       />
 
       <PlayerControls
         songTitle={songTitle()}
         songArtist={songArtist()}
-        currentTime={currentTime}
-        duration={duration}
-        volume={volume}
-        isMuted={isMuted}
+        currentTime={player.currentTime}
+        duration={player.duration}
+        volume={player.volume}
+        isMuted={player.isMuted}
         togglePlayPause={togglePlayPause}
         seekToPercent={seekToPercent}
         setVolumePercent={setVolumePercent}
@@ -276,21 +250,24 @@ export function App() {
       {/* Confirm Modal */}
       <Show when={confirmModalState().isOpen}>
         <ConfirmModal
+          open={true}
           title={confirmModalState().title}
           message={confirmModalState().message}
-          onConfirm={() => {
-            confirmModalState().onConfirm?.();
+          onResponse={(confirmed) => {
+            if (confirmed) {
+              confirmModalState().onConfirm?.();
+            }
             hideConfirmModal();
           }}
-          onCancel={hideConfirmModal}
         />
       </Show>
 
       {/* Rename Modal */}
       <Show when={renameModalState().isOpen}>
         <RenameModal
-          defaultValue={renameModalState().defaultValue}
-          onConfirm={(value) => {
+          open={true}
+          value={renameModalState().defaultValue}
+          onSubmit={(value) => {
             renameModalState().onConfirm?.(value);
           }}
           onCancel={hideRenameModal}

@@ -15,8 +15,8 @@ import {
   columnVisibility,
   gridTemplateColumns,
 } from '../stores/columns.js';
-import { formatTime, formatItemCount } from '../utils/format.js';
-import { folderContainsSong, getItemById } from '../utils/api.js';
+import { formatTime, pluralize } from '../utils/format.js';
+import { folderContainsSong, getItemById, countSongsInList } from '../utils/api.js';
 
 /**
  * Single tree item (folder or song)
@@ -272,21 +272,20 @@ export function TreeItem(props) {
 }
 
 /**
- * Folder item count (loaded asynchronously)
+ * Folder song count (loaded asynchronously, counts all songs recursively)
  */
 function FolderItemCount(props) {
   const [count] = createResource(
     () => props.listId,
     async (listId) => {
-      const items = await window.electronAPI?.getListItems(listId);
-      return items?.length || 0;
+      return await countSongsInList(listId);
     }
   );
 
   return (
     <span class="tree-item-count">
       <Show when={count() !== undefined}>
-        {formatItemCount(count())}
+        {count()} {pluralize(count(), 'song')}
       </Show>
     </span>
   );

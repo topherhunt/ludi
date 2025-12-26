@@ -1,4 +1,4 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal, createMemo, createRoot } from 'solid-js';
 
 const STORAGE_KEY = 'ludi-column-settings';
 
@@ -58,11 +58,42 @@ function saveToStorage(settings) {
   }
 }
 
-// Initialize from storage
-const initialSettings = loadFromStorage();
+// Initialize from storage and create signals inside createRoot
+const {
+  columnVisibility,
+  setColumnVisibility,
+  columnWidths,
+  setColumnWidths,
+  gridTemplateColumns,
+} = createRoot(() => {
+  const initialSettings = loadFromStorage();
 
-const [columnVisibility, setColumnVisibility] = createSignal(initialSettings.visibility);
-const [columnWidths, setColumnWidths] = createSignal(initialSettings.widths);
+  const [columnVisibility, setColumnVisibility] = createSignal(initialSettings.visibility);
+  const [columnWidths, setColumnWidths] = createSignal(initialSettings.widths);
+
+  const gridTemplateColumns = createMemo(() => {
+    const vis = columnVisibility();
+    const widths = columnWidths();
+
+    const cols = ['minmax(200px, 1fr)'];  // Title is always visible
+
+    if (vis.track) cols.push(`${widths.track || 40}px`);
+    if (vis.duration) cols.push(`${widths.duration || 60}px`);
+    if (vis.artist) cols.push(`${widths.artist || 150}px`);
+    if (vis.album) cols.push(`${widths.album || 150}px`);
+    if (vis.tags) cols.push(`${widths.tags || 100}px`);
+
+    return cols.join(' ');
+  });
+
+  return {
+    columnVisibility,
+    setColumnVisibility,
+    columnWidths,
+    setColumnWidths,
+    gridTemplateColumns,
+  };
+});
 
 /**
  * Check if a column is visible
@@ -128,25 +159,6 @@ function setColumnWidth(column, width) {
     return next;
   });
 }
-
-/**
- * Build CSS grid-template-columns value based on visibility
- * @returns {string}
- */
-const gridTemplateColumns = createMemo(() => {
-  const vis = columnVisibility();
-  const widths = columnWidths();
-
-  const cols = ['minmax(200px, 1fr)'];  // Title is always visible
-
-  if (vis.track) cols.push(`${widths.track || 40}px`);
-  if (vis.duration) cols.push(`${widths.duration || 60}px`);
-  if (vis.artist) cols.push(`${widths.artist || 150}px`);
-  if (vis.album) cols.push(`${widths.album || 150}px`);
-  if (vis.tags) cols.push(`${widths.tags || 100}px`);
-
-  return cols.join(' ');
-});
 
 /**
  * Apply settings received from settings window (via IPC)

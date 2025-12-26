@@ -4,18 +4,33 @@ const fs = require('fs');
 const os = require('os');
 
 const DB_DIR = path.join(os.homedir(), '.ludi');
-const DB_PATH = path.join(DB_DIR, 'ludi-library.sqlite');
+
+// Determine database filename based on environment
+// Can be overridden with LUDI_DB_PATH environment variable
+function getDbPath() {
+  if (process.env.LUDI_DB_PATH) {
+    return process.env.LUDI_DB_PATH;
+  }
+
+  const env = process.env.NODE_ENV || 'dev';
+  const filename = `ludi-library-${env}.sqlite`;
+  return path.join(DB_DIR, filename);
+}
 
 let db;
 
 function initialize() {
+  // Determine DB path now (after env vars are set)
+  const dbPath = getDbPath();
+
   // Create directory if it doesn't exist
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
   }
 
   // Open database
-  db = new Database(DB_PATH);
+  db = new Database(dbPath);
 
   // Enable foreign keys
   db.pragma('foreign_keys = ON');
@@ -410,7 +425,7 @@ function getSettings() {
   });
 
   // Add non-editable settings
-  settings.database_path = DB_PATH;
+  settings.database_path = getDbPath();
 
   return settings;
 }
@@ -442,10 +457,6 @@ function updateFolderExpanded(listId, isExpanded) {
   `).run(isExpanded ? 1 : 0, now, listId);
 }
 
-function getDbPath() {
-  return DB_PATH;
-}
-
 module.exports = {
   initialize,
   getLists,
@@ -464,5 +475,5 @@ module.exports = {
   updateFolderExpanded,
   getSettings,
   updateSetting,
-  getDbPath
+  getDbPath,
 };

@@ -76,6 +76,22 @@ export function AlertModal(props) {
  * Confirm Modal - Yes/No dialog
  */
 export function ConfirmModal(props) {
+  // Handle Enter key to confirm
+  createEffect(() => {
+    if (!props.open) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        props.onResponse?.(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
   return (
     <Modal
       open={props.open}
@@ -115,6 +131,22 @@ export function RenameModal(props) {
       inputRef.focus();
       inputRef.select();
     }
+  });
+
+  // Handle Escape key to close
+  createEffect(() => {
+    if (!props.open) return;
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        props.onCancel?.();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleEscape);
+    });
   });
 
   const handleSubmit = () => {

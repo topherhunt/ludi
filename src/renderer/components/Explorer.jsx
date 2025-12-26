@@ -35,6 +35,8 @@ export function Explorer(props) {
   // Handle refetch callback from TreeView
   const handleRefetch = (fn) => {
     refetchTree = fn;
+    // Also expose refetch to parent for sidebar operations
+    props.onRefetchReady?.(fn);
   };
 
   // Close context menu
@@ -260,7 +262,7 @@ export function Explorer(props) {
   });
 
   return (
-    <main class="explorer">
+    <main class="main-panel">
       <ExplorerHeader
         title={getListTitle()}
         onCollapseAll={handleCollapseAll}

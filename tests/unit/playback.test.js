@@ -189,6 +189,110 @@ describe('Playback Store', () => {
     });
   });
 
+  describe('double-click to start playback', () => {
+    // Simulates the flow: user double-clicks a song in the tree
+    // → handlePlaySong gets called with (songId, parentListId)
+    // → fetches songs from parent list
+    // → finds clicked song's index
+    // → sets playlist and current track
+    // → starts playback
+
+    it('should set playlist and play from specific song index', () => {
+      // Simulate a list of songs (as returned by getSongsInList)
+      const songsInList = [
+        { id: 101, title: 'Song A' },
+        { id: 102, title: 'Song B' },
+        { id: 103, title: 'Song C' },
+        { id: 104, title: 'Song D' },
+      ];
+
+      // User double-clicked on Song C (id: 103)
+      const clickedSongId = 103;
+      const songIndex = songsInList.findIndex(s => s.id === clickedSongId);
+
+      // Set the playlist starting at the clicked song
+      setCurrentPlaylist(songsInList.map(s => s.id), songIndex);
+
+      // Verify playlist is set correctly
+      expect(playlist()).toEqual([101, 102, 103, 104]);
+      expect(currentTrackIndex()).toBe(2); // Song C is at index 2
+
+      // Simulate starting playback
+      setCurrentPlayingSongId(clickedSongId);
+      setIsPlaying(true);
+
+      expect(currentPlayingSongId()).toBe(103);
+      expect(isPlaying()).toBe(true);
+    });
+
+    it('should allow navigating to next song after double-click play', () => {
+      const songIds = [201, 202, 203, 204];
+
+      // Double-click on second song
+      setCurrentPlaylist(songIds, 1);
+      setCurrentPlayingSongId(202);
+      setIsPlaying(true);
+
+      // Play next
+      const nextId = nextTrack();
+      expect(nextId).toBe(203);
+      expect(currentTrackIndex()).toBe(2);
+    });
+
+    it('should allow navigating to previous song after double-click play', () => {
+      const songIds = [301, 302, 303, 304];
+
+      // Double-click on third song
+      setCurrentPlaylist(songIds, 2);
+      setCurrentPlayingSongId(303);
+      setIsPlaying(true);
+
+      // Play previous
+      const prevId = previousTrack();
+      expect(prevId).toBe(302);
+      expect(currentTrackIndex()).toBe(1);
+    });
+
+    it('should handle double-click on first song in list', () => {
+      const songIds = [401, 402, 403];
+
+      // Double-click on first song
+      setCurrentPlaylist(songIds, 0);
+      setCurrentPlayingSongId(401);
+      setIsPlaying(true);
+
+      expect(currentTrackIndex()).toBe(0);
+      expect(hasPreviousTrack()).toBe(false);
+      expect(hasNextTrack()).toBe(true);
+    });
+
+    it('should handle double-click on last song in list', () => {
+      const songIds = [501, 502, 503];
+
+      // Double-click on last song
+      setCurrentPlaylist(songIds, 2);
+      setCurrentPlayingSongId(503);
+      setIsPlaying(true);
+
+      expect(currentTrackIndex()).toBe(2);
+      expect(hasPreviousTrack()).toBe(true);
+      expect(hasNextTrack()).toBe(false);
+    });
+
+    it('should handle double-click on single song in list', () => {
+      const songIds = [601];
+
+      // Double-click on only song
+      setCurrentPlaylist(songIds, 0);
+      setCurrentPlayingSongId(601);
+      setIsPlaying(true);
+
+      expect(currentTrackIndex()).toBe(0);
+      expect(hasPreviousTrack()).toBe(false);
+      expect(hasNextTrack()).toBe(false);
+    });
+  });
+
   describe('window globals for testing', () => {
     it('should expose shuffleEnabled on window', () => {
       expect(window.shuffleEnabled).toBe(false);

@@ -47,7 +47,7 @@ export function Sidebar(props) {
           +
         </button>
         <Show when={isDropdownOpen()}>
-          <div id="addLibraryDropdown" class="dropdown-menu">
+          <div id="addLibraryDropdown" class="dropdown-menu visible">
             <div
               class="dropdown-item"
               id="newFolderMenuItem"

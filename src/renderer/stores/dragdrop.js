@@ -1,24 +1,76 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal, createMemo, createRoot } from 'solid-js';
 
-// Drag state
-const [isDragging, setIsDragging] = createSignal(false);
-const [draggedItemIds, setDraggedItemIds] = createSignal([]);
-const [isInternalDrag, setIsInternalDrag] = createSignal(false);
-const [dragSource, setDragSource] = createSignal(null);  // 'tree' | 'sidebar' | 'external'
+// Create signals inside createRoot to avoid warnings
+const {
+  isDragging,
+  setIsDragging,
+  draggedItemIds,
+  setDraggedItemIds,
+  isInternalDrag,
+  setIsInternalDrag,
+  dragSource,
+  setDragSource,
+  dropTargetId,
+  setDropTargetId,
+  dropPosition,
+  setDropPosition,
+  dropTargetListId,
+  setDropTargetListId,
+  isDropIndicatorVisible,
+  setIsDropIndicatorVisible,
+  dropIndicatorPosition,
+  setDropIndicatorPosition,
+  isInternalDragOperation,
+  isDraggingMultiple,
+  draggedItemCount,
+} = createRoot(() => {
+  // Drag state
+  const [isDragging, setIsDragging] = createSignal(false);
+  const [draggedItemIds, setDraggedItemIds] = createSignal([]);
+  const [isInternalDrag, setIsInternalDrag] = createSignal(false);
+  const [dragSource, setDragSource] = createSignal(null);
 
-// Drop target state
-const [dropTargetId, setDropTargetId] = createSignal(null);
-const [dropPosition, setDropPosition] = createSignal('after');  // 'before' | 'after' | 'inside'
-const [dropTargetListId, setDropTargetListId] = createSignal(null);
+  // Drop target state
+  const [dropTargetId, setDropTargetId] = createSignal(null);
+  const [dropPosition, setDropPosition] = createSignal('after');
+  const [dropTargetListId, setDropTargetListId] = createSignal(null);
 
-// Drop indicator visibility and position
-const [isDropIndicatorVisible, setIsDropIndicatorVisible] = createSignal(false);
-const [dropIndicatorPosition, setDropIndicatorPosition] = createSignal({ top: 0, left: 0, width: 0 });
+  // Drop indicator visibility and position
+  const [isDropIndicatorVisible, setIsDropIndicatorVisible] = createSignal(false);
+  const [dropIndicatorPosition, setDropIndicatorPosition] = createSignal({ top: 0, left: 0, width: 0 });
+
+  // Computed
+  const isInternalDragOperation = createMemo(() => isInternalDrag());
+  const isDraggingMultiple = createMemo(() => draggedItemIds().length > 1);
+  const draggedItemCount = createMemo(() => draggedItemIds().length);
+
+  return {
+    isDragging,
+    setIsDragging,
+    draggedItemIds,
+    setDraggedItemIds,
+    isInternalDrag,
+    setIsInternalDrag,
+    dragSource,
+    setDragSource,
+    dropTargetId,
+    setDropTargetId,
+    dropPosition,
+    setDropPosition,
+    dropTargetListId,
+    setDropTargetListId,
+    isDropIndicatorVisible,
+    setIsDropIndicatorVisible,
+    dropIndicatorPosition,
+    setDropIndicatorPosition,
+    isInternalDragOperation,
+    isDraggingMultiple,
+    draggedItemCount,
+  };
+});
 
 /**
  * Start an internal drag operation
- * @param {number[]} itemIds - IDs of items being dragged
- * @param {string} source - 'tree' or 'sidebar'
  */
 function startInternalDrag(itemIds, source = 'tree') {
   setIsDragging(true);
@@ -39,9 +91,6 @@ function startExternalDrag() {
 
 /**
  * Update drop target
- * @param {number|null} itemId - Target item ID (or null to clear)
- * @param {string} position - 'before' | 'after' | 'inside'
- * @param {number|null} listId - Target list ID (for folder drops)
  */
 function updateDropTarget(itemId, position, listId = null) {
   setDropTargetId(itemId);
@@ -51,9 +100,6 @@ function updateDropTarget(itemId, position, listId = null) {
 
 /**
  * Show drop indicator at a specific position
- * @param {number} top
- * @param {number} left
- * @param {number} width
  */
 function showDropIndicator(top, left, width) {
   setDropIndicatorPosition({ top, left, width });
@@ -83,34 +129,13 @@ function endDrag() {
 
 /**
  * Check if a specific item is being dragged
- * @param {number} itemId
- * @returns {boolean}
  */
 function isItemBeingDragged(itemId) {
   return draggedItemIds().includes(itemId);
 }
 
 /**
- * Check if current drag operation is internal (tree reorder) vs external (file drop)
- * @returns {boolean}
- */
-const isInternalDragOperation = createMemo(() => isInternalDrag());
-
-/**
- * Check if we're dragging multiple items
- * @returns {boolean}
- */
-const isDraggingMultiple = createMemo(() => draggedItemIds().length > 1);
-
-/**
- * Get count of items being dragged
- * @returns {number}
- */
-const draggedItemCount = createMemo(() => draggedItemIds().length);
-
-/**
  * Get the drop info for executing the drop
- * @returns {{ targetId: number|null, position: string, listId: number|null }}
  */
 function getDropInfo() {
   return {
@@ -122,7 +147,6 @@ function getDropInfo() {
 
 /**
  * Set drag state (unified setter for components)
- * @param {Object} state
  */
 function setDragState(state) {
   if (state.isDragging !== undefined) {
@@ -144,7 +168,7 @@ function setDragState(state) {
 }
 
 /**
- * Clear all drag state (alias for endDrag for component usage)
+ * Clear all drag state (alias for endDrag)
  */
 function clearDragState() {
   endDrag();

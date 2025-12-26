@@ -4,6 +4,7 @@ import {
   lastSelectedItemId,
   clearSelection,
   selectOnly,
+  selectAll,
   setLastSelectedItemId,
 } from '../stores/navigation.js';
 import { isAnyModalOpen, closeAllModals } from '../stores/modals.js';
@@ -61,6 +62,14 @@ export function useKeyboard(options) {
       if (selectedItems().size > 0) {
         clearSelection();
       }
+      return;
+    }
+
+    // Cmd+A to select all
+    if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      const visibleItems = getVisibleItemIds?.() || [];
+      selectAll(visibleItems);
       return;
     }
 

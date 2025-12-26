@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
@@ -9,6 +9,17 @@ let settingsWindow;
 
 // Check if running in SolidJS development mode
 const isSolidDev = process.env.SOLID_DEV === 'true';
+
+// Suppress Electron security warnings in dev mode (CSP warnings from Vite's eval usage)
+if (isSolidDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
+
+// Register custom protocol for serving local audio files
+// This is needed when running from Vite dev server (http://) which can't access file:// URLs
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ludi-audio', privileges: { stream: true, bypassCSP: true } }
+]);
 
 function createWindow() {
   const isTest = process.env.NODE_ENV === 'test';
@@ -165,6 +176,14 @@ function createMenu() {
 
 app.whenReady().then(() => {
   try {
+    // Register custom protocol handler for local audio files
+    // This allows the renderer to load audio when running from http://localhost (Vite dev server)
+    protocol.handle('ludi-audio', (request) => {
+      // URL format: ludi-audio:///path/to/file.mp3
+      const filePath = decodeURIComponent(request.url.replace('ludi-audio://', ''));
+      return net.fetch('file://' + filePath);
+    });
+
     // Initialize database
     db.initialize();
 
@@ -435,4 +454,12 @@ ipcMain.handle('settings:columnsChanged', (event, settings) => {
   if (mainWindow) {
     mainWindow.webContents.send('column-settings-changed', settings);
   }
+});
+
+ipcMain.handle('shell:showInFinder', (event, filePath) => {
+  if (filePath && fs.existsSync(filePath)) {
+    shell.showItemInFolder(filePath);
+    return true;
+  }
+  return false;
 });

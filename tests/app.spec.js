@@ -228,7 +228,7 @@ test.describe('LUDI Music Player', () => {
     expect(settings.library_path).toBeTruthy();
     expect(settings.library_path).toContain('Music/Ludi Library');
     expect(settings.database_path).toBeTruthy();
-    expect(settings.database_path).toContain('.ludi/ludi-library.sqlite');
+    expect(settings.database_path).toContain('.ludi/ludi-library-test.sqlite');
   });
 
   test('should have library path configured correctly', async () => {
@@ -747,6 +747,9 @@ test.describe('LUDI Music Player', () => {
   });
 
   test('should delete a folder', async () => {
+    // Use unique folder name to avoid conflicts with previous test runs
+    const uniqueFolderName = `Test Folder ${Date.now()}`;
+
     // Create a new folder using the + button
     await window.click('#addLibraryBtn');
     await window.waitForTimeout(100);
@@ -754,12 +757,12 @@ test.describe('LUDI Music Player', () => {
     await window.waitForTimeout(100);
 
     // Enter folder name in the modal
-    await window.fill('#renameInput', 'Test Folder to Delete');
+    await window.fill('#renameInput', uniqueFolderName);
     await window.click('#renameOkBtn');
     await window.waitForTimeout(300);
 
     // Find the folder we just created
-    const folderContent = await window.locator('.tree-item-content:has-text("Test Folder to Delete")').first();
+    const folderContent = await window.locator(`.tree-item-content:has-text("${uniqueFolderName}")`).first();
     expect(await folderContent.isVisible()).toBe(true);
 
     // Select the folder
@@ -775,7 +778,7 @@ test.describe('LUDI Music Player', () => {
     await window.waitForTimeout(300);
 
     // Verify the folder is gone
-    const deletedFolder = await window.locator('.tree-item-content:has-text("Test Folder to Delete")').count();
+    const deletedFolder = await window.locator(`.tree-item-content:has-text("${uniqueFolderName}")`).count();
     expect(deletedFolder).toBe(0);
   });
 });

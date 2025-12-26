@@ -9,8 +9,11 @@ npm install
 # Run the app
 npm start
 
-# Run in development mode (with DevTools)
+# Run in OLD development mode (with DevTools)
 npm run dev
+
+# Run in BETA development mode
+npm run dev:solid
 
 # Run integration tests
 npm test

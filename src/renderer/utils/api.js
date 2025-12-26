@@ -286,6 +286,29 @@ export async function getSongsInList(listId) {
 }
 
 /**
+ * Count all songs in a list (recursively including subfolders)
+ * More efficient than getSongsInList when you only need the count
+ * @param {number} listId
+ * @returns {Promise<number>}
+ */
+export async function countSongsInList(listId) {
+  const items = await getListItems(listId);
+  let count = 0;
+
+  for (const item of items) {
+    if (item.list_id !== null) {
+      // This is a folder, recurse into it
+      count += await countSongsInList(item.list_id);
+    } else if (item.song_id !== null) {
+      // This is a song
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
  * Check if a folder contains a specific song (recursively)
  * @param {number} listId
  * @param {number|null} songId
@@ -314,11 +337,14 @@ export async function folderContainsSong(listId, songId) {
  * Add songs to a list by file paths
  * @param {number} listId
  * @param {string[]} filePaths
+ * @param {number} [position] - Optional position to insert at (defaults to end)
  * @returns {Promise<void>}
  */
-export async function addSongsToList(listId, filePaths) {
-  const items = await getListItems(listId);
-  const position = items.length;
+export async function addSongsToList(listId, filePaths, position) {
+  if (position === undefined) {
+    const items = await getListItems(listId);
+    position = items.length;
+  }
 
   await importFiles(filePaths, listId, position);
 }

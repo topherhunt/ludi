@@ -1,4 +1,4 @@
-import { createSignal, createResource, onMount } from 'solid-js';
+import { createSignal, createResource, onMount, onCleanup } from 'solid-js';
 
 /**
  * Load column settings from localStorage
@@ -81,6 +81,16 @@ export function Settings() {
     }
   };
 
+  // Show database path in Finder
+  const handleShowDbInFinder = () => {
+    window.electronAPI?.showInFinder?.(databasePath());
+  };
+
+  // Show library path in Finder
+  const handleShowLibraryInFinder = () => {
+    window.electronAPI?.showInFinder?.(libraryPath());
+  };
+
   // Handle cancel button
   const handleCancel = () => {
     window.electronAPI?.closeSettings?.();
@@ -111,6 +121,19 @@ export function Settings() {
     window.electronAPI?.closeSettings?.();
   };
 
+  // Handle Escape key to save and close
+  onMount(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        handleSave();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
   return (
     <div class="settings-container">
       <header class="settings-header">
@@ -130,6 +153,9 @@ export function Settings() {
             value={databasePath()}
             readonly
           />
+          <button class="browse-btn" onClick={handleShowDbInFinder}>
+            Show in Finder
+          </button>
         </div>
 
         <div class="setting-item">
@@ -144,9 +170,14 @@ export function Settings() {
             value={libraryPath()}
             onInput={(e) => setLibraryPath(e.target.value)}
           />
-          <button id="browseBtn" class="browse-btn" onClick={handleBrowse}>
-            Browse...
-          </button>
+          <div class="button-row">
+            <button id="browseBtn" class="browse-btn" onClick={handleBrowse}>
+              Browse...
+            </button>
+            <button class="browse-btn" onClick={handleShowLibraryInFinder}>
+              Show in Finder
+            </button>
+          </div>
         </div>
 
         <div class="setting-item">

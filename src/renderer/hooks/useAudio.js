@@ -1,7 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { setIsPlaying, setCurrentPlayingSongId } from '../stores/playback.js';
 import { getSong } from '../utils/api.js';
-import { getSettings } from '../utils/api.js';
 
 /**
  * Audio player hook using Howler.js
@@ -47,6 +46,12 @@ export function createAudioPlayer() {
       if (sound && sound.playing()) {
         const seek = sound.seek() || 0;
         setCurrentTime(seek);
+
+        // Update duration if it becomes available (HTML5 audio may load it late)
+        const dur = sound.duration();
+        if (isFinite(dur) && dur > 0 && duration() !== dur) {
+          setDuration(dur);
+        }
       }
     }, 250);
   }
@@ -86,9 +91,8 @@ export function createAudioPlayer() {
         return false;
       }
 
-      // Get library path to construct full file path
-      const settings = await getSettings();
-      const fullPath = `${settings.library_path}/${song.file_path}`;
+      // song.file_path is already the full absolute path (converted by database.js getSong)
+      const fullPath = song.file_path;
 
       // Stop and unload current sound
       if (sound) {
@@ -97,8 +101,9 @@ export function createAudioPlayer() {
       }
       stopTimeUpdates();
 
-      // Convert file path to file:// URL for Howler
-      const fileUrl = 'file://' + fullPath.replace(/\\/g, '/');
+      // Use ludi-audio:// protocol which works from both file:// and http:// origins
+      // This custom protocol is registered in main.js and serves local files
+      const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/');
 
       // Create new Howl instance
       sound = new Howl({
@@ -108,7 +113,10 @@ export function createAudioPlayer() {
         onplay: () => {
           setIsPlaying(true);
           setIsLoading(false);
-          setDuration(sound.duration());
+          const dur = sound.duration();
+          if (isFinite(dur) && dur > 0) {
+            setDuration(dur);
+          }
           startTimeUpdates();
           onPlayCallback?.();
         },
@@ -129,7 +137,10 @@ export function createAudioPlayer() {
           onEndCallback?.();
         },
         onload: () => {
-          setDuration(sound.duration());
+          const dur = sound.duration();
+          if (isFinite(dur) && dur > 0) {
+            setDuration(dur);
+          }
           setIsLoading(false);
         },
         onloaderror: (id, err) => {
@@ -148,6 +159,11 @@ export function createAudioPlayer() {
 
       // Update the playing song ID in the store
       setCurrentPlayingSongId(songId);
+
+      // Set duration from database immediately (don't wait for Howler to load metadata)
+      if (song.duration_seconds && isFinite(song.duration_seconds) && song.duration_seconds > 0) {
+        setDuration(song.duration_seconds);
+      }
 
       // Start playback
       sound.play();
@@ -219,7 +235,9 @@ export function createAudioPlayer() {
    */
   function seekToPercent(percentage) {
     if (sound) {
-      const dur = sound.duration();
+      // Use the duration signal (set from DB) instead of sound.duration() which may be Infinity
+      const dur = duration();
+      if (!isFinite(dur) || dur <= 0) return;
       const time = dur * (percentage / 100);
       seek(time);
     }

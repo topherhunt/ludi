@@ -1,22 +1,77 @@
-import { createSignal } from 'solid-js';
+import { createSignal, createRoot } from 'solid-js';
 
-// Generic modal state
-const [isModalOpen, setIsModalOpen] = createSignal(false);
-const [modalTitle, setModalTitle] = createSignal('');
-const [modalContent, setModalContent] = createSignal('');
-const [modalType, setModalType] = createSignal('alert');  // 'alert' | 'confirm' | 'custom'
-const [modalCallback, setModalCallback] = createSignal(null);
+// Create signals inside createRoot to avoid warnings
+const {
+  isModalOpen,
+  setIsModalOpen,
+  modalTitle,
+  setModalTitle,
+  modalContent,
+  setModalContent,
+  modalType,
+  setModalType,
+  modalCallback,
+  setModalCallback,
+  isRenameModalOpen,
+  setIsRenameModalOpen,
+  renameModalTitle,
+  setRenameModalTitle,
+  renameModalValue,
+  setRenameModalValue,
+  renameModalCallback,
+  setRenameModalCallback,
+  isContextMenuOpen,
+  setIsContextMenuOpen,
+  contextMenuPosition,
+  setContextMenuPosition,
+  contextMenuItems,
+  setContextMenuItems,
+} = createRoot(() => {
+  // Generic modal state
+  const [isModalOpen, setIsModalOpen] = createSignal(false);
+  const [modalTitle, setModalTitle] = createSignal('');
+  const [modalContent, setModalContent] = createSignal('');
+  const [modalType, setModalType] = createSignal('alert');
+  const [modalCallback, setModalCallback] = createSignal(null);
 
-// Rename modal state
-const [isRenameModalOpen, setIsRenameModalOpen] = createSignal(false);
-const [renameModalTitle, setRenameModalTitle] = createSignal('');
-const [renameModalValue, setRenameModalValue] = createSignal('');
-const [renameModalCallback, setRenameModalCallback] = createSignal(null);
+  // Rename modal state
+  const [isRenameModalOpen, setIsRenameModalOpen] = createSignal(false);
+  const [renameModalTitle, setRenameModalTitle] = createSignal('');
+  const [renameModalValue, setRenameModalValue] = createSignal('');
+  const [renameModalCallback, setRenameModalCallback] = createSignal(null);
 
-// Context menu state
-const [isContextMenuOpen, setIsContextMenuOpen] = createSignal(false);
-const [contextMenuPosition, setContextMenuPosition] = createSignal({ x: 0, y: 0 });
-const [contextMenuItems, setContextMenuItems] = createSignal([]);
+  // Context menu state
+  const [isContextMenuOpen, setIsContextMenuOpen] = createSignal(false);
+  const [contextMenuPosition, setContextMenuPosition] = createSignal({ x: 0, y: 0 });
+  const [contextMenuItems, setContextMenuItems] = createSignal([]);
+
+  return {
+    isModalOpen,
+    setIsModalOpen,
+    modalTitle,
+    setModalTitle,
+    modalContent,
+    setModalContent,
+    modalType,
+    setModalType,
+    modalCallback,
+    setModalCallback,
+    isRenameModalOpen,
+    setIsRenameModalOpen,
+    renameModalTitle,
+    setRenameModalTitle,
+    renameModalValue,
+    setRenameModalValue,
+    renameModalCallback,
+    setRenameModalCallback,
+    isContextMenuOpen,
+    setIsContextMenuOpen,
+    contextMenuPosition,
+    setContextMenuPosition,
+    contextMenuItems,
+    setContextMenuItems,
+  };
+});
 
 /**
  * Show an alert modal
@@ -79,24 +134,18 @@ function handleModalResponse(confirmed) {
 
 /**
  * Show rename modal
- * @param {string} title
- * @param {string} initialValue
- * @param {Function} onSubmit - Called with new value when user clicks OK
- * @returns {Promise<string|null>} - Resolves to new value or null if cancelled
+ * @param {string} defaultValue - Default value for the input field
+ * @param {Function} onConfirm - Called with new value when user clicks OK
  */
-function showRenameModal(title, initialValue, onSubmit) {
-  return new Promise((resolve) => {
-    setRenameModalTitle(title);
-    setRenameModalValue(initialValue);
-    setRenameModalCallback(() => (value) => {
-      closeRenameModal();
-      resolve(value);
-      if (value !== null && onSubmit) {
-        onSubmit(value);
-      }
-    });
-    setIsRenameModalOpen(true);
+function showRenameModal(defaultValue, onConfirm) {
+  setRenameModalValue(defaultValue);
+  setRenameModalCallback(() => (value) => {
+    closeRenameModal();
+    if (value !== null && onConfirm) {
+      onConfirm(value);
+    }
   });
+  setIsRenameModalOpen(true);
 }
 
 /**

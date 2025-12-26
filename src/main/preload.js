@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
   closeSettings: () => ipcRenderer.invoke('settings:close'),
   notifyColumnSettingsChanged: (settings) => ipcRenderer.invoke('settings:columnsChanged', settings),
+  showInFinder: (filePath) => ipcRenderer.invoke('shell:showInFinder', filePath),
 
   // Media key events
   onMediaKey: (callback) => {

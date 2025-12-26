@@ -93,6 +93,11 @@ body {
   background-color: #505050;
 }
 
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;

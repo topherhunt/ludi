@@ -361,17 +361,19 @@ body {
   flex-shrink: 0;
 }
 
-.col-track,
-.col-duration {
+.tree-item-content > .col-track,
+.tree-item-content > .col-duration {
   color: #858585;
   font-size: 12px;
+  padding: 0 8px 0 1.2em;
 }
 
-.col-artist,
-.col-album,
-.col-tags {
+.tree-item-content > .col-artist,
+.tree-item-content > .col-album,
+.tree-item-content > .col-tags {
   color: #999;
   font-size: 13px;
+  padding: 0 8px 0 1.2em;
 }
 
 /* Hidden columns */

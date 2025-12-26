@@ -1,77 +1,106 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal, createMemo, createRoot } from 'solid-js';
 import { createShuffledIndices, createShuffledIndicesWithPin } from '../utils/shuffle.js';
 
-// Playback state
-const [isPlaying, setIsPlaying] = createSignal(false);
-const [currentPlayingSongId, setCurrentPlayingSongId] = createSignal(null);
+// Create store signals inside createRoot to avoid "computations created outside createRoot" warnings
+const {
+  isPlaying,
+  setIsPlaying,
+  currentPlayingSongId,
+  setCurrentPlayingSongId,
+  playlist,
+  setPlaylist,
+  currentTrackIndex,
+  setCurrentTrackIndex,
+  currentPlaylistId,
+  setCurrentPlaylistId,
+  shuffleEnabled,
+  setShuffleEnabled,
+  shuffledIndices,
+  setShuffledIndices,
+  loopMode,
+  setLoopMode,
+  actualTrackIndex,
+  currentSongFromPlaylist,
+  hasNextTrack,
+  hasPreviousTrack,
+} = createRoot(() => {
+  // Playback state
+  const [isPlaying, setIsPlaying] = createSignal(false);
+  const [currentPlayingSongId, setCurrentPlayingSongId] = createSignal(null);
 
-// Playlist state
-const [playlist, setPlaylist] = createSignal([]);  // Array of song IDs
-const [currentTrackIndex, setCurrentTrackIndex] = createSignal(-1);
-const [currentPlaylistId, setCurrentPlaylistId] = createSignal(null);  // The list the playlist was built from
+  // Playlist state
+  const [playlist, setPlaylist] = createSignal([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = createSignal(-1);
+  const [currentPlaylistId, setCurrentPlaylistId] = createSignal(null);
 
-// Shuffle state
-const [shuffleEnabled, setShuffleEnabled] = createSignal(false);
-const [shuffledIndices, setShuffledIndices] = createSignal([]);
+  // Shuffle state
+  const [shuffleEnabled, setShuffleEnabled] = createSignal(false);
+  const [shuffledIndices, setShuffledIndices] = createSignal([]);
 
-// Loop state: 'off' | 'all' | 'one'
-const [loopMode, setLoopMode] = createSignal('off');
+  // Loop state: 'off' | 'all' | 'one'
+  const [loopMode, setLoopMode] = createSignal('off');
 
-/**
- * Get the actual track index accounting for shuffle
- * @returns {number}
- */
-const actualTrackIndex = createMemo(() => {
-  const idx = currentTrackIndex();
-  if (idx < 0) return -1;
+  const actualTrackIndex = createMemo(() => {
+    const idx = currentTrackIndex();
+    if (idx < 0) return -1;
+    if (shuffleEnabled() && shuffledIndices().length > 0) {
+      return shuffledIndices()[idx];
+    }
+    return idx;
+  });
 
-  if (shuffleEnabled() && shuffledIndices().length > 0) {
-    return shuffledIndices()[idx];
-  }
-  return idx;
-});
+  const currentSongFromPlaylist = createMemo(() => {
+    const idx = actualTrackIndex();
+    const pl = playlist();
+    if (idx < 0 || idx >= pl.length) return null;
+    return pl[idx];
+  });
 
-/**
- * Get current song ID from playlist
- * @returns {number|null}
- */
-const currentSongFromPlaylist = createMemo(() => {
-  const idx = actualTrackIndex();
-  const pl = playlist();
-  if (idx < 0 || idx >= pl.length) return null;
-  return pl[idx];
-});
+  const hasNextTrack = createMemo(() => {
+    const idx = currentTrackIndex();
+    const pl = playlist();
+    if (loopMode() === 'all' || loopMode() === 'one') return pl.length > 0;
+    return idx < pl.length - 1;
+  });
 
-/**
- * Check if there's a next track available
- * @returns {boolean}
- */
-const hasNextTrack = createMemo(() => {
-  const idx = currentTrackIndex();
-  const pl = playlist();
-  if (loopMode() === 'all' || loopMode() === 'one') return pl.length > 0;
-  return idx < pl.length - 1;
-});
+  const hasPreviousTrack = createMemo(() => {
+    const idx = currentTrackIndex();
+    const pl = playlist();
+    if (loopMode() === 'all') return pl.length > 0;
+    return idx > 0;
+  });
 
-/**
- * Check if there's a previous track available
- * @returns {boolean}
- */
-const hasPreviousTrack = createMemo(() => {
-  const idx = currentTrackIndex();
-  const pl = playlist();
-  if (loopMode() === 'all') return pl.length > 0;
-  return idx > 0;
+  return {
+    isPlaying,
+    setIsPlaying,
+    currentPlayingSongId,
+    setCurrentPlayingSongId,
+    playlist,
+    setPlaylist,
+    currentTrackIndex,
+    setCurrentTrackIndex,
+    currentPlaylistId,
+    setCurrentPlaylistId,
+    shuffleEnabled,
+    setShuffleEnabled,
+    shuffledIndices,
+    setShuffledIndices,
+    loopMode,
+    setLoopMode,
+    actualTrackIndex,
+    currentSongFromPlaylist,
+    hasNextTrack,
+    hasPreviousTrack,
+  };
 });
 
 /**
  * Toggle shuffle mode
  */
 function toggleShuffle() {
-  setShuffleEnabled(prev => {
+  setShuffleEnabled((prev) => {
     const newValue = !prev;
     if (newValue) {
-      // Generate shuffled indices
       const pl = playlist();
       const indices = createShuffledIndices(pl.length);
       setShuffledIndices(indices);
@@ -86,7 +115,7 @@ function toggleShuffle() {
  * Cycle through loop modes: off -> all -> one -> off
  */
 function cycleLoopMode() {
-  setLoopMode(prev => {
+  setLoopMode((prev) => {
     if (prev === 'off') return 'all';
     if (prev === 'all') return 'one';
     return 'off';
@@ -95,9 +124,6 @@ function cycleLoopMode() {
 
 /**
  * Set the current playlist
- * @param {number[]} songIds - Array of song IDs
- * @param {number} startIndex - Index to start playing from
- * @param {number|null} listId - The list ID this playlist was built from
  */
 function setCurrentPlaylist(songIds, startIndex = 0, listId = null) {
   setPlaylist(songIds);
@@ -105,10 +131,9 @@ function setCurrentPlaylist(songIds, startIndex = 0, listId = null) {
   setCurrentPlaylistId(listId);
 
   if (shuffleEnabled() && songIds.length > 0) {
-    // Keep current song at position 0, shuffle the rest
     const shuffled = createShuffledIndicesWithPin(songIds.length, startIndex);
     setShuffledIndices(shuffled);
-    setCurrentTrackIndex(0);  // Current song is now at position 0 in shuffled order
+    setCurrentTrackIndex(0);
   } else {
     setShuffledIndices([]);
   }
@@ -116,7 +141,6 @@ function setCurrentPlaylist(songIds, startIndex = 0, listId = null) {
 
 /**
  * Move to next track
- * @returns {number|null} - The new song ID or null if no next track
  */
 function nextTrack() {
   const pl = playlist();
@@ -125,7 +149,6 @@ function nextTrack() {
   const currentIdx = currentTrackIndex();
 
   if (loopMode() === 'one') {
-    // Stay on same track
     return pl[actualTrackIndex()];
   }
 
@@ -135,21 +158,21 @@ function nextTrack() {
     if (loopMode() === 'all') {
       nextIdx = 0;
     } else {
-      return null;  // End of playlist
+      return null;
     }
   }
 
   setCurrentTrackIndex(nextIdx);
-  const newActualIdx = shuffleEnabled() && shuffledIndices().length > 0
-    ? shuffledIndices()[nextIdx]
-    : nextIdx;
+  const newActualIdx =
+    shuffleEnabled() && shuffledIndices().length > 0
+      ? shuffledIndices()[nextIdx]
+      : nextIdx;
 
   return pl[newActualIdx];
 }
 
 /**
  * Move to previous track
- * @returns {number|null} - The new song ID or null if no previous track
  */
 function previousTrack() {
   const pl = playlist();
@@ -162,14 +185,15 @@ function previousTrack() {
     if (loopMode() === 'all') {
       prevIdx = pl.length - 1;
     } else {
-      return null;  // Start of playlist
+      return null;
     }
   }
 
   setCurrentTrackIndex(prevIdx);
-  const newActualIdx = shuffleEnabled() && shuffledIndices().length > 0
-    ? shuffledIndices()[prevIdx]
-    : prevIdx;
+  const newActualIdx =
+    shuffleEnabled() && shuffledIndices().length > 0
+      ? shuffledIndices()[prevIdx]
+      : prevIdx;
 
   return pl[newActualIdx];
 }
@@ -188,9 +212,7 @@ function clearPlayback() {
   setLoopMode('off');
 }
 
-// shuffleArray is imported from utils/shuffle.js
-
-// Expose for testing (matches current vanilla JS behavior)
+// Expose for testing
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'shuffleEnabled', {
     get: () => shuffleEnabled(),
