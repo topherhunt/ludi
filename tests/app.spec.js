@@ -747,6 +747,75 @@ test.describe('LUDI Music Player', () => {
     }
   });
 
+  test('should drag item into folder', async () => {
+    // Create a folder to drag items into
+    const folderName = `Drop Target Folder ${Date.now()}`;
+    await window.click('#addLibraryBtn');
+    await window.waitForTimeout(100);
+    await window.click('#newFolderMenuItem');
+    await window.waitForTimeout(100);
+    await window.fill('#renameInput', folderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(300);
+
+    // Verify folder was created
+    const folderItem = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${folderName}")`);
+    await expect(folderItem).toBeVisible();
+
+    // Get the folder's list_id from the DOM
+    const folderId = await folderItem.getAttribute('data-folder-id');
+
+    // Verify folder is initially empty
+    const initialFolderItems = await window.evaluate(async (listId) => {
+      return await window.electronAPI.getListItems(parseInt(listId));
+    }, folderId);
+    expect(initialFolderItems.length).toBe(0);
+
+    // Find a song to drag (should exist from earlier import test)
+    const songItem = await window.locator('.tree-item-content[data-is-folder="false"]').first();
+    const songExists = await songItem.count() > 0;
+
+    if (songExists) {
+      // Get the song's item ID
+      const songItemId = await songItem.getAttribute('data-item-id');
+
+      // Get bounding boxes for drag operation
+      const songBox = await songItem.boundingBox();
+      const folderBox = await folderItem.boundingBox();
+
+      if (songBox && folderBox) {
+        // Perform drag: start from song center
+        await window.mouse.move(songBox.x + songBox.width / 2, songBox.y + songBox.height / 2);
+        await window.mouse.down();
+        await window.waitForTimeout(100);
+
+        // Move to middle of folder (middle 50% triggers "drop into" mode)
+        await window.mouse.move(folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2);
+        await window.waitForTimeout(100);
+
+        // Drop
+        await window.mouse.up();
+        await window.waitForTimeout(500);
+
+        // Verify the item is now inside the folder
+        const folderItemsAfter = await window.evaluate(async (listId) => {
+          return await window.electronAPI.getListItems(parseInt(listId));
+        }, folderId);
+
+        expect(folderItemsAfter.length).toBe(1);
+        expect(folderItemsAfter[0].id.toString()).toBe(songItemId);
+      }
+    }
+
+    // Clean up: delete the test folder
+    await folderItem.click();
+    await window.waitForTimeout(100);
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(300);
+  });
+
   test('should delete a folder', async () => {
     // Use unique folder name to avoid conflicts with previous test runs
     const uniqueFolderName = `Test Folder ${Date.now()}`;

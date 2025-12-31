@@ -11,6 +11,7 @@
 - **Fail-fast**: Throw errors for invalid states. Don't use `?.` or `??` for expected data—crash clearly if missing.
 - **Boring > clever**: Explicit, self-documenting code with clear naming. Comments only for non-obvious WHY.
 - **Imitate existing patterns**: Review similar screens before building new ones.
+- **Same action = same code path**: Different triggers for the same action (e.g., context menu vs keyboard shortcut) should use the same underlying function and have the same side effects (confirmations, UI updates, etc.). Don't skip dialogs or steps for one trigger but not another.
 
 ## Testing
 

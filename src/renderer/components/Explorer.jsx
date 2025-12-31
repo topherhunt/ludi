@@ -142,22 +142,16 @@ export function Explorer(props) {
     });
   };
 
-  // Delete an item
-  const handleDelete = async (item) => {
-    await deleteItem(item.id);
-    refetchTree?.();
-  };
-
-  // Handle delete selected (from keyboard)
-  const handleDeleteSelected = async () => {
-    const selected = Array.from(selectedItems());
-    if (selected.length === 0) return;
+  // Delete item(s) with confirmation dialog
+  // Used by both context menu and keyboard shortcut for consistent behavior
+  const handleDeleteWithConfirm = async (itemIds) => {
+    if (itemIds.length === 0) return;
 
     // Get item descriptions for confirm dialog
-    let message = `Delete ${selected.length} item${selected.length > 1 ? 's' : ''}?`;
+    let message = `Delete ${itemIds.length} item${itemIds.length > 1 ? 's' : ''}?`;
 
-    if (selected.length === 1) {
-      const item = await window.electronAPI?.getItem?.(selected[0]);
+    if (itemIds.length === 1) {
+      const item = await window.electronAPI?.getItem?.(itemIds[0]);
       if (item) {
         const name = item.list_id !== null ? item.list_title : item.song_title;
         const truncated = name.length > 50 ? name.substring(0, 50) + '...' : name;
@@ -166,13 +160,24 @@ export function Explorer(props) {
     }
 
     showConfirmModal('Confirm Delete', message, async () => {
-      for (const id of selected) {
+      for (const id of itemIds) {
         await deleteItem(id);
       }
       clearSelection();
       refetchTree?.();
       hideConfirmModal();
     });
+  };
+
+  // Delete an item (from context menu)
+  const handleDelete = (item) => {
+    handleDeleteWithConfirm([item.id]);
+  };
+
+  // Handle delete selected (from keyboard)
+  const handleDeleteSelected = () => {
+    const selected = Array.from(selectedItems());
+    handleDeleteWithConfirm(selected);
   };
 
   // Collapse all folders

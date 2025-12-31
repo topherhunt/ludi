@@ -453,6 +453,23 @@ body {
   color: #e69500;
 }
 
+.playback-controls button.loading {
+  color: #4ec9b0;
+}
+
+.playback-controls button.loading i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .playback-controls button.toggle-btn {
   opacity: 0.4;
   transition: opacity 0.2s, background-color 0.2s;

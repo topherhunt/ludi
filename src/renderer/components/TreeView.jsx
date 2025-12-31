@@ -201,6 +201,10 @@ export function TreeView(props) {
 
     e.stopPropagation();
 
+    // Capture drop-into state BEFORE removing the class
+    const targetContent = e.target.closest('.tree-item-content');
+    const isDropIntoFolder = targetContent?.classList.contains('drop-into');
+
     // Clean up UI state
     document.querySelectorAll('.tree-item-content.drop-into').forEach((el) => {
       el.classList.remove('drop-into');
@@ -240,12 +244,9 @@ export function TreeView(props) {
       return;
     }
 
-    const targetContent = e.target.closest('.tree-item-content');
     if (!targetContent || itemsToMove.includes(targetItemId)) {
       return;
     }
-
-    const isDropIntoFolder = targetContent.classList.contains('drop-into');
 
     try {
       const targetItemData = await getItemById(targetItemId);

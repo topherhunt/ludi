@@ -21,6 +21,7 @@ export function PlayerControls(props) {
     duration,
     volume,
     isMuted,
+    isLoading,
     togglePlayPause,
     seekToPercent,
     setVolumePercent,
@@ -66,6 +67,7 @@ export function PlayerControls(props) {
 
   // Get play/pause icon
   const playPauseIcon = createMemo(() => {
+    if (isLoading?.()) return 'bi bi-arrow-repeat';
     return isPlaying() ? 'bi bi-pause-circle-fill' : 'bi bi-play-circle-fill';
   });
 
@@ -113,7 +115,8 @@ export function PlayerControls(props) {
           disabled={!hasPlaylist()}
           classList={{
             playing: isPlaying(),
-            paused: !isPlaying() && hasPlaylist(),
+            paused: !isPlaying() && hasPlaylist() && !isLoading?.(),
+            loading: isLoading?.(),
           }}
           onClick={togglePlayPause}
         >

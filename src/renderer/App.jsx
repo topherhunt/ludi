@@ -29,6 +29,7 @@ import {
   setIsPlaying,
   hasNextTrack,
   hasPreviousTrack,
+  loopMode,
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
 import { getSongsInList, getSong } from './utils/api.js';
@@ -64,11 +65,45 @@ export function App() {
     onCleanup(() => cleanup?.());
   });
 
-  // Handle track end - play next or stop
+  // Listen for media key events (play/pause, next, previous)
+  onMount(() => {
+    window.electronAPI?.onMediaKey?.((action) => {
+      switch (action) {
+        case 'play-pause':
+          togglePlayPause();
+          break;
+        case 'next':
+          handleNext();
+          break;
+        case 'previous':
+          handlePrevious();
+          break;
+      }
+    });
+  });
+
+  // Handle track end - play next, loop, or stop
   const handleTrackEnd = () => {
-    if (hasNextTrack()) {
-      handleNext();
+    // Loop One: replay the same song
+    if (loopMode() === 'one') {
+      playCurrentTrack();
+      return;
+    }
+
+    // Otherwise, try to advance to next track
+    const pl = playlist();
+    const idx = currentTrackIndex();
+
+    if (idx < pl.length - 1) {
+      // Not at end, go to next
+      setCurrentTrackIndex(idx + 1);
+      playCurrentTrack();
+    } else if (loopMode() === 'all') {
+      // At end with loop all: wrap to beginning
+      setCurrentTrackIndex(0);
+      playCurrentTrack();
     } else {
+      // At end, no loop: stop playback
       setIsPlaying(false);
       setCurrentPlayingSongId(null);
     }
@@ -140,17 +175,45 @@ export function App() {
     }
   };
 
-  // Handle next track
+  // Handle next track (manual navigation - always moves to next song)
   const handleNext = async () => {
-    if (!hasNextTrack()) return;
-    setCurrentTrackIndex(currentTrackIndex() + 1);
+    const pl = playlist();
+    if (pl.length === 0) return;
+
+    const idx = currentTrackIndex();
+    const loop = loopMode();
+
+    if (idx < pl.length - 1) {
+      // Not at end, go to next
+      setCurrentTrackIndex(idx + 1);
+    } else if (loop === 'all' || loop === 'one') {
+      // At end with any loop mode: wrap to beginning
+      setCurrentTrackIndex(0);
+    } else {
+      // At end, no loop: do nothing
+      return;
+    }
     await playCurrentTrack();
   };
 
-  // Handle previous track
+  // Handle previous track (manual navigation - always moves to previous song)
   const handlePrevious = async () => {
-    if (!hasPreviousTrack()) return;
-    setCurrentTrackIndex(currentTrackIndex() - 1);
+    const pl = playlist();
+    if (pl.length === 0) return;
+
+    const idx = currentTrackIndex();
+    const loop = loopMode();
+
+    if (idx > 0) {
+      // Not at beginning, go to previous
+      setCurrentTrackIndex(idx - 1);
+    } else if (loop === 'all' || loop === 'one') {
+      // At beginning with any loop mode: wrap to end
+      setCurrentTrackIndex(pl.length - 1);
+    } else {
+      // At beginning, no loop: do nothing
+      return;
+    }
     await playCurrentTrack();
   };
 
@@ -179,8 +242,14 @@ export function App() {
 
   // Handle list change from sidebar
   const handleListChange = async (listId) => {
+    const sameList = listId === currentListId();
     setCurrentListId(listId);
     clearSelection();
+
+    // If clicking on the same list, force a refetch (user might want to refresh)
+    if (sameList && explorerRefetch) {
+      explorerRefetch();
+    }
 
     // Update title
     if (listId === 0) {
@@ -221,7 +290,13 @@ export function App() {
         onPlayFolder={handlePlayFolder}
         onPlaySong={handlePlaySong}
         onSeek={handleSeek}
-        onRefetchReady={(fn) => { explorerRefetch = fn; }}
+        onRefetchReady={(fn) => {
+          explorerRefetch = fn;
+          // Expose for testing
+          if (typeof window !== 'undefined') {
+            window.refreshExplorer = fn;
+          }
+        }}
       />
 
       <PlayerControls
@@ -231,6 +306,7 @@ export function App() {
         duration={player.duration}
         volume={player.volume}
         isMuted={player.isMuted}
+        isLoading={player.isLoading}
         togglePlayPause={togglePlayPause}
         seekToPercent={seekToPercent}
         setVolumePercent={setVolumePercent}

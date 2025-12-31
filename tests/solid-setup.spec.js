@@ -762,6 +762,9 @@ test.describe('SolidJS Setup', () => {
   });
 
   test('should add folder after song via context menu', async () => {
+    // Use unique folder name to avoid conflicts with previous test runs
+    const uniqueFolderName = `Context Menu Folder ${Date.now()}`;
+
     // Ensure we're on Main Library
     const mainLibraryItem = await window.locator('.playlist-item').first();
     await mainLibraryItem.click();
@@ -800,7 +803,7 @@ test.describe('SolidJS Setup', () => {
     expect(inputValue).toBe('New Folder');
 
     // Enter a custom folder name
-    await renameInput.fill('Test Folder From Context Menu');
+    await renameInput.fill(uniqueFolderName);
 
     // Click OK to create the folder
     const okBtn = await window.locator('#renameOkBtn');
@@ -812,7 +815,7 @@ test.describe('SolidJS Setup', () => {
     expect(newFolderCount).toBe(initialFolderCount + 1);
 
     // Verify the folder exists with the correct name
-    const newFolder = await window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'Test Folder From Context Menu' });
+    const newFolder = await window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: uniqueFolderName });
     await expect(newFolder).toBeVisible();
 
     // Clean up: delete the folder we just created
@@ -820,6 +823,9 @@ test.describe('SolidJS Setup', () => {
     await window.waitForTimeout(50);
     const deleteItem = await window.locator('.context-menu-item').filter({ hasText: 'Delete' });
     await deleteItem.click();
+    await window.waitForTimeout(100);
+    // Confirm deletion
+    await window.click('#modalYesBtn');
     await window.waitForTimeout(100);
   });
 });

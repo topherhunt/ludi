@@ -101,9 +101,12 @@ export function createAudioPlayer() {
       }
       stopTimeUpdates();
 
-      // Use ludi-audio:// protocol which works from both file:// and http:// origins
-      // This custom protocol is registered in main.js and serves local files
-      const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/');
+      // Use file:// directly when running from file:// origin (production)
+      // Use ludi-audio:// custom protocol when running from http:// (Vite dev server)
+      const isFileOrigin = window.location.protocol === 'file:';
+      const fileUrl = isFileOrigin
+        ? 'file://' + fullPath.replace(/\\/g, '/')
+        : 'ludi-audio://' + fullPath.replace(/\\/g, '/');
 
       // Create new Howl instance
       sound = new Howl({
