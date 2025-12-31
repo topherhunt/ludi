@@ -338,7 +338,7 @@ export async function folderContainsSong(listId, songId) {
  * @param {number} listId
  * @param {string[]} filePaths
  * @param {number} [position] - Optional position to insert at (defaults to end)
- * @returns {Promise<void>}
+ * @returns {Promise<{ imported: Array, unsupported: Array, errors: Array }>}
  */
 export async function addSongsToList(listId, filePaths, position) {
   if (position === undefined) {
@@ -346,5 +346,5 @@ export async function addSongsToList(listId, filePaths, position) {
     position = items.length;
   }
 
-  await importFiles(filePaths, listId, position);
+  return importFiles(filePaths, listId, position);
 }

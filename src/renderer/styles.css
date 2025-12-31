@@ -712,3 +712,24 @@ body {
   margin-bottom: 4px;
 }
 
+/* Skipped files list in import alert */
+.skipped-files-list {
+  margin-top: 12px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+}
+
+.skipped-files-list ul {
+  margin: 0;
+  padding: 8px 8px 8px 28px;
+  list-style-type: disc;
+}
+
+.skipped-files-list li {
+  padding: 2px 0;
+  word-break: break-all;
+}
+

@@ -1,6 +1,7 @@
 import { For, Show, createResource, createMemo, onMount } from 'solid-js';
 import { currentListId, selectedItems, clearSelection } from '../stores/navigation.js';
 import { setDragState, clearDragState, isDropIndicatorVisible, dropIndicatorPosition } from '../stores/dragdrop.js';
+import { showAlertModal } from '../stores/modals.js';
 import { TreeItem } from './TreeItem.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { getListItems, getItemById, moveItem, addSongsToList } from '../utils/api.js';
@@ -217,8 +218,18 @@ export function TreeView(props) {
         .map((f) => f.path);
 
       if (audioPaths.length > 0 && externalDropTarget) {
-        await addSongsToList(externalDropTarget.listId, audioPaths, externalDropTarget.position);
+        const result = await addSongsToList(externalDropTarget.listId, audioPaths, externalDropTarget.position);
         refetch();
+
+        // Show alert for skipped songs
+        const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
+        if (skipped.length > 0) {
+          const fileListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
+          showAlertModal(`
+            <p>Skipped ${skipped.length} song(s) already in library:</p>
+            <div class="skipped-files-list"><ul>${fileListHtml}</ul></div>
+          `);
+        }
       }
       externalDropTarget = null;
       return;
@@ -368,8 +379,18 @@ export function TreeView(props) {
 
     if (audioPaths.length > 0) {
       const dropTarget = externalDropTarget || { listId: currentListId(), position: undefined };
-      await addSongsToList(dropTarget.listId, audioPaths, dropTarget.position);
+      const result = await addSongsToList(dropTarget.listId, audioPaths, dropTarget.position);
       refetch();
+
+      // Show alert for skipped songs
+      const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
+      if (skipped.length > 0) {
+        const fileListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
+        showAlertModal(`
+          <p>Skipped ${skipped.length} song(s) already in library:</p>
+          <div class="skipped-files-list"><ul>${fileListHtml}</ul></div>
+        `);
+      }
     }
     externalDropTarget = null;
   };

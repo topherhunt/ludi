@@ -42,8 +42,9 @@ export function ContextMenu(props) {
         <div
           class="context-menu-item"
           onClick={() => {
+            const listId = props.item.list_id;
             props.onClose?.();
-            props.onAddFolderInside?.(props.item.list_id);
+            props.onAddFolderInside?.(listId);
           }}
         >
           Add Folder Inside
@@ -54,8 +55,11 @@ export function ContextMenu(props) {
       <div
         class="context-menu-item"
         onClick={() => {
+          // Capture values before closing (props.item becomes undefined after onClose)
+          const parentListId = props.item.parent_list_id;
+          const position = props.item.position + 1;
           props.onClose?.();
-          props.onAddFolderAfter?.(props.item.parent_list_id, props.item.position + 1);
+          props.onAddFolderAfter?.(parentListId, position);
         }}
       >
         Add Folder After
@@ -81,8 +85,9 @@ export function ContextMenu(props) {
         <div
           class="context-menu-item"
           onClick={() => {
+            const listId = props.item.list_id;
             props.onClose?.();
-            props.onPlayFolder?.(props.item.list_id);
+            props.onPlayFolder?.(listId);
           }}
         >
           Play This Folder
@@ -120,8 +125,9 @@ export function ContextMenu(props) {
         <div
           class="context-menu-item"
           onClick={() => {
+            const item = props.item;
             props.onClose?.();
-            props.onRename?.(props.item);
+            props.onRename?.(item);
           }}
         >
           Rename
@@ -132,8 +138,9 @@ export function ContextMenu(props) {
       <div
         class="context-menu-item"
         onClick={() => {
+          const item = props.item;
           props.onClose?.();
-          props.onDelete?.(props.item);
+          props.onDelete?.(item);
         }}
       >
         Delete

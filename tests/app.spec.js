@@ -379,10 +379,11 @@ test.describe('LUDI Music Player', () => {
     // Verify import was successful (or file already exists)
     expect(importResult.success).toBe(true);
 
-    // Either the file was imported, or it already existed (unique constraint error)
+    // Either the file was imported, or it already existed in the library
     const wasImported = importResult.result.imported.length === 1;
     const alreadyExists = importResult.result.errors.length > 0 &&
-                          importResult.result.errors[0].error.includes('UNIQUE constraint');
+                          (importResult.result.errors[0].error.includes('already exists') ||
+                           importResult.result.errors[0].error.includes('UNIQUE constraint'));
 
     expect(wasImported || alreadyExists).toBe(true);
     expect(importResult.result.unsupported).toHaveLength(0);

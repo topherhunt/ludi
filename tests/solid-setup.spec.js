@@ -760,4 +760,66 @@ test.describe('SolidJS Setup', () => {
     await expect(expandBtn).toBeVisible();
     await expect(expandBtn).toHaveText('Expand All');
   });
+
+  test('should add folder after song via context menu', async () => {
+    // Ensure we're on Main Library
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Find a song item
+    const songItem = await window.locator('.tree-item-content[data-is-folder="false"]').first();
+    await expect(songItem).toBeVisible({ timeout: 2000 });
+    await songItem.click();
+
+    // Get initial folder count
+    const initialFolderCount = await window.locator('.tree-item-content[data-is-folder="true"]').count();
+
+    // Right-click to open context menu
+    await songItem.click({ button: 'right' });
+    await window.waitForTimeout(50);
+
+    // Verify context menu is visible
+    const contextMenu = await window.locator('.context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    // Click "Add Folder After"
+    const addFolderItem = await window.getByText('Add Folder After', { exact: true });
+    await expect(addFolderItem).toBeVisible();
+    await addFolderItem.click();
+    await window.waitForTimeout(100);
+
+    // Verify rename modal appears
+    const renameModal = await window.locator('.modal-overlay.visible');
+    await expect(renameModal).toBeVisible({ timeout: 1000 });
+
+    // Verify input has "New Folder" as default value
+    const renameInput = await window.locator('#renameInput');
+    await expect(renameInput).toBeVisible();
+    const inputValue = await renameInput.inputValue();
+    expect(inputValue).toBe('New Folder');
+
+    // Enter a custom folder name
+    await renameInput.fill('Test Folder From Context Menu');
+
+    // Click OK to create the folder
+    const okBtn = await window.locator('#renameOkBtn');
+    await okBtn.click();
+    await window.waitForTimeout(200);
+
+    // Verify the folder was created
+    const newFolderCount = await window.locator('.tree-item-content[data-is-folder="true"]').count();
+    expect(newFolderCount).toBe(initialFolderCount + 1);
+
+    // Verify the folder exists with the correct name
+    const newFolder = await window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'Test Folder From Context Menu' });
+    await expect(newFolder).toBeVisible();
+
+    // Clean up: delete the folder we just created
+    await newFolder.click({ button: 'right' });
+    await window.waitForTimeout(50);
+    const deleteItem = await window.locator('.context-menu-item').filter({ hasText: 'Delete' });
+    await deleteItem.click();
+    await window.waitForTimeout(100);
+  });
 });

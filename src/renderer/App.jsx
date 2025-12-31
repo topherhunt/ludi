@@ -242,6 +242,7 @@ export function App() {
       {/* Alert Modal */}
       <Show when={alertModalState().isOpen}>
         <AlertModal
+          open={true}
           message={alertModalState().message}
           onClose={hideAlertModal}
         />

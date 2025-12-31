@@ -208,6 +208,14 @@ function isSongInList(songId, parentListId) {
   return item !== undefined;
 }
 
+function isSongInLibrary(songId) {
+  // Check if the song exists anywhere in any list
+  // For now, all lists are part of the Main Library
+  // Later when playlists are added, this would need to filter by library vs playlist
+  const item = db.prepare('SELECT 1 FROM list_items WHERE song_id = ? LIMIT 1').get(songId);
+  return item !== undefined;
+}
+
 function addFolder(parentListId, position, title) {
   const now = new Date().toISOString();
 
@@ -465,6 +473,7 @@ module.exports = {
   getSong,
   getSongByPath,
   isSongInList,
+  isSongInLibrary,
   addFolder,
   addSong,
   addSongToList,

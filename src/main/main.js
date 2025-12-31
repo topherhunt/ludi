@@ -398,12 +398,10 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
         }
       }
 
-      // Check if the song is already in this list (prevents duplicates from concurrent imports)
-      if (db.isSongInList(songId, parentListId)) {
-        // Song already exists in this list, skip it
-        if (!isNewSong) {
-          results.errors.push({ file: path.basename(filePath), error: 'UNIQUE constraint failed: File already exists in this playlist' });
-        }
+      // For Main Library (and its subfolders), don't allow duplicate songs anywhere
+      // Later when playlists are added (id > 0, non-subfolder), they will allow duplicates
+      if (!isNewSong && db.isSongInLibrary(songId)) {
+        results.errors.push({ file: path.basename(filePath), error: 'Song already exists in library' });
         continue;
       }
 
