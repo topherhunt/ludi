@@ -11,7 +11,7 @@ const DEFAULT_VISIBILITY = {
 };
 
 const DEFAULT_WIDTHS = {
-  title: null,  // Auto
+  title: 300,
   track: 40,
   duration: 60,
   artist: 150,
@@ -75,7 +75,7 @@ const {
     const vis = columnVisibility();
     const widths = columnWidths();
 
-    const cols = ['minmax(200px, 1fr)'];  // Title is always visible
+    const cols = [`${widths.title || 300}px`];  // Title is always visible
 
     if (vis.track) cols.push(`${widths.track || 40}px`);
     if (vis.duration) cols.push(`${widths.duration || 60}px`);

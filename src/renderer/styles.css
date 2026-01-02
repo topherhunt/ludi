@@ -249,6 +249,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-item-count {
@@ -354,7 +355,8 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 0;
+  padding: 0;
+  padding-right: 0.5rem;
 }
 
 .tree-item-content .tree-item-icon {
@@ -365,7 +367,7 @@ body {
 .tree-item-content > .col-duration {
   color: #858585;
   font-size: 12px;
-  padding: 0 8px 0 1.2em;
+  padding: 0 8px 0 0.2em;
 }
 
 .tree-item-content > .col-artist,
@@ -373,7 +375,7 @@ body {
 .tree-item-content > .col-tags {
   color: #999;
   font-size: 13px;
-  padding: 0 8px 0 1.2em;
+  padding: 0 8px 0 0.2em;
 }
 
 /* Hidden columns */
