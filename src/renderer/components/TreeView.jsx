@@ -265,13 +265,28 @@ export function TreeView(props) {
       if (!targetItemData) return;
 
       // Get all items to move with their data
-      const itemsData = [];
+      const allItemsData = [];
       for (const itemId of itemsToMove) {
         const item = await getItemById(itemId);
         if (item) {
-          itemsData.push(item);
+          allItemsData.push(item);
         }
       }
+
+      // Build a set of list_ids for folders in the selection
+      // These are parent containers that are being moved
+      const folderListIdsBeingMoved = new Set();
+      for (const item of allItemsData) {
+        if (item.list_id !== null) {
+          folderListIdsBeingMoved.add(item.list_id);
+        }
+      }
+
+      // Filter out items whose parent folder is also being moved
+      // These items will travel with their parent automatically
+      const itemsData = allItemsData.filter(item => {
+        return !folderListIdsBeingMoved.has(item.parent_list_id);
+      });
 
       // Sort by position (descending for proper move order)
       itemsData.sort((a, b) => b.position - a.position);

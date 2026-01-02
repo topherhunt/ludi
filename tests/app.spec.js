@@ -943,6 +943,138 @@ test.describe('LUDI Music Player', () => {
     await expect(expandBtn).toHaveText('Expand All');
   });
 
+  test('should not reparent child items when dragging folder with selected children', async () => {
+    // This test verifies that when you select a folder AND some of its children,
+    // then drag-drop the selection, the children stay inside the folder
+    // (they should not get reparented to the drop target)
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Create a parent folder
+    const parentFolderName = `Parent Folder ${Date.now()}`;
+    const addBtn = await window.locator('#addLibraryBtn');
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    const newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    const renameInput = await window.locator('#renameInput');
+    await renameInput.fill(parentFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Find and expand the parent folder
+    const parentFolder = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${parentFolderName}")`);
+    await expect(parentFolder).toBeVisible({ timeout: 1000 });
+    const chevron = parentFolder.locator('.tree-item-icon.chevron');
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Add a child folder inside the parent
+    await parentFolder.click({ button: 'right' });
+    await window.waitForTimeout(50);
+    const addFolderInside = await window.locator('.context-menu-item').filter({ hasText: 'Add Folder Inside' });
+    await addFolderInside.click();
+    await window.waitForTimeout(100);
+    const childFolderName = `Child Folder ${Date.now()}`;
+    const childInput = await window.locator('#renameInput');
+    await childInput.fill(childFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Expand to see the child
+    await chevron.click();
+    await window.waitForTimeout(50);
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Verify the child folder is inside the parent (check DOM structure)
+    const childFolder = await window.locator(`.tree-item-content:has-text("${childFolderName}")`);
+    await expect(childFolder).toBeVisible({ timeout: 1000 });
+
+    // Get parent folder's list_id (the folder-id data attribute)
+    const parentListId = await parentFolder.getAttribute('data-folder-id');
+
+    // Verify child is inside parent by checking DOM structure
+    const childIsInsideParent = await window.evaluate(({ parentListId, childFolderName }) => {
+      const parentChildren = document.querySelector(`[data-list-id="${parentListId}"]`);
+      if (!parentChildren) return false;
+      const child = parentChildren.querySelector(`.tree-item-content`);
+      return child?.textContent?.includes(childFolderName) || false;
+    }, { parentListId, childFolderName });
+    expect(childIsInsideParent).toBe(true);
+
+    // Now select the parent folder
+    await parentFolder.click();
+    await window.waitForTimeout(50);
+
+    // Cmd+click the child folder to add to selection
+    await childFolder.click({ modifiers: ['Meta'] });
+    await window.waitForTimeout(50);
+
+    // Verify both are selected
+    await expect(parentFolder).toHaveClass(/selected/);
+    await expect(childFolder).toHaveClass(/selected/);
+
+    // Get the child folder's item-id before drag
+    const childItemId = await childFolder.getAttribute('data-item-id');
+
+    // Perform drag-drop: drag parent folder to a different position (e.g., to a song)
+    // Find a song item to drop onto
+    const songItem = await window.locator('.tree-item-content[data-is-folder="false"]').first();
+    await expect(songItem).toBeVisible({ timeout: 2000 });
+
+    // Perform the drag operation using page.dispatchEvent for reliable drag-drop
+    const parentBox = await parentFolder.boundingBox();
+    const songBox = await songItem.boundingBox();
+
+    if (parentBox && songBox) {
+      // Start drag from parent folder
+      await window.mouse.move(parentBox.x + parentBox.width / 2, parentBox.y + parentBox.height / 2);
+      await window.mouse.down();
+
+      // Move to song item (bottom half to drop "after")
+      await window.mouse.move(songBox.x + songBox.width / 2, songBox.y + songBox.height * 0.75, { steps: 5 });
+      await window.waitForTimeout(50);
+
+      // Drop
+      await window.mouse.up();
+      await window.waitForTimeout(200);
+    }
+
+    // Re-query the parent folder (it may have moved in the DOM)
+    const movedParentFolder = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${parentFolderName}")`);
+    await expect(movedParentFolder).toBeVisible({ timeout: 1000 });
+
+    // Expand the moved parent folder to see children
+    const movedChevron = movedParentFolder.locator('.tree-item-icon.chevron');
+    await movedChevron.click();
+    await window.waitForTimeout(100);
+
+    // Get the moved parent's folder-id
+    const movedParentListId = await movedParentFolder.getAttribute('data-folder-id');
+
+    // THE KEY CHECK: Child folder should still be inside the parent folder
+    const childStillInsideParent = await window.evaluate(({ parentListId, childFolderName }) => {
+      const parentChildren = document.querySelector(`[data-list-id="${parentListId}"]`);
+      if (!parentChildren) return false;
+      const child = parentChildren.querySelector(`.tree-item-content`);
+      return child?.textContent?.includes(childFolderName) || false;
+    }, { parentListId: movedParentListId, childFolderName });
+
+    expect(childStillInsideParent).toBe(true);
+
+    // Clean up: delete the parent folder (which will delete child too)
+    await movedParentFolder.click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(100);
+  });
+
   test('should add folder after song via context menu', async () => {
     // Use unique folder name to avoid conflicts with previous test runs
     const uniqueFolderName = `Context Menu Folder ${Date.now()}`;
