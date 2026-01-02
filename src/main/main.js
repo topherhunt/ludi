@@ -16,7 +16,7 @@ if (isSolidDev) {
 }
 
 // Register custom protocol for serving local audio files
-// This is needed when running from Vite dev server (http://) which can't access file:// URLs
+// Used in both dev and prod for consistent behavior and proper Range request support (needed for seeking)
 protocol.registerSchemesAsPrivileged([
   { scheme: 'ludi-audio', privileges: { stream: true, bypassCSP: true } }
 ]);
@@ -177,11 +177,72 @@ function createMenu() {
 app.whenReady().then(() => {
   try {
     // Register custom protocol handler for local audio files
-    // This allows the renderer to load audio when running from http://localhost (Vite dev server)
-    protocol.handle('ludi-audio', (request) => {
-      // URL format: ludi-audio:///path/to/file.mp3
+    // Used in both dev and prod for consistent behavior
+    //
+    // ============================================================================
+    // CRITICAL: RANGE REQUEST HANDLING IS REQUIRED FOR AUDIO SEEKING
+    // ============================================================================
+    // When HTML5 Audio elements seek to a position, they send HTTP Range requests
+    // (e.g., "Range: bytes=1000000-") expecting a 206 Partial Content response.
+    //
+    // A naive implementation like `return net.fetch('file://' + filePath)` will
+    // NOT handle Range requests - it returns the entire file with 200 OK.
+    // This causes a subtle but severe bug:
+    //   - The seek bar UI updates correctly (shows the target position)
+    //   - But the actual audio plays from the WRONG position (often much earlier)
+    //   - The mismatch worsens with longer files (3+ minutes)
+    //
+    // The fix: Manually parse Range headers and return proper 206 responses with
+    // Content-Range headers. This is how real HTTP servers serve streamable media.
+    //
+    // DO NOT simplify this to just `net.fetch()` - it will break seeking!
+    // ============================================================================
+    protocol.handle('ludi-audio', async (request) => {
       const filePath = decodeURIComponent(request.url.replace('ludi-audio://', ''));
-      return net.fetch('file://' + filePath);
+
+      const stats = fs.statSync(filePath);
+      const fileSize = stats.size;
+
+      // Check for Range header - this is how HTML5 Audio implements seeking
+      const rangeHeader = request.headers.get('Range');
+
+      if (rangeHeader) {
+        // Parse range header: "bytes=start-end" or "bytes=start-"
+        const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+        if (match) {
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+          const chunkSize = end - start + 1;
+
+          // Read the requested portion of the file
+          const buffer = Buffer.alloc(chunkSize);
+          const fd = fs.openSync(filePath, 'r');
+          fs.readSync(fd, buffer, 0, chunkSize, start);
+          fs.closeSync(fd);
+
+          // Return 206 Partial Content with proper headers
+          return new Response(buffer, {
+            status: 206,
+            headers: {
+              'Content-Type': 'audio/mpeg',
+              'Content-Length': String(chunkSize),
+              'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+              'Accept-Ranges': 'bytes',
+            },
+          });
+        }
+      }
+
+      // No range header - return full file with Accept-Ranges header
+      const buffer = fs.readFileSync(filePath);
+      return new Response(buffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': String(fileSize),
+          'Accept-Ranges': 'bytes',
+        },
+      });
     });
 
     // Initialize database

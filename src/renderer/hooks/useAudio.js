@@ -101,12 +101,11 @@ export function createAudioPlayer() {
       }
       stopTimeUpdates();
 
-      // Use file:// directly when running from file:// origin (production)
-      // Use ludi-audio:// custom protocol when running from http:// (Vite dev server)
-      const isFileOrigin = window.location.protocol === 'file:';
-      const fileUrl = isFileOrigin
-        ? 'file://' + fullPath.replace(/\\/g, '/')
-        : 'ludi-audio://' + fullPath.replace(/\\/g, '/');
+      // Always use ludi-audio:// custom protocol (defined in main.js)
+      // DO NOT use file:// URLs directly - the custom protocol handler includes
+      // critical Range request handling required for audio seeking to work correctly.
+      // See the detailed comment in main.js protocol.handle() for explanation.
+      const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/');
 
       // Create new Howl instance
       sound = new Howl({
@@ -238,8 +237,10 @@ export function createAudioPlayer() {
    */
   function seekToPercent(percentage) {
     if (sound) {
-      // Use the duration signal (set from DB) instead of sound.duration() which may be Infinity
-      const dur = duration();
+      // Use Howler's actual duration for seeking (like the old renderer.js does)
+      // This ensures the seek position is accurate even if DB duration differs
+      const howlerDur = sound.duration();
+      const dur = (isFinite(howlerDur) && howlerDur > 0) ? howlerDur : duration();
       if (!isFinite(dur) || dur <= 0) return;
       const time = dur * (percentage / 100);
       seek(time);
