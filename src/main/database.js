@@ -341,7 +341,8 @@ function deleteItem(itemId) {
     const item = db.prepare('SELECT * FROM list_items WHERE id = ?').get(itemId);
 
     if (!item) {
-      throw new Error('Item not found');
+      // Item already deleted (e.g., as child of a deleted parent folder) - nothing to do
+      return;
     }
 
     // If it's a folder, recursively delete all items inside

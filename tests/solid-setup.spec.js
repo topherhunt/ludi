@@ -626,6 +626,100 @@ test.describe('SolidJS Setup', () => {
     expect(deletedFolder).toBe(0);
   });
 
+  test('should delete multiple items including folder and its contents without error', async () => {
+    // This test reproduces the bug where deleting a folder AND its children
+    // causes "Item not found" error because the folder deletion recursively
+    // deletes children, then the child deletion tries to delete already-gone items
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    const uniqueFolderName = `Multi-Delete Folder ${Date.now()}`;
+
+    // Create a folder
+    const addBtn = await window.locator('#addLibraryBtn');
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    const newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    const renameInput = await window.locator('#renameInput');
+    await renameInput.fill(uniqueFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Find and expand the folder
+    const folderContent = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${uniqueFolderName}")`);
+    await expect(folderContent).toBeVisible({ timeout: 1000 });
+
+    // Click the chevron to expand
+    const chevron = folderContent.locator('.tree-item-icon.chevron');
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Add a nested folder inside
+    await folderContent.click({ button: 'right' });
+    await window.waitForTimeout(50);
+    const addFolderInside = await window.locator('.context-menu-item').filter({ hasText: 'Add Folder Inside' });
+    await addFolderInside.click();
+    await window.waitForTimeout(100);
+
+    const nestedFolderName = `Nested ${Date.now()}`;
+    const nestedInput = await window.locator('#renameInput');
+    await nestedInput.fill(nestedFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Click chevron again to see the nested folder
+    await chevron.click();
+    await window.waitForTimeout(50);
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Find the nested folder
+    const nestedFolder = await window.locator(`.tree-item-content:has-text("${nestedFolderName}")`);
+    await expect(nestedFolder).toBeVisible({ timeout: 1000 });
+
+    // Select the parent folder
+    await folderContent.click();
+    await window.waitForTimeout(50);
+
+    // Cmd+click the nested folder to add to selection
+    await nestedFolder.click({ modifiers: ['Meta'] });
+    await window.waitForTimeout(50);
+
+    // Clear console errors before delete
+    await window.evaluate(() => {
+      window.__deleteTestErrors = [];
+      const origError = console.error;
+      console.error = (...args) => {
+        window.__deleteTestErrors.push(args.join(' '));
+        origError.apply(console, args);
+      };
+    });
+
+    // Press Backspace to delete both
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+
+    // Confirm
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(200);
+
+    // Verify no errors occurred during deletion
+    const deleteErrors = await window.evaluate(() => window.__deleteTestErrors || []);
+    const itemNotFoundErrors = deleteErrors.filter(e => e.includes('Item not found'));
+    expect(itemNotFoundErrors).toEqual([]);
+
+    // Verify both are deleted
+    const remainingParent = await window.locator(`.tree-item-content:has-text("${uniqueFolderName}")`).count();
+    const remainingNested = await window.locator(`.tree-item-content:has-text("${nestedFolderName}")`).count();
+    expect(remainingParent).toBe(0);
+    expect(remainingNested).toBe(0);
+  });
+
   test('should support drag and drop with draggable items', async () => {
     // Refresh UI first
     const mainLibraryItem = await window.locator('.playlist-item').first();
