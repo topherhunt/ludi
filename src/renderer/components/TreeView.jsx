@@ -14,12 +14,24 @@ export function TreeView(props) {
   let containerRef;
 
   // Fetch items for current list
-  const [items, { refetch }] = createResource(
+  const [items, { refetch: rawRefetch }] = createResource(
     currentListId,
     async (listId) => {
       return await getListItems(listId);
     }
   );
+
+  // Wrap refetch to preserve scroll position
+  const refetch = async () => {
+    const scrollTop = containerRef?.scrollTop ?? 0;
+    await rawRefetch();
+    // Restore scroll position after DOM updates
+    requestAnimationFrame(() => {
+      if (containerRef) {
+        containerRef.scrollTop = scrollTop;
+      }
+    });
+  };
 
   // Expose refetch to parent for refreshing
   onMount(() => {

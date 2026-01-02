@@ -744,6 +744,94 @@ test.describe('SolidJS Setup', () => {
     }
   });
 
+  test('should preserve scroll position when deleting items', async () => {
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Create multiple folders so we have enough content to scroll
+    const folderNames = [];
+    for (let i = 0; i < 15; i++) {
+      const name = `Scroll Test ${Date.now()}-${i}`;
+      folderNames.push(name);
+
+      const addBtn = await window.locator('#addLibraryBtn');
+      await addBtn.click();
+      await window.waitForTimeout(30);
+      const newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+      await newFolderOption.click();
+      const renameInput = await window.locator('#renameInput');
+      await renameInput.fill(name);
+      await window.click('#renameOkBtn');
+      await window.waitForTimeout(30);
+    }
+
+    // Force scroll down in the container
+    const scrollInfo = await window.evaluate(() => {
+      const container = document.getElementById('explorerContainer');
+      if (!container) return { success: false };
+      // Scroll to middle of content
+      const scrollTarget = Math.min(200, container.scrollHeight - container.clientHeight);
+      container.scrollTop = scrollTarget;
+      return {
+        success: true,
+        scrollTop: container.scrollTop,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight
+      };
+    });
+    await window.waitForTimeout(50);
+
+    // Skip test if container isn't scrollable (not enough content)
+    if (scrollInfo.scrollHeight <= scrollInfo.clientHeight) {
+      // Clean up and skip
+      for (const name of folderNames) {
+        const folder = await window.locator(`.tree-item-content:has-text("${name}")`);
+        if (await folder.count() > 0) {
+          await folder.click();
+          await window.keyboard.press('Backspace');
+          await window.waitForTimeout(30);
+          await window.click('#modalYesBtn');
+          await window.waitForTimeout(30);
+        }
+      }
+      return; // Container not scrollable, can't test scroll preservation
+    }
+
+    const scrollBefore = scrollInfo.scrollTop;
+    expect(scrollBefore).toBeGreaterThan(0);
+
+    // Delete a folder
+    const lastFolder = await window.locator(`.tree-item-content:has-text("${folderNames[14]}")`);
+    await lastFolder.click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(50);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(150);
+
+    // Check scroll position is preserved
+    const scrollAfter = await window.evaluate(() => {
+      return document.getElementById('explorerContainer')?.scrollTop || 0;
+    });
+    // Scroll should be preserved (within small tolerance for deleted item height)
+    expect(scrollAfter).toBeGreaterThanOrEqual(scrollBefore - 50);
+
+    // Clean up remaining folders
+    for (let i = 0; i < 14; i++) {
+      const folder = await window.locator(`.tree-item-content:has-text("${folderNames[i]}")`);
+      if (await folder.count() > 0) {
+        await folder.click();
+        await window.keyboard.press('Backspace');
+        await window.waitForTimeout(30);
+        await window.click('#modalYesBtn');
+        await window.waitForTimeout(30);
+      }
+    }
+  });
+
   test('should play song when Enter key is pressed', async () => {
     // Track errors during this test
     const playbackErrors = [];
