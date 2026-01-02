@@ -295,7 +295,14 @@ export function TreeView(props) {
         let newPosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
 
         for (const item of itemsData) {
-          await moveItem(item.id, targetItemData.parent_list_id, newPosition);
+          let adjustedPosition = newPosition;
+          // When moving DOWN within the same list, removing the item first shifts
+          // all items below it up by 1, so we need to subtract 1 from target position
+          if (item.parent_list_id === targetItemData.parent_list_id &&
+              item.position < newPosition) {
+            adjustedPosition = newPosition - 1;
+          }
+          await moveItem(item.id, targetItemData.parent_list_id, adjustedPosition);
         }
       }
 
