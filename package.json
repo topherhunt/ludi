@@ -6,10 +6,9 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --enable-logging",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173/index.html && VITE_DEV=true electron .\"",
     "vite": "vite",
     "vite:build": "vite build",
-    "dev:solid": "concurrently \"vite\" \"wait-on http://localhost:5173/solid.html && SOLID_DEV=true electron .\"",
     "test": "playwright test",
     "test:unit": "vitest",
     "postinstall": "electron-rebuild"

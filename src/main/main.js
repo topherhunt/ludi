@@ -7,11 +7,11 @@ const { parseFile } = require('music-metadata');
 let mainWindow;
 let settingsWindow;
 
-// Check if running in SolidJS development mode
-const isSolidDev = process.env.SOLID_DEV === 'true';
+// Check if running in development mode (with Vite dev server)
+const isDev = process.env.VITE_DEV === 'true';
 
 // Suppress Electron security warnings in dev mode (CSP warnings from Vite's eval usage)
-if (isSolidDev) {
+if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
@@ -38,15 +38,15 @@ function createWindow() {
     }
   });
 
-  // Load from Vite dev server in Solid development mode, otherwise load static file
-  if (isSolidDev) {
-    mainWindow.loadURL('http://localhost:5173/solid.html');
+  // Load from Vite dev server in development mode, otherwise load static file
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173/index.html');
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
   // Open DevTools in development (but not during tests, as it interferes with Playwright)
-  if ((process.argv.includes('--enable-logging') || isSolidDev) && !isTest) {
+  if ((process.argv.includes('--enable-logging') || isDev) && !isTest) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -101,9 +101,9 @@ function createSettingsWindow() {
     modal: false
   });
 
-  // Load from Vite dev server in Solid development mode, otherwise load static file
-  if (isSolidDev) {
-    settingsWindow.loadURL('http://localhost:5173/settings.solid.html');
+  // Load from Vite dev server in development mode, otherwise load static file
+  if (isDev) {
+    settingsWindow.loadURL('http://localhost:5173/settings.html');
   } else {
     settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
   }

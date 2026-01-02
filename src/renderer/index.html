@@ -3,108 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' data: file:; font-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:5173 http://localhost:5173; media-src 'self' data: file:; font-src 'self'">
   <title>LUDI Music Player</title>
   <link rel="stylesheet" href="bootstrap-icons.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-container">
-    <!-- Sidebar for playlists (future feature) -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <h2>Library</h2>
-        <button id="addLibraryBtn" class="add-btn" title="Add">+</button>
-        <div id="addLibraryDropdown" class="dropdown-menu">
-          <div class="dropdown-item" id="newFolderMenuItem">New Folder</div>
-        </div>
-      </div>
-      <div class="playlist-list" id="playlistList">
-        <!-- Playlists will be rendered here -->
-      </div>
-    </aside>
-
-    <!-- Main panel with nested folder explorer -->
-    <main class="main-panel">
-      <div class="explorer-header">
-        <h1 id="currentListTitle">Main Library</h1>
-        <div class="explorer-controls">
-          <button id="collapseAllBtn" title="Collapse All">Collapse All</button>
-          <button id="expandAllBtn" title="Expand All">Expand All</button>
-        </div>
-      </div>
-
-      <div class="explorer-container" id="explorerContainer">
-        <div class="column-headers" id="columnHeaders">
-          <div class="col-header col-title">Title<span class="resize-handle"></span></div>
-          <div class="col-header col-track" data-column="track">#<span class="resize-handle"></span></div>
-          <div class="col-header col-duration" data-column="duration">Time<span class="resize-handle"></span></div>
-          <div class="col-header col-artist" data-column="artist">Artist<span class="resize-handle"></span></div>
-          <div class="col-header col-album" data-column="album">Album<span class="resize-handle"></span></div>
-          <div class="col-header col-tags" data-column="tags">Tags</div>
-        </div>
-        <div class="drop-indicator" id="dropIndicator"></div>
-        <ul class="explorer-tree" id="explorerTree" data-list-id="0">
-          <!-- Tree items will be rendered here -->
-        </ul>
-      </div>
-    </main>
-
-    <!-- Player controls at bottom -->
-    <footer class="player-controls">
-      <div class="player-info">
-        <div class="song-title" id="currentSongTitle">No song playing</div>
-        <div class="song-artist" id="currentSongArtist"></div>
-      </div>
-
-      <div class="playback-controls">
-        <button id="shuffleBtn" title="Shuffle" class="toggle-btn"><i class="bi bi-shuffle"></i></button>
-        <button id="prevBtn" title="Previous" disabled><i class="bi bi-skip-backward-circle-fill"></i></button>
-        <button id="playPauseBtn" title="Play/Pause" disabled><i class="bi bi-play-circle-fill"></i></button>
-        <button id="nextBtn" title="Next" disabled><i class="bi bi-skip-forward-circle-fill"></i></button>
-        <button id="loopBtn" title="Loop: Off" class="toggle-btn"><i class="bi bi-repeat"></i></button>
-      </div>
-
-      <div class="time-controls">
-        <span id="currentTime">0:00</span>
-        <input type="range" id="seekBar" min="0" max="100" value="0" disabled>
-        <span id="totalTime">0:00</span>
-      </div>
-
-      <div class="volume-controls">
-        <button id="muteBtn" title="Mute"><i class="bi bi-volume-up-fill"></i></button>
-        <input type="range" id="volumeSlider" min="0" max="100" value="100">
-      </div>
-    </footer>
-  </div>
-
-  <!-- Modal Dialog -->
-  <div id="modalOverlay" class="modal-overlay">
-    <div class="modal-dialog">
-      <div class="modal-title" id="modalTitle"></div>
-      <div class="modal-content" id="modalContent"></div>
-      <div class="modal-buttons" id="modalButtons">
-        <button id="modalOkBtn" class="modal-btn">OK</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rename Modal -->
-  <div id="renameModalOverlay" class="modal-overlay">
-    <div class="modal-dialog rename-dialog">
-      <div class="modal-title" id="renameModalTitle">New Folder</div>
-      <div class="modal-content rename-content">
-        <label for="renameInput">Folder Name:</label>
-        <input type="text" id="renameInput" class="modal-input" placeholder="Enter folder name">
-      </div>
-      <div class="modal-buttons">
-        <button id="renameCancelBtn" class="modal-btn modal-btn-secondary">Cancel</button>
-        <button id="renameOkBtn" class="modal-btn">OK</button>
-      </div>
-    </div>
-  </div>
-
+  <div id="app"></div>
   <script src="howler.min.js"></script>
-  <script src="renderer.js"></script>
+  <script type="module" src="./index.jsx"></script>
 </body>
 </html>

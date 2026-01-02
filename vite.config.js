@@ -13,8 +13,8 @@ export default defineConfig({
     minify: false,  // Easier debugging in Electron
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'src/renderer/solid.html'),
-        settings: path.resolve(__dirname, 'src/renderer/settings.solid.html'),
+        main: path.resolve(__dirname, 'src/renderer/index.html'),
+        settings: path.resolve(__dirname, 'src/renderer/settings.html'),
       },
     },
   },

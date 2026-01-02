@@ -6,14 +6,11 @@
 # Install dependencies (automatically rebuilds native modules)
 npm install
 
-# Run the app
+# Run the app (production mode)
 npm start
 
-# Run in OLD development mode (with DevTools)
+# Run in development mode (with Vite hot reload + DevTools)
 npm run dev
-
-# Run in BETA development mode
-npm run dev:solid
 
 # Run integration tests
 npm test
@@ -28,9 +25,10 @@ Fast, intuitive, lightweight, deceptively powerful MacOS music library & player 
 Architecture:
 
 - Electron (Tauri was my first choice but it's not functional on MacOS yet)
+- SolidJS for the UI layer
 - SQLite for the music library DB
 - Howler.js for audio playback
-- ?? (TODO) for extracting title/artist/album tags from audiofiles
+- music-metadata for extracting title/artist/album tags from audiofiles
 - Thorough integration tests using Playwright for Electron
 
 Features:
@@ -49,7 +47,7 @@ Features:
 - ✅ Folders
 - ✅ Hotkeys for playlist navigation & playback
 - ✅ Configurable columns for track #, duration, artist, album, and tags
-- [ ] Refactor all UI to SolidJS for performance & easier maintenance
+- ✅ Refactor all UI to SolidJS for performance & easier maintenance
 - [ ] Searching & filtering
 
 ## The SQLite DB schema:

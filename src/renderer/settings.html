@@ -3,59 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:5173 http://localhost:5173">
   <title>Settings - Ludi</title>
   <link rel="stylesheet" href="settings.css">
 </head>
 <body>
-  <div class="settings-container">
-    <header class="settings-header">
-      <h1>Settings</h1>
-    </header>
-
-    <div class="settings-content">
-      <div class="setting-item">
-        <label class="setting-label">Database path</label>
-        <div class="setting-description">Location where Ludi stores your library database</div>
-        <input type="text" id="databasePath" class="setting-input" readonly>
-      </div>
-
-      <div class="setting-item">
-        <label class="setting-label">Library path</label>
-        <div class="setting-description">Location where audio files are stored</div>
-        <input type="text" id="libraryPath" class="setting-input">
-        <button id="browseBtn" class="browse-btn">Browse...</button>
-      </div>
-
-      <div class="setting-item">
-        <label class="setting-label">Visible columns</label>
-        <div class="setting-description">Choose which columns to display in the playlist view</div>
-        <div class="checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="colTrack" checked> #
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="colDuration" checked> Time
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="colArtist" checked> Artist
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="colAlbum" checked> Album
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="colTags" checked> Tags
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <footer class="settings-footer">
-      <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
-      <button id="saveBtn" class="btn btn-primary">Save</button>
-    </footer>
-  </div>
-
-  <script src="settings.js"></script>
+  <div id="app"></div>
+  <script type="module" src="./settings.jsx"></script>
 </body>
 </html>
