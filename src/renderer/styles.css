@@ -206,11 +206,13 @@ body {
 
 .tree-item-content.drag-over {
   background-color: #264f78;
-  border: 1px solid #007acc;
+  outline: 1px solid #007acc;
+  outline-offset: -1px;
 }
 
 .tree-item-content.drop-into {
-  border: 2px solid #007acc;
+  outline: 2px solid #007acc;
+  outline-offset: -2px;
   background-color: rgba(0, 122, 204, 0.1);
 }
 
