@@ -288,8 +288,8 @@ export function TreeView(props) {
         return !folderListIdsBeingMoved.has(item.parent_list_id);
       });
 
-      // Sort by position (descending for proper move order)
-      itemsData.sort((a, b) => b.position - a.position);
+      // Sort by position ascending to preserve relative order when moving
+      itemsData.sort((a, b) => a.position - b.position);
 
       if (isDropIntoFolder) {
         // Drop INTO folder - move all items to end of folder
@@ -307,17 +307,37 @@ export function TreeView(props) {
         const heightPercent = relativeY / rect.height;
         const isFolder = targetContent.dataset.isFolder === 'true';
         const insertBefore = isFolder ? heightPercent < 0.25 : heightPercent < 0.5;
-        let newPosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
+        const basePosition = insertBefore ? targetItemData.position : targetItemData.position + 1;
 
-        for (const item of itemsData) {
-          let adjustedPosition = newPosition;
-          // When moving DOWN within the same list, removing the item first shifts
-          // all items below it up by 1, so we need to subtract 1 from target position
-          if (item.parent_list_id === targetItemData.parent_list_id &&
-              item.position < newPosition) {
-            adjustedPosition = newPosition - 1;
-          }
-          await moveItem(item.id, targetItemData.parent_list_id, adjustedPosition);
+        // Count items moving DOWN (from above the target in the same list)
+        const itemsAbove = itemsData.filter(item =>
+          item.parent_list_id === targetItemData.parent_list_id &&
+          item.position < basePosition
+        );
+        const itemsNotAbove = itemsData.filter(item =>
+          item.parent_list_id !== targetItemData.parent_list_id ||
+          item.position >= basePosition
+        );
+
+        // Effective base position accounts for all items being removed from above
+        const effectiveBase = basePosition - itemsAbove.length;
+
+        // Assign target positions based on original order (ascending)
+        const itemTargets = new Map();
+        itemsData.forEach((item, index) => {
+          itemTargets.set(item.id, effectiveBase + index);
+        });
+
+        // Process items moving DOWN in DESCENDING order to avoid interleaving
+        // (removing higher-position items first prevents shifting issues)
+        const itemsAboveDescending = [...itemsAbove].sort((a, b) => b.position - a.position);
+        for (const item of itemsAboveDescending) {
+          await moveItem(item.id, targetItemData.parent_list_id, itemTargets.get(item.id));
+        }
+
+        // Process remaining items in ASCENDING order
+        for (const item of itemsNotAbove) {
+          await moveItem(item.id, targetItemData.parent_list_id, itemTargets.get(item.id));
         }
       }
 

@@ -943,6 +943,214 @@ test.describe('LUDI Music Player', () => {
     await expect(expandBtn).toHaveText('Expand All');
   });
 
+  test('should preserve relative order when dragging multiple items DOWN', async () => {
+    // When dragging items from ABOVE the target to BELOW it,
+    // the relative order should be preserved
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Create a song-like marker folder (to act as our "song" since we can easily create folders)
+    const songMarkerName = `Song Marker ${Date.now()}`;
+    const addBtn = await window.locator('#addLibraryBtn');
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    let newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    let renameInput = await window.locator('#renameInput');
+    await renameInput.fill(songMarkerName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Create a folder below it
+    const folderName = `Folder Below ${Date.now()}`;
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    renameInput = await window.locator('#renameInput');
+    await renameInput.fill(folderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Create a target marker at the end
+    const targetMarkerName = `Target Marker ${Date.now()}`;
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    renameInput = await window.locator('#renameInput');
+    await renameInput.fill(targetMarkerName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Find all three items
+    const songMarker = await window.locator(`.tree-item-content:has-text("${songMarkerName}")`);
+    const folder = await window.locator(`.tree-item-content:has-text("${folderName}")`);
+    const targetMarker = await window.locator(`.tree-item-content:has-text("${targetMarkerName}")`);
+
+    await expect(songMarker).toBeVisible();
+    await expect(folder).toBeVisible();
+    await expect(targetMarker).toBeVisible();
+
+    // Verify initial order: songMarker should be above folder
+    const initialSongPos = await songMarker.getAttribute('data-item-id');
+    const initialFolderPos = await folder.getAttribute('data-item-id');
+
+    // Select songMarker first, then CMD+click folder
+    await songMarker.click();
+    await window.waitForTimeout(50);
+    await folder.click({ modifiers: ['Meta'] });
+    await window.waitForTimeout(50);
+
+    // Verify both are selected
+    await expect(songMarker).toHaveClass(/selected/);
+    await expect(folder).toHaveClass(/selected/);
+
+    // Drag from songMarker to targetMarker (drop after it)
+    const songBox = await songMarker.boundingBox();
+    const targetBox = await targetMarker.boundingBox();
+
+    if (songBox && targetBox) {
+      await window.mouse.move(songBox.x + songBox.width / 2, songBox.y + songBox.height / 2);
+      await window.mouse.down();
+      // Move to bottom of target marker to drop "after"
+      await window.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.9, { steps: 5 });
+      await window.waitForTimeout(50);
+      await window.mouse.up();
+      await window.waitForTimeout(200);
+    }
+
+    // Get all tree items in order
+    const allItems = await window.locator('.tree-item-content').all();
+    const itemTexts = [];
+    for (const item of allItems) {
+      const text = await item.textContent();
+      itemTexts.push(text);
+    }
+
+    // Find positions of our items after the move
+    const songMarkerIndex = itemTexts.findIndex(t => t.includes(songMarkerName));
+    const folderIndex = itemTexts.findIndex(t => t.includes(folderName));
+    const targetIndex = itemTexts.findIndex(t => t.includes(targetMarkerName));
+
+    // songMarker should still be above folder (lower index = higher in list)
+    expect(songMarkerIndex).toBeLessThan(folderIndex);
+
+    // Both should be after the target marker now
+    expect(songMarkerIndex).toBeGreaterThan(targetIndex);
+    expect(folderIndex).toBeGreaterThan(targetIndex);
+
+    // Clean up - delete all three folders
+    for (const name of [songMarkerName, folderName, targetMarkerName]) {
+      const item = await window.locator(`.tree-item-content:has-text("${name}")`);
+      if (await item.count() > 0) {
+        await item.click();
+        await window.keyboard.press('Backspace');
+        await window.waitForTimeout(50);
+        await window.click('#modalYesBtn');
+        await window.waitForTimeout(50);
+      }
+    }
+  });
+
+  test('should preserve relative order when dragging multiple items UP', async () => {
+    // When dragging items from BELOW the target to ABOVE it,
+    // the relative order should be preserved
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Create 4 folders: Target, then A, B, C (we'll move B and C above Target)
+    const targetName = `Target ${Date.now()}`;
+    const folderAName = `Folder A ${Date.now()}`;
+    const folderBName = `Folder B ${Date.now()}`;
+    const folderCName = `Folder C ${Date.now()}`;
+
+    for (const name of [targetName, folderAName, folderBName, folderCName]) {
+      const addBtn = await window.locator('#addLibraryBtn');
+      await addBtn.click();
+      await window.waitForTimeout(50);
+      const newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+      await newFolderOption.click();
+      const renameInput = await window.locator('#renameInput');
+      await renameInput.fill(name);
+      await window.click('#renameOkBtn');
+      await window.waitForTimeout(100);
+    }
+
+    // Find all four items
+    const target = await window.locator(`.tree-item-content:has-text("${targetName}")`);
+    const folderB = await window.locator(`.tree-item-content:has-text("${folderBName}")`);
+    const folderC = await window.locator(`.tree-item-content:has-text("${folderCName}")`);
+
+    await expect(target).toBeVisible();
+    await expect(folderB).toBeVisible();
+    await expect(folderC).toBeVisible();
+
+    // Select B and C (they are below the target)
+    await folderB.click();
+    await window.waitForTimeout(50);
+    await folderC.click({ modifiers: ['Meta'] });
+    await window.waitForTimeout(50);
+
+    // Verify both are selected
+    await expect(folderB).toHaveClass(/selected/);
+    await expect(folderC).toHaveClass(/selected/);
+
+    // Drag from B to Target (drop before it to move UP)
+    const folderBBox = await folderB.boundingBox();
+    const targetBox = await target.boundingBox();
+
+    if (folderBBox && targetBox) {
+      await window.mouse.move(folderBBox.x + folderBBox.width / 2, folderBBox.y + folderBBox.height / 2);
+      await window.mouse.down();
+      // Move to top of target to drop "before"
+      await window.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.1, { steps: 5 });
+      await window.waitForTimeout(50);
+      await window.mouse.up();
+      await window.waitForTimeout(200);
+    }
+
+    // Get all tree items in order
+    const allItems = await window.locator('.tree-item-content').all();
+    const itemTexts = [];
+    for (const item of allItems) {
+      const text = await item.textContent();
+      itemTexts.push(text);
+    }
+
+    // Find positions after the move
+    const folderBIndex = itemTexts.findIndex(t => t.includes(folderBName));
+    const folderCIndex = itemTexts.findIndex(t => t.includes(folderCName));
+    const targetIndex = itemTexts.findIndex(t => t.includes(targetName));
+
+    // B should still be above C (preserved order)
+    expect(folderBIndex).toBeLessThan(folderCIndex);
+
+    // Both should be BEFORE the target now (moved up)
+    expect(folderBIndex).toBeLessThan(targetIndex);
+    expect(folderCIndex).toBeLessThan(targetIndex);
+
+    // Clean up
+    for (const name of [targetName, folderAName, folderBName, folderCName]) {
+      const item = await window.locator(`.tree-item-content:has-text("${name}")`);
+      if (await item.count() > 0) {
+        await item.click();
+        await window.keyboard.press('Backspace');
+        await window.waitForTimeout(50);
+        await window.click('#modalYesBtn');
+        await window.waitForTimeout(50);
+      }
+    }
+  });
+
   test('should not reparent child items when dragging folder with selected children', async () => {
     // This test verifies that when you select a folder AND some of its children,
     // then drag-drop the selection, the children stay inside the folder
