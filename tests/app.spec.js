@@ -1493,6 +1493,110 @@ test.describe('LUDI Music Player', () => {
     }
   });
 
+  test('should insert as first child when dropping on bottom zone of expanded folder', async () => {
+    // When a folder is EXPANDED and you drop on its bottom 25%,
+    // the item should become the FIRST child inside the folder
+    // (instead of a sibling after the folder)
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Create a parent folder
+    const parentFolderName = `Expanded Folder ${Date.now()}`;
+    const addBtn = await window.locator('#addLibraryBtn');
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    let newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    let renameInput = await window.locator('#renameInput');
+    await renameInput.fill(parentFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Find and expand the parent folder
+    const parentFolder = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${parentFolderName}")`);
+    await expect(parentFolder).toBeVisible({ timeout: 1000 });
+    const chevron = parentFolder.locator('.tree-item-icon.chevron');
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Add an existing child folder inside the parent
+    await parentFolder.click({ button: 'right' });
+    await window.waitForTimeout(50);
+    const addFolderInside = await window.locator('.context-menu-item').filter({ hasText: 'Add Folder Inside' });
+    await addFolderInside.click();
+    await window.waitForTimeout(100);
+    const existingChildName = `Existing Child ${Date.now()}`;
+    const childInput = await window.locator('#renameInput');
+    await childInput.fill(existingChildName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Re-expand the folder to see the child
+    await chevron.click();
+    await window.waitForTimeout(50);
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Create a new folder that will be dragged INTO the parent folder
+    const dragFolderName = `Drag Me ${Date.now()}`;
+    await addBtn.click();
+    await window.waitForTimeout(50);
+    newFolderOption = await window.locator('.dropdown-item').filter({ hasText: 'New Folder' });
+    await newFolderOption.click();
+    renameInput = await window.locator('#renameInput');
+    await renameInput.fill(dragFolderName);
+    await window.click('#renameOkBtn');
+    await window.waitForTimeout(100);
+
+    // Find the drag folder
+    const dragFolder = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${dragFolderName}")`);
+    await expect(dragFolder).toBeVisible();
+
+    // Select the drag folder
+    await dragFolder.click();
+    await window.waitForTimeout(50);
+
+    // Get bounding boxes
+    const dragBox = await dragFolder.boundingBox();
+    const parentBox = await parentFolder.boundingBox();
+
+    if (dragBox && parentBox) {
+      // Drag to bottom 25% of the expanded parent folder
+      await window.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+      await window.mouse.down();
+      // Move to bottom 12.5% of parent (well within bottom 25%)
+      await window.mouse.move(parentBox.x + parentBox.width / 2, parentBox.y + parentBox.height * 0.875, { steps: 5 });
+      await window.waitForTimeout(50);
+      await window.mouse.up();
+      await window.waitForTimeout(200);
+    }
+
+    // Get the parent folder's list ID
+    const parentListId = await parentFolder.getAttribute('data-folder-id');
+
+    // Get children of the parent folder in order
+    const children = await window.evaluate(async (listId) => {
+      const items = await window.electronAPI.getListItems(parseInt(listId));
+      return items.map(item => item.list_title || item.song_title);
+    }, parentListId);
+
+    // The dragged folder should be FIRST (position 0), existing child should be second
+    expect(children[0]).toBe(dragFolderName);
+    expect(children[1]).toBe(existingChildName);
+
+    // Clean up: delete the parent folder (which will delete children too)
+    const movedParentFolder = await window.locator(`.tree-item-content[data-is-folder="true"]:has-text("${parentFolderName}")`);
+    await movedParentFolder.click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(100);
+  });
+
   test('should import folder contents in alphabetical order', async () => {
     const fs = require('fs');
     const os = require('os');

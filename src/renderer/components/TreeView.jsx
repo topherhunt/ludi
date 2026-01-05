@@ -48,6 +48,9 @@ export function TreeView(props) {
   // Track current drop state to avoid unnecessary updates that cause flickering
   let currentDropState = null; // { targetItemId, mode: 'above' | 'into' | 'below' }
 
+  // Track if dropping into folder should insert at start (for expanded folders, bottom zone)
+  let insertAtFolderStart = false;
+
   // Get all visible item IDs in order (for range selection)
   const getVisibleItemIds = () => {
     const ids = [];
@@ -143,20 +146,38 @@ export function TreeView(props) {
     const isFolder = targetContent.dataset.isFolder === 'true';
     const folderId = targetContent.dataset.folderId ? parseInt(targetContent.dataset.folderId) : null;
 
-    // For folders: top 25% = above, middle 50% = into, bottom 25% = below
+    // Check if folder is expanded (has visible children)
+    let isFolderExpanded = false;
+    if (isFolder) {
+      const treeItem = targetContent.closest('.tree-item');
+      const childrenContainer = treeItem?.querySelector(':scope > .tree-item-children');
+      isFolderExpanded = childrenContainer?.classList.contains('expanded') || false;
+    }
+
+    // For folders: top 25% = above, middle 50% = into, bottom 25% = below (or into-first if expanded)
     // For songs: top 50% = above, bottom 50% = below
     const inMiddle50 = isFolder && heightPercent >= 0.25 && heightPercent <= 0.75;
+    const inBottom25 = isFolder && heightPercent > 0.75;
     const insertBefore = isFolder ? heightPercent < 0.25 : heightPercent < 0.5;
 
     // Determine the drop mode
+    // For expanded folders, bottom 25% should insert as first child (into-first)
     let dropMode;
+    let shouldInsertAtStart = false;
     if (isFolder && inMiddle50) {
       dropMode = 'into';
+    } else if (isFolder && inBottom25 && isFolderExpanded) {
+      // Expanded folder bottom zone: insert as first child
+      dropMode = 'into';
+      shouldInsertAtStart = true;
     } else if (insertBefore) {
       dropMode = 'above';
     } else {
       dropMode = 'below';
     }
+
+    // Track insertion mode for handleDrop
+    insertAtFolderStart = shouldInsertAtStart;
 
     // Check if state has changed - skip update if same to prevent flickering
     if (currentDropState?.targetItemId === targetItemId && currentDropState?.mode === dropMode) {
@@ -179,9 +200,10 @@ export function TreeView(props) {
       targetContent.classList.add('drop-into');
       setDragState({ isDragging: true, showDropIndicator: false });
 
-      // Track external drop target (position undefined = append to end)
+      // Track external drop target
+      // position 0 = insert at start, undefined = append to end
       if (isExternalFile) {
-        externalDropTarget = { listId: folderId, position: undefined, intoFolder: true };
+        externalDropTarget = { listId: folderId, position: shouldInsertAtStart ? 0 : undefined, intoFolder: true };
       }
     } else {
       // Drop BEFORE/AFTER - show indicator line
@@ -223,6 +245,8 @@ export function TreeView(props) {
     });
     clearDragState();
     currentDropState = null;
+    const shouldInsertAtStart = insertAtFolderStart;
+    insertAtFolderStart = false;
 
     // Handle external file drop
     if (isExternalFile) {
@@ -307,13 +331,24 @@ export function TreeView(props) {
       itemsData.sort((a, b) => a.position - b.position);
 
       if (isDropIntoFolder) {
-        // Drop INTO folder - move all items to end of folder
+        // Drop INTO folder
         const targetFolderId = parseInt(targetContent.dataset.folderId);
-        const folderItems = await getListItems(targetFolderId);
-        let endPosition = folderItems.length;
-        for (const item of itemsData) {
-          await moveItem(item.id, targetFolderId, endPosition);
-          endPosition++;
+
+        if (shouldInsertAtStart) {
+          // Insert at beginning of folder (for expanded folder bottom zone)
+          let position = 0;
+          for (const item of itemsData) {
+            await moveItem(item.id, targetFolderId, position);
+            position++;
+          }
+        } else {
+          // Append to end of folder
+          const folderItems = await getListItems(targetFolderId);
+          let endPosition = folderItems.length;
+          for (const item of itemsData) {
+            await moveItem(item.id, targetFolderId, endPosition);
+            endPosition++;
+          }
         }
       } else {
         // Drop BEFORE/AFTER - calculate position based on folder rules
@@ -369,6 +404,7 @@ export function TreeView(props) {
     draggedItems = [];
     clearDragState();
     currentDropState = null;
+    insertAtFolderStart = false;
 
     // Reset opacity on all items
     document.querySelectorAll('.tree-item-content').forEach((el) => {
