@@ -1,8 +1,8 @@
 const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
-  testDir: './tests',
-  testIgnore: ['**/unit/**'],  // Ignore unit tests (run by Vitest)
+  testDir: './tests/e2e',
+  globalTeardown: './tests/e2e/global-teardown.js',
   timeout: 30000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
