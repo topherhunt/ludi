@@ -1350,4 +1350,206 @@ test.describe('LUDI Music Player', () => {
     await window.click('#modalYesBtn');
     await window.waitForTimeout(100);
   });
+
+  test('should import folder and create matching folder structure in library', async () => {
+    const fs = require('fs');
+    const os = require('os');
+
+    // Create a temp folder structure with test audio
+    const tempDir = path.join(os.tmpdir(), `ludi-test-folder-${Date.now()}`);
+    const subfolderDir = path.join(tempDir, 'subfolder');
+    fs.mkdirSync(subfolderDir, { recursive: true });
+
+    // Copy test audio file to both folders
+    const testAudioPath = path.join(__dirname, 'test-audiofiles', '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    const destPath1 = path.join(tempDir, 'song1.mp3');
+    const destPath2 = path.join(subfolderDir, 'song2.mp3');
+    fs.copyFileSync(testAudioPath, destPath1);
+    fs.copyFileSync(testAudioPath, destPath2);
+
+    // Refresh UI
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Import the folder via IPC (simulating drag-drop)
+    const importResult = await window.evaluate(async (folderPath) => {
+      try {
+        const result = await window.electronAPI.importFiles({
+          filePaths: [folderPath],
+          parentListId: 0,
+          position: 0
+        });
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }, tempDir);
+
+    expect(importResult.success).toBe(true);
+    expect(importResult.result.imported.length).toBe(2);
+
+    // Refresh UI
+    await mainLibraryItem.click();
+    await window.waitForTimeout(200);
+
+    // Verify the parent folder was created with the temp dir name
+    const folderName = path.basename(tempDir);
+    const importedFolder = await window.locator(`.tree-item-content[data-is-folder="true"]`).filter({ hasText: folderName });
+    await expect(importedFolder).toBeVisible({ timeout: 2000 });
+
+    // Expand the folder to see contents
+    const chevron = importedFolder.locator('.tree-item-icon.chevron');
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Verify subfolder exists inside
+    const subfolder = await window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'subfolder' });
+    await expect(subfolder).toBeVisible({ timeout: 1000 });
+
+    // Clean up temp files
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // Clean up from library
+    await importedFolder.click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(100);
+  });
+
+  test('should show dialog when importing folder with unsupported files', async () => {
+    const fs = require('fs');
+    const os = require('os');
+
+    // Create a temp folder with a mix of supported and unsupported files
+    const tempDir = path.join(os.tmpdir(), `ludi-test-unsupported-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Copy test audio file
+    const testAudioPath = path.join(__dirname, 'test-audiofiles', '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    const destAudioPath = path.join(tempDir, 'valid-song.mp3');
+    fs.copyFileSync(testAudioPath, destAudioPath);
+
+    // Create unsupported files
+    fs.writeFileSync(path.join(tempDir, 'readme.txt'), 'This is a text file');
+    fs.writeFileSync(path.join(tempDir, 'image.jpg'), 'fake image data');
+
+    // Refresh UI
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Import the folder via IPC
+    const importResult = await window.evaluate(async (folderPath) => {
+      try {
+        const result = await window.electronAPI.importFiles({
+          filePaths: [folderPath],
+          parentListId: 0,
+          position: 0
+        });
+        return { success: true, result };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }, tempDir);
+
+    expect(importResult.success).toBe(true);
+    // Should have imported 1 song and have 2 unsupported files
+    expect(importResult.result.imported.length).toBe(1);
+    expect(importResult.result.unsupported.length).toBe(2);
+    expect(importResult.result.unsupported).toContain('readme.txt');
+    expect(importResult.result.unsupported).toContain('image.jpg');
+
+    // Clean up temp files
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // Clean up from library
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+    const folderName = path.basename(tempDir);
+    const importedFolder = await window.locator(`.tree-item-content[data-is-folder="true"]`).filter({ hasText: folderName });
+    if (await importedFolder.count() > 0) {
+      await importedFolder.click();
+      await window.keyboard.press('Backspace');
+      await window.waitForTimeout(100);
+      await window.click('#modalYesBtn');
+      await window.waitForTimeout(100);
+    }
+  });
+
+  test('should import folder contents in alphabetical order', async () => {
+    const fs = require('fs');
+    const os = require('os');
+
+    // Create a temp folder with subfolders that should be sorted alphabetically
+    const tempDir = path.join(os.tmpdir(), `ludi-test-alpha-${Date.now()}`);
+    // Create folders in non-alphabetical order to verify sorting
+    fs.mkdirSync(path.join(tempDir, 'zebra-folder'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'alpha-folder'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'middle-folder'), { recursive: true });
+
+    // Copy test audio file to each folder with unique names to avoid duplicate detection
+    // (same metadata leads to same destination path, causing duplicates)
+    const testAudioPath = path.join(__dirname, 'test-audiofiles', '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    fs.copyFileSync(testAudioPath, path.join(tempDir, 'zebra-folder', 'zebra-song.mp3'));
+    fs.copyFileSync(testAudioPath, path.join(tempDir, 'alpha-folder', 'alpha-song.mp3'));
+    fs.copyFileSync(testAudioPath, path.join(tempDir, 'middle-folder', 'middle-song.mp3'));
+
+    // Refresh UI
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    // Import the folder
+    const importResult = await window.evaluate(async (folderPath) => {
+      const result = await window.electronAPI.importFiles({
+        filePaths: [folderPath],
+        parentListId: 0,
+        position: 0
+      });
+      return result;
+    }, tempDir);
+
+    // First import succeeds, subsequent ones are duplicates (same metadata = same dest path)
+    // The folder structure should still be created alphabetically
+    expect(importResult.imported.length + importResult.errors.length).toBeGreaterThanOrEqual(1);
+
+    // Refresh UI
+    await mainLibraryItem.click();
+    await window.waitForTimeout(200);
+
+    // Find and expand the imported folder
+    const folderName = path.basename(tempDir);
+    const importedFolder = await window.locator(`.tree-item-content[data-is-folder="true"]`).filter({ hasText: folderName });
+    await expect(importedFolder).toBeVisible({ timeout: 2000 });
+
+    const chevron = importedFolder.locator('.tree-item-icon.chevron');
+    await chevron.click();
+    await window.waitForTimeout(100);
+
+    // Get the folder's list ID
+    const folderId = await importedFolder.getAttribute('data-folder-id');
+
+    // Get children in order - these are subfolders so check list_title
+    const children = await window.evaluate(async (listId) => {
+      const items = await window.electronAPI.getListItems(parseInt(listId));
+      return items.map(item => item.list_title);
+    }, folderId);
+
+    // Verify alphabetical order of subfolders
+    expect(children[0]).toBe('alpha-folder');
+    expect(children[1]).toBe('middle-folder');
+    expect(children[2]).toBe('zebra-folder');
+
+    // Clean up temp files
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    // Clean up from library
+    await importedFolder.click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(100);
+  });
 });

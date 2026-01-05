@@ -389,9 +389,177 @@ ipcMain.handle('db:deleteItemWithFiles', (event, itemId) => {
   };
 });
 
+// Supported audio extensions for import
+const SUPPORTED_EXTENSIONS = ['.mp3', '.m4a', '.ogg'];
+
+/**
+ * Check if a file extension is a supported audio format
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+function isSupportedAudio(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return SUPPORTED_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Recursively scan a folder for audio files, returning a tree structure
+ * @param {string} folderPath - Absolute path to the folder
+ * @returns {{ name: string, files: string[], subfolders: object[], unsupported: string[] }}
+ */
+function scanFolderForAudio(folderPath) {
+  const result = {
+    name: path.basename(folderPath),
+    files: [],
+    subfolders: [],
+    unsupported: []
+  };
+
+  const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+  // Sort alphabetically
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const entryPath = path.join(folderPath, entry.name);
+
+    if (entry.isDirectory()) {
+      const subfolder = scanFolderForAudio(entryPath);
+      // Only include subfolders that have audio content (files or subfolders with content)
+      if (subfolder.files.length > 0 || subfolder.subfolders.length > 0) {
+        result.subfolders.push(subfolder);
+        // Bubble up unsupported files
+        result.unsupported.push(...subfolder.unsupported);
+      } else if (subfolder.unsupported.length > 0) {
+        // Folder only had unsupported files
+        result.unsupported.push(...subfolder.unsupported);
+      }
+    } else if (entry.isFile()) {
+      if (isSupportedAudio(entryPath)) {
+        result.files.push(entryPath);
+      } else {
+        // Track unsupported files (skip hidden files like .DS_Store)
+        if (!entry.name.startsWith('.')) {
+          result.unsupported.push(entryPath);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Import a single audio file and add to a list
+ * @returns {{ songId, title, artist, album } | null}
+ */
+async function importSingleFile(filePath, parentListId, position, libraryPath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  // Extract metadata
+  const metadata = await parseFile(filePath);
+  const title = metadata.common.title || path.basename(filePath, ext);
+  const artist = metadata.common.artist || 'Unknown';
+  const album = metadata.common.album || 'Unknown';
+  const durationSeconds = Math.floor(metadata.format.duration || 0);
+  const trackNumber = metadata.common.track?.no || null;
+
+  // Create destination directory
+  const destDir = path.join(libraryPath, artist, album);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
+  // Copy file to library
+  const fileName = path.basename(filePath);
+  const destPath = path.join(destDir, fileName);
+
+  // Get relative path from library root
+  const relativePath = path.relative(libraryPath, destPath);
+
+  // Copy file (skip if it already exists at destination)
+  if (!fs.existsSync(destPath)) {
+    fs.copyFileSync(filePath, destPath);
+  }
+
+  let songId;
+  let isNewSong = false;
+  try {
+    // Add song to database
+    songId = db.addSong(relativePath, title, artist, album, durationSeconds, trackNumber);
+    isNewSong = true;
+  } catch (dbError) {
+    // Check if this is a UNIQUE constraint error (song already exists)
+    if (dbError.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      // Get the existing song
+      const existingSong = db.getSongByPath(relativePath);
+      if (existingSong) {
+        songId = existingSong.id;
+      } else {
+        throw dbError;
+      }
+    } else {
+      throw dbError;
+    }
+  }
+
+  // For Main Library (and its subfolders), don't allow duplicate songs anywhere
+  if (!isNewSong && db.isSongInLibrary(songId)) {
+    return { skipped: true, file: path.basename(filePath), error: 'Song already exists in library' };
+  }
+
+  // Add song to list at the appropriate position
+  db.addSongToList(songId, parentListId, position);
+
+  return { songId, title, artist, album };
+}
+
+/**
+ * Recursively import a folder tree structure, creating folders and importing audio
+ * @returns {{ imported: Array, errors: Array, folderId: number | null }}
+ */
+async function importFolderTree(folderTree, parentListId, startPosition, libraryPath) {
+  const results = {
+    imported: [],
+    errors: [],
+    folderId: null
+  };
+
+  // Create the folder in the database
+  const folderId = db.addFolder(parentListId, startPosition, folderTree.name);
+  results.folderId = folderId;
+
+  let currentPosition = 0;
+
+  // Import files in this folder (already sorted alphabetically)
+  for (const filePath of folderTree.files) {
+    try {
+      const result = await importSingleFile(filePath, folderId, currentPosition, libraryPath);
+      if (result.skipped) {
+        results.errors.push({ file: result.file, error: result.error });
+      } else {
+        results.imported.push(result);
+      }
+      currentPosition++;
+    } catch (error) {
+      console.error('Error importing file:', filePath, error);
+      results.errors.push({ file: path.basename(filePath), error: error.message });
+      currentPosition++;
+    }
+  }
+
+  // Recursively import subfolders
+  for (const subfolder of folderTree.subfolders) {
+    const subResults = await importFolderTree(subfolder, folderId, currentPosition, libraryPath);
+    results.imported.push(...subResults.imported);
+    results.errors.push(...subResults.errors);
+    currentPosition++;
+  }
+
+  return results;
+}
+
 // File import IPC handler
 ipcMain.handle('files:import', async (event, { filePaths, parentListId, position }) => {
-  const supportedExtensions = ['.mp3', '.m4a', '.ogg'];
   const settings = db.getSettings();
   const libraryPath = settings.library_path;
 
@@ -403,76 +571,47 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
 
   for (let i = 0; i < filePaths.length; i++) {
     const filePath = filePaths[i];
-    const ext = path.extname(filePath).toLowerCase();
 
-    // Check if file type is supported
-    if (!supportedExtensions.includes(ext)) {
-      results.unsupported.push(path.basename(filePath));
-      continue;
-    }
+    // Check if this is a directory
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+      // Scan the folder for audio files
+      const folderTree = scanFolderForAudio(filePath);
 
-    try {
-      // Extract metadata
-      const metadata = await parseFile(filePath);
-      const title = metadata.common.title || path.basename(filePath, ext);
-      const artist = metadata.common.artist || 'Unknown';
-      const album = metadata.common.album || 'Unknown';
-      const durationSeconds = Math.floor(metadata.format.duration || 0);
-      const trackNumber = metadata.common.track?.no || null;
+      // Collect unsupported files
+      results.unsupported.push(...folderTree.unsupported.map(p => path.basename(p)));
 
-      // Create destination directory
-      const destDir = path.join(libraryPath, artist, album);
-      if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
-      }
-
-      // Copy file to library
-      const fileName = path.basename(filePath);
-      const destPath = path.join(destDir, fileName);
-
-      // Get relative path from library root
-      const relativePath = path.relative(libraryPath, destPath);
-
-      // Copy file (skip if it already exists at destination)
-      if (!fs.existsSync(destPath)) {
-        fs.copyFileSync(filePath, destPath);
-      }
-
-      let songId;
-      let isNewSong = false;
-      try {
-        // Add song to database
-        songId = db.addSong(relativePath, title, artist, album, durationSeconds, trackNumber);
-        isNewSong = true;
-      } catch (dbError) {
-        // Check if this is a UNIQUE constraint error (song already exists)
-        if (dbError.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-          // Get the existing song
-          const existingSong = db.getSongByPath(relativePath);
-          if (existingSong) {
-            songId = existingSong.id;
-          } else {
-            throw dbError; // Re-throw if we can't find the song
-          }
-        } else {
-          throw dbError; // Re-throw if it's not a UNIQUE constraint error
-        }
-      }
-
-      // For Main Library (and its subfolders), don't allow duplicate songs anywhere
-      // Later when playlists are added (id > 0, non-subfolder), they will allow duplicates
-      if (!isNewSong && db.isSongInLibrary(songId)) {
-        results.errors.push({ file: path.basename(filePath), error: 'Song already exists in library' });
+      // Skip if no audio content
+      if (folderTree.files.length === 0 && folderTree.subfolders.length === 0) {
         continue;
       }
 
-      // Add song to list at the appropriate position
-      db.addSongToList(songId, parentListId, position + i);
+      // Import the folder tree
+      try {
+        const folderResults = await importFolderTree(folderTree, parentListId, position + i, libraryPath);
+        results.imported.push(...folderResults.imported);
+        results.errors.push(...folderResults.errors);
+      } catch (error) {
+        console.error('Error importing folder:', filePath, error);
+        results.errors.push({ file: path.basename(filePath), error: error.message });
+      }
+    } else {
+      // It's a file
+      if (!isSupportedAudio(filePath)) {
+        results.unsupported.push(path.basename(filePath));
+        continue;
+      }
 
-      results.imported.push({ songId, title, artist, album });
-    } catch (error) {
-      console.error('Error importing file:', filePath, error);
-      results.errors.push({ file: path.basename(filePath), error: error.message });
+      try {
+        const result = await importSingleFile(filePath, parentListId, position + i, libraryPath);
+        if (result.skipped) {
+          results.errors.push({ file: result.file, error: result.error });
+        } else {
+          results.imported.push(result);
+        }
+      } catch (error) {
+        console.error('Error importing file:', filePath, error);
+        results.errors.push({ file: path.basename(filePath), error: error.message });
+      }
     }
   }
 

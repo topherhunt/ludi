@@ -229,22 +229,37 @@ export function TreeView(props) {
       e.preventDefault();
 
       const files = Array.from(e.dataTransfer.files);
-      const audioPaths = files
-        .filter((f) => f.name.match(/\.(mp3|wav|ogg|flac|m4a|aac|wma|aiff)$/i))
-        .map((f) => f.path);
+      // Pass all file/folder paths to the backend - it handles filtering and folder scanning
+      const paths = files.map((f) => f.path);
 
-      if (audioPaths.length > 0 && externalDropTarget) {
-        const result = await addSongsToList(externalDropTarget.listId, audioPaths, externalDropTarget.position);
+      if (paths.length > 0 && externalDropTarget) {
+        const result = await addSongsToList(externalDropTarget.listId, paths, externalDropTarget.position);
         refetch();
 
-        // Show alert for skipped songs
+        // Build dialog content for skipped/unsupported files
         const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
-        if (skipped.length > 0) {
-          const fileListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
-          showAlertModal(`
-            <p>Skipped ${skipped.length} song(s) already in library:</p>
-            <div class="skipped-files-list"><ul>${fileListHtml}</ul></div>
-          `);
+        const unsupported = result?.unsupported || [];
+
+        if (skipped.length > 0 || unsupported.length > 0) {
+          let dialogHtml = '';
+
+          if (unsupported.length > 0) {
+            const unsupportedListHtml = unsupported.map(f => `<li>${f}</li>`).join('');
+            dialogHtml += `
+              <p>Skipped ${unsupported.length} unsupported file(s):</p>
+              <div class="skipped-files-list"><ul>${unsupportedListHtml}</ul></div>
+            `;
+          }
+
+          if (skipped.length > 0) {
+            const skippedListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
+            dialogHtml += `
+              <p>Skipped ${skipped.length} song(s) already in library:</p>
+              <div class="skipped-files-list"><ul>${skippedListHtml}</ul></div>
+            `;
+          }
+
+          showAlertModal(dialogHtml);
         }
       }
       externalDropTarget = null;
@@ -426,25 +441,38 @@ export function TreeView(props) {
     clearDragState();
 
     const files = Array.from(e.dataTransfer.files);
-    const audioPaths = files
-      .filter((f) =>
-        f.name.match(/\.(mp3|wav|ogg|flac|m4a|aac|wma|aiff)$/i)
-      )
-      .map((f) => f.path);
+    // Pass all file/folder paths to the backend - it handles filtering and folder scanning
+    const paths = files.map((f) => f.path);
 
-    if (audioPaths.length > 0) {
+    if (paths.length > 0) {
       const dropTarget = externalDropTarget || { listId: currentListId(), position: undefined };
-      const result = await addSongsToList(dropTarget.listId, audioPaths, dropTarget.position);
+      const result = await addSongsToList(dropTarget.listId, paths, dropTarget.position);
       refetch();
 
-      // Show alert for skipped songs
+      // Build dialog content for skipped/unsupported files
       const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
-      if (skipped.length > 0) {
-        const fileListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
-        showAlertModal(`
-          <p>Skipped ${skipped.length} song(s) already in library:</p>
-          <div class="skipped-files-list"><ul>${fileListHtml}</ul></div>
-        `);
+      const unsupported = result?.unsupported || [];
+
+      if (skipped.length > 0 || unsupported.length > 0) {
+        let dialogHtml = '';
+
+        if (unsupported.length > 0) {
+          const unsupportedListHtml = unsupported.map(f => `<li>${f}</li>`).join('');
+          dialogHtml += `
+            <p>Skipped ${unsupported.length} unsupported file(s):</p>
+            <div class="skipped-files-list"><ul>${unsupportedListHtml}</ul></div>
+          `;
+        }
+
+        if (skipped.length > 0) {
+          const skippedListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
+          dialogHtml += `
+            <p>Skipped ${skipped.length} song(s) already in library:</p>
+            <div class="skipped-files-list"><ul>${skippedListHtml}</ul></div>
+          `;
+        }
+
+        showAlertModal(dialogHtml);
       }
     }
     externalDropTarget = null;

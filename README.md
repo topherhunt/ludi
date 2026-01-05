@@ -1,5 +1,7 @@
 # LUDI music player
 
+Claude agents: see @AGENTS.md
+
 ## Getting Started
 
 ```bash
