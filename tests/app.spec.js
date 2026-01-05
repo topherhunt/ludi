@@ -1,5 +1,7 @@
 const { test, expect, _electron: electron } = require('@playwright/test');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 test.describe('LUDI Music Player', () => {
@@ -10,6 +12,19 @@ test.describe('LUDI Music Player', () => {
   const consoleErrors = [];
 
   test.beforeAll(async () => {
+    // Clean up test database and library before running tests
+    // This ensures tests start with a clean slate and don't fail due to
+    // leftover data from previous runs (especially important when test
+    // cleanup fails mid-run)
+    const testDbPath = path.join(os.homedir(), '.ludi', 'ludi-library-test.sqlite');
+    const testLibraryPath = path.join(os.homedir(), '.ludi', 'library-test');
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+    if (fs.existsSync(testLibraryPath)) {
+      fs.rmSync(testLibraryPath, { recursive: true, force: true });
+    }
+
     // Start Vite dev server
     viteProcess = spawn('npm', ['run', 'vite'], {
       cwd: path.join(__dirname, '..'),

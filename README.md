@@ -14,7 +14,7 @@ npm start
 # Run in development mode (with Vite hot reload + DevTools)
 npm run dev
 
-# Run integration tests
+# Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)
 npm test
 ```
 
