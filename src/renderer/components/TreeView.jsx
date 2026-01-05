@@ -1,7 +1,7 @@
 import { For, Show, createResource, createMemo, onMount } from 'solid-js';
 import { currentListId, selectedItems, clearSelection } from '../stores/navigation.js';
 import { setDragState, clearDragState, isDropIndicatorVisible, dropIndicatorPosition } from '../stores/dragdrop.js';
-import { showAlertModal } from '../stores/modals.js';
+import { showAlert } from '../stores/modals.js';
 import { TreeItem } from './TreeItem.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { getListItems, getItemById, moveItem, addSongsToList } from '../utils/api.js';
@@ -283,7 +283,10 @@ export function TreeView(props) {
             `;
           }
 
-          showAlertModal(dialogHtml);
+          showAlert(
+            '<i class="bi bi-info-circle" style="margin-right: 8px;"></i>Import Summary',
+            dialogHtml
+          );
         }
       }
       externalDropTarget = null;

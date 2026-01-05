@@ -159,7 +159,7 @@ export function Explorer(props) {
       }
     }
 
-    showConfirmModal('Confirm Delete', message, async () => {
+    showConfirmModal('<i class="bi bi-trash" style="margin-right: 8px;"></i>Confirm Delete', message, async () => {
       for (const id of itemIds) {
         await deleteItem(id);
       }
