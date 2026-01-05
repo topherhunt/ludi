@@ -319,6 +319,7 @@ export function App() {
       <Show when={alertModalState().isOpen}>
         <AlertModal
           open={true}
+          title={alertModalState().title}
           message={alertModalState().message}
           onClose={hideAlertModal}
         />

@@ -1,6 +1,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { setIsPlaying, setCurrentPlayingSongId } from '../stores/playback.js';
 import { getSong } from '../utils/api.js';
+import { showAlert } from '../stores/modals.js';
 
 /**
  * Audio player hook using Howler.js
@@ -149,6 +150,10 @@ export function createAudioPlayer() {
           console.error('Error loading audio:', err, 'Path:', fileUrl);
           setError(`Failed to load audio: ${err}`);
           setIsLoading(false);
+          showAlert(
+            '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>File Not Found',
+            `<p>Could not find audio file:</p><p style="word-break: break-all; font-family: monospace; font-size: 12px;">${fullPath}</p>`
+          );
           onErrorCallback?.(err);
         },
         onplayerror: (id, err) => {

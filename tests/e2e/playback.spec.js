@@ -140,4 +140,52 @@ test.describe('Playback', () => {
 
     window.off('console', errorHandler);
   });
+
+  test('should show alert when audio file is not found', async ({ window }) => {
+    // Create a song with a non-existent file path
+    const fakePath = '/path/to/nonexistent/audio.mp3';
+    const songResult = await window.evaluate(async (filePath) => {
+      const songId = await window.electronAPI.addSong({
+        filePath,
+        title: 'Missing Song',
+        artist: 'Test Artist',
+        album: 'Test Album',
+        durationSeconds: 180,
+        trackNumber: 1
+      });
+      await window.electronAPI.addSongToList({
+        songId,
+        parentListId: 0,
+        position: 0
+      });
+      return songId;
+    }, fakePath);
+
+    expect(songResult).toBeTruthy();
+
+    // Navigate to main library
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(200);
+
+    // Find and double-click the missing song
+    const songItem = await window.locator('.tree-item-content[data-is-folder="false"]').first();
+    await expect(songItem).toBeVisible({ timeout: 2000 });
+    await songItem.dblclick();
+    await window.waitForTimeout(500);
+
+    // Verify alert modal appears with the file path
+    const alertModal = await window.locator('.modal-overlay.visible');
+    await expect(alertModal).toBeVisible({ timeout: 2000 });
+
+    const alertContent = await alertModal.textContent();
+    expect(alertContent).toContain('File Not Found');
+    expect(alertContent).toContain('Could not find audio file');
+    expect(alertContent).toContain(fakePath);
+
+    // Close the alert
+    const okButton = await alertModal.locator('button');
+    await okButton.click();
+    await expect(alertModal).not.toBeVisible();
+  });
 });

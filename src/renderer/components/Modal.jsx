@@ -39,7 +39,7 @@ export function Modal(props) {
       >
         <div class="modal-dialog">
           <Show when={props.title}>
-            <div class="modal-title">{props.title}</div>
+            <div class="modal-title" innerHTML={props.title}></div>
           </Show>
           <div class="modal-content" innerHTML={props.content}>
             {props.children}

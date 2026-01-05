@@ -217,6 +217,7 @@ function closeAllModals() {
 function alertModalState() {
   return {
     isOpen: isModalOpen() && modalType() === 'alert',
+    title: modalTitle(),
     message: modalContent(),
   };
 }
