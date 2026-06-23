@@ -37,7 +37,7 @@ export function Modal(props) {
         class="modal-overlay visible"
         onClick={handleOverlayClick}
       >
-        <div class="modal-dialog">
+        <div class="modal-dialog" classList={{ [props.dialogClass]: !!props.dialogClass }}>
           <Show when={props.title}>
             <div class="modal-title" innerHTML={props.title}></div>
           </Show>
@@ -62,6 +62,7 @@ export function AlertModal(props) {
       open={props.open}
       title={props.title}
       content={props.message}
+      dialogClass={props.dialogClass}
       onClose={props.onClose}
       buttons={
         <button class="modal-btn" onClick={props.onClose}>

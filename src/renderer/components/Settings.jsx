@@ -141,7 +141,8 @@ export function Settings() {
     setScannedFiles([]);
     showAlert(
       '<i class="bi bi-check-circle" style="margin-right: 8px;"></i>Import Summary',
-      html
+      html,
+      'scan-results-dialog'
     );
   };
 
@@ -334,6 +335,7 @@ export function Settings() {
           open={true}
           title={alertModalState().title}
           message={alertModalState().message}
+          dialogClass={alertModalState().dialogClass}
           onClose={hideAlertModal}
         />
       </Show>

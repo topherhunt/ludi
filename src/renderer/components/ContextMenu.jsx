@@ -134,6 +134,33 @@ export function ContextMenu(props) {
         </div>
       </Show>
 
+      {/* Song-only actions */}
+      <Show when={!isFolder()}>
+        <div class="context-menu-separator" />
+
+        <div
+          class="context-menu-item"
+          onClick={() => {
+            const item = props.item;
+            props.onClose?.();
+            props.onShowInFinder?.(item);
+          }}
+        >
+          Show in Finder
+        </div>
+
+        <div
+          class="context-menu-item"
+          onClick={() => {
+            const item = props.item;
+            props.onClose?.();
+            props.onCopyPath?.(item);
+          }}
+        >
+          Copy file path
+        </div>
+      </Show>
+
       {/* Delete */}
       <div
         class="context-menu-item"

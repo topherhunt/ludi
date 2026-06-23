@@ -12,6 +12,7 @@ import {
   deleteItemWithFiles,
   renameFolder,
   getListItems,
+  getSong,
   updateFolderExpanded,
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
@@ -131,6 +132,18 @@ export function Explorer(props) {
       refetchTree?.();
       hideRenameModal();
     });
+  };
+
+  // Reveal a song's audio file in Finder (opens the folder and selects the file)
+  const handleShowInFinder = async (item) => {
+    const song = await getSong(item.song_id);
+    if (song) await window.electronAPI?.showInFinder?.(song.file_path);
+  };
+
+  // Copy a song's absolute audio file path to the clipboard
+  const handleCopyPath = async (item) => {
+    const song = await getSong(item.song_id);
+    if (song) await window.electronAPI?.copyToClipboard?.(song.file_path);
   };
 
   // Rename a folder
@@ -286,6 +299,8 @@ export function Explorer(props) {
           onCollapseAll={handleCollapseAll}
           onExpandAll={handleExpandAll}
           onRename={handleRename}
+          onShowInFinder={handleShowInFinder}
+          onCopyPath={handleCopyPath}
           onDelete={handleDelete}
         />
       </Show>

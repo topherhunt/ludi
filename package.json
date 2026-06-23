@@ -6,7 +6,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173/index.html && VITE_DEV=true electron .\"",
+    "dev": "node scripts/dev.js",
     "vite": "vite",
     "vite:build": "vite build",
     "release": "vite build && electron-builder",

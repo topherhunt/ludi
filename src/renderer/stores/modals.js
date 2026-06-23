@@ -12,6 +12,8 @@ const {
   setModalType,
   modalCallback,
   setModalCallback,
+  modalDialogClass,
+  setModalDialogClass,
   isRenameModalOpen,
   setIsRenameModalOpen,
   renameModalTitle,
@@ -33,6 +35,7 @@ const {
   const [modalContent, setModalContent] = createSignal('');
   const [modalType, setModalType] = createSignal('alert');
   const [modalCallback, setModalCallback] = createSignal(null);
+  const [modalDialogClass, setModalDialogClass] = createSignal('');
 
   // Rename modal state
   const [isRenameModalOpen, setIsRenameModalOpen] = createSignal(false);
@@ -56,6 +59,8 @@ const {
     setModalType,
     modalCallback,
     setModalCallback,
+    modalDialogClass,
+    setModalDialogClass,
     isRenameModalOpen,
     setIsRenameModalOpen,
     renameModalTitle,
@@ -78,11 +83,12 @@ const {
  * @param {string} title
  * @param {string} content
  */
-function showAlert(title, content) {
+function showAlert(title, content, dialogClass = '') {
   setModalTitle(title);
   setModalContent(content);
   setModalType('alert');
   setModalCallback(null);
+  setModalDialogClass(dialogClass);
   setIsModalOpen(true);
 }
 
@@ -117,6 +123,7 @@ function closeModal() {
   setModalTitle('');
   setModalContent('');
   setModalCallback(null);
+  setModalDialogClass('');
 }
 
 /**
@@ -219,6 +226,7 @@ function alertModalState() {
     isOpen: isModalOpen() && modalType() === 'alert',
     title: modalTitle(),
     message: modalContent(),
+    dialogClass: modalDialogClass(),
   };
 }
 

@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeSettings: () => ipcRenderer.invoke('settings:close'),
   notifyColumnSettingsChanged: (settings) => ipcRenderer.invoke('settings:columnsChanged', settings),
   showInFinder: (filePath) => ipcRenderer.invoke('shell:showInFinder', filePath),
+  copyToClipboard: (text) => ipcRenderer.invoke('clipboard:writeText', text),
 
   // Media key events
   onMediaKey: (callback) => {

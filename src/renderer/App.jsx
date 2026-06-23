@@ -45,6 +45,41 @@ export function App() {
   // List title for explorer header
   const [listTitle, setListTitle] = createSignal('Main Library');
 
+  // Resizable sidebar width (persisted across restarts via localStorage)
+  const SIDEBAR_MIN = 150;
+  const SIDEBAR_MAX = 600;
+  const storedWidth =
+    typeof localStorage !== 'undefined'
+      ? parseInt(localStorage.getItem('ludi-sidebar-width'), 10)
+      : NaN;
+  const [sidebarWidth, setSidebarWidth] = createSignal(
+    Number.isFinite(storedWidth)
+      ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, storedWidth))
+      : 200
+  );
+
+  const startSidebarResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth();
+    document.body.classList.add('resizing-sidebar');
+
+    const onMove = (ev) => {
+      const w = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + (ev.clientX - startX)));
+      setSidebarWidth(w);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('resizing-sidebar');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('ludi-sidebar-width', String(sidebarWidth()));
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   // Explorer refetch function (captured when Explorer is ready)
   let explorerRefetch = null;
 
@@ -286,11 +321,18 @@ export function App() {
   };
 
   return (
-    <div class="app-container">
+    <div class="app-container" style={{ '--sidebar-width': `${sidebarWidth()}px` }}>
       <Sidebar
         onListChange={handleListChange}
         onNewFolder={handleNewFolder}
       />
+
+      {/* Draggable divider to resize the sidebar */}
+      <div
+        class="sidebar-resizer qa-sidebar-resizer"
+        onMouseDown={startSidebarResize}
+      />
+
 
       <Explorer
         listTitle={listTitle()}
@@ -328,6 +370,7 @@ export function App() {
           open={true}
           title={alertModalState().title}
           message={alertModalState().message}
+          dialogClass={alertModalState().dialogClass}
           onClose={hideAlertModal}
         />
       </Show>

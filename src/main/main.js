@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
@@ -772,4 +772,9 @@ ipcMain.handle('shell:showInFinder', (event, filePath) => {
     return true;
   }
   return false;
+});
+
+ipcMain.handle('clipboard:writeText', (event, text) => {
+  clipboard.writeText(String(text));
+  return true;
 });

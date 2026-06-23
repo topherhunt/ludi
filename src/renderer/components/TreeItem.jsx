@@ -172,7 +172,7 @@ export function TreeItem(props) {
         data-is-folder={isFolder()}
         data-folder-id={isFolder() ? props.item.list_id : undefined}
         data-song-id={!isFolder() ? props.item.song_id : undefined}
-        style={{ 'grid-template-columns': gridTemplateColumns() }}
+        style={{ 'grid-template-columns': isFolder() ? '1fr' : gridTemplateColumns() }}
         draggable={true}
         onClick={handleClick}
         onDblClick={handleDoubleClick}
@@ -201,43 +201,46 @@ export function TreeItem(props) {
           </span>
         </span>
 
-        {/* Track number column */}
-        <Show when={visibility().track}>
-          <span class="col-track" data-column="track">
-            {!isFolder() && props.item.track_number ? props.item.track_number : ''}
-          </span>
-        </Show>
+        {/* Song-only columns. Folders skip these so the name spans the full row. */}
+        <Show when={!isFolder()}>
+          {/* Track number column */}
+          <Show when={visibility().track}>
+            <span class="col-track" data-column="track">
+              {props.item.track_number ? props.item.track_number : ''}
+            </span>
+          </Show>
 
-        {/* Duration column */}
-        <Show when={visibility().duration}>
-          <span class="col-duration" data-column="duration">
-            {!isFolder() && props.item.duration_seconds
-              ? formatTime(props.item.duration_seconds)
-              : ''}
-          </span>
-        </Show>
+          {/* Duration column */}
+          <Show when={visibility().duration}>
+            <span class="col-duration" data-column="duration">
+              {props.item.duration_seconds
+                ? formatTime(props.item.duration_seconds)
+                : ''}
+            </span>
+          </Show>
 
-        {/* Artist column */}
-        <Show when={visibility().artist}>
-          <span class="col-artist" data-column="artist">
-            {!isFolder() && props.item.artist && props.item.artist !== 'Unknown'
-              ? props.item.artist
-              : ''}
-          </span>
-        </Show>
+          {/* Artist column */}
+          <Show when={visibility().artist}>
+            <span class="col-artist" data-column="artist">
+              {props.item.artist && props.item.artist !== 'Unknown'
+                ? props.item.artist
+                : ''}
+            </span>
+          </Show>
 
-        {/* Album column */}
-        <Show when={visibility().album}>
-          <span class="col-album" data-column="album">
-            {!isFolder() && props.item.album && props.item.album !== 'Unknown'
-              ? props.item.album
-              : ''}
-          </span>
-        </Show>
+          {/* Album column */}
+          <Show when={visibility().album}>
+            <span class="col-album" data-column="album">
+              {props.item.album && props.item.album !== 'Unknown'
+                ? props.item.album
+                : ''}
+            </span>
+          </Show>
 
-        {/* Tags column */}
-        <Show when={visibility().tags}>
-          <span class="col-tags" data-column="tags"></span>
+          {/* Tags column */}
+          <Show when={visibility().tags}>
+            <span class="col-tags" data-column="tags"></span>
+          </Show>
         </Show>
       </div>
 
