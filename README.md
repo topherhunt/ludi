@@ -16,9 +16,22 @@ npm run dev
 
 # Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)
 npm test
+
+# Build a packaged macOS app + .dmg (output in release/)
+npm run dist
 ```
 
 The integration tests use Playwright to launch the app, verify the UI is displayed correctly, and confirm no errors occurred during startup.
+
+## Data locations
+
+The app runs in one of three isolated modes, so dev/test/live never share a database or music folder:
+
+| Mode | Trigger | Database (`~/.ludi/`) | Music library (`~/Music/`) |
+|------|---------|-----------------------|----------------------------|
+| live | packaged `.dmg` | `ludi-library-live.sqlite` | `Ludi Library` |
+| dev  | `npm run dev`, `npm start` | `ludi-library-dev.sqlite` | `Ludi Library Dev` |
+| test | `npm test` (reset each run) | `ludi-library-test.sqlite` | `Ludi Library Test` |
 
 ## VISION
 

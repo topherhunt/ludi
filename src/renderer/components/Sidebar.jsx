@@ -34,8 +34,16 @@ export function Sidebar(props) {
     props.onNewFolder?.();
   };
 
+  // Handle click on empty space in sidebar to clear selection
+  const handleSidebarClick = (e) => {
+    // Only clear if clicking on empty space (not on a playlist item)
+    if (!e.target.closest('.playlist-item') && !e.target.closest('.sidebar-header')) {
+      clearSelection();
+    }
+  };
+
   return (
-    <aside class="sidebar">
+    <aside class="sidebar" onClick={handleSidebarClick}>
       <div class="sidebar-header">
         <h2>Library</h2>
         <button

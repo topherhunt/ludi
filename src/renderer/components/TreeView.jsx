@@ -530,6 +530,14 @@ export function TreeView(props) {
     }
   };
 
+  // Handle click on empty space in container to clear selection
+  const handleContainerClick = (e) => {
+    // Only clear if clicking on empty space (not on a tree item)
+    if (!e.target.closest('.tree-item-content')) {
+      clearSelection();
+    }
+  };
+
   return (
     <div
       class="explorer-container"
@@ -538,6 +546,7 @@ export function TreeView(props) {
       onDragOver={handleContainerDragOver}
       onDrop={handleContainerDrop}
       onDragLeave={handleContainerDragLeave}
+      onClick={handleContainerClick}
     >
       <ul
         class="explorer-tree"

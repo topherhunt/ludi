@@ -5,16 +5,37 @@ const os = require('os');
 
 const DB_DIR = path.join(os.homedir(), '.ludi');
 
-// Determine database filename based on environment
-// Can be overridden with LUDI_DB_PATH environment variable
+// Electron's app is used only to detect a packaged ("live") build. Guarded so
+// this module can still be required outside Electron (e.g. unit tests).
+let electronApp = null;
+try {
+  electronApp = require('electron').app;
+} catch (e) {
+  electronApp = null;
+}
+
+// The app runs in exactly one of three modes. Each gets its own database file
+// AND its own music-library folder so dev, test, and live never collide.
+function getMode() {
+  if (process.env.NODE_ENV === 'test') return 'test';
+  if (electronApp && electronApp.isPackaged) return 'live';
+  return 'dev';
+}
+
+// Music-library folder name per mode. "live" is the user's real library.
+const LIBRARY_FOLDER = {
+  test: 'Ludi Library Test',
+  dev: 'Ludi Library Dev',
+  live: 'Ludi Library',
+};
+
+// Determine database filename based on mode.
+// Can be overridden with LUDI_DB_PATH environment variable.
 function getDbPath() {
   if (process.env.LUDI_DB_PATH) {
     return process.env.LUDI_DB_PATH;
   }
-
-  const env = process.env.NODE_ENV || 'dev';
-  const filename = `ludi-library-${env}.sqlite`;
-  return path.join(DB_DIR, filename);
+  return path.join(DB_DIR, `ludi-library-${getMode()}.sqlite`);
 }
 
 let db;
@@ -52,7 +73,7 @@ function initialize() {
 }
 
 function initializeDefaultSettings() {
-  const defaultLibraryPath = path.join(os.homedir(), 'Music', 'Ludi Library');
+  const defaultLibraryPath = path.join(os.homedir(), 'Music', LIBRARY_FOLDER[getMode()]);
 
   const libraryPath = db.prepare('SELECT * FROM settings WHERE key = ?').get('library_path');
   if (!libraryPath) {

@@ -151,4 +151,67 @@ test.describe('Selection', () => {
       expect(selectedCount).toBe(0);
     }
   });
+
+  test('should clear selection when clicking empty space in explorer container', async ({ window }) => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 0) {
+      // Select an item first
+      const firstItem = treeItems.first();
+      await firstItem.click();
+      await expect(firstItem).toHaveClass(/selected/);
+
+      // Click on empty space in explorer container (below the items)
+      const container = await window.locator('#explorerContainer');
+      const containerBox = await container.boundingBox();
+      const lastItem = treeItems.last();
+      const lastItemBox = await lastItem.boundingBox();
+
+      if (containerBox && lastItemBox) {
+        // Click below the last item but still within the container
+        const clickY = Math.min(lastItemBox.y + lastItemBox.height + 20, containerBox.y + containerBox.height - 5);
+        await window.mouse.click(containerBox.x + containerBox.width / 2, clickY);
+        await window.waitForTimeout(50);
+      }
+
+      // Verify selection is cleared
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(0);
+    }
+  });
+
+  test('should clear selection when clicking empty space in sidebar', async ({ window }) => {
+    const treeItems = await window.locator('.tree-item-content');
+    const count = await treeItems.count();
+
+    if (count > 0) {
+      // Select an item first
+      const firstItem = treeItems.first();
+      await firstItem.click();
+      await expect(firstItem).toHaveClass(/selected/);
+
+      // Click on empty space in sidebar (below the playlist items)
+      const sidebar = await window.locator('.sidebar');
+      const sidebarBox = await sidebar.boundingBox();
+      const playlistItems = await window.locator('.playlist-item');
+      const lastPlaylistItem = playlistItems.last();
+      const lastPlaylistItemBox = await lastPlaylistItem.boundingBox();
+
+      if (sidebarBox && lastPlaylistItemBox) {
+        // Click below the last playlist item but still within the sidebar
+        const clickY = Math.min(lastPlaylistItemBox.y + lastPlaylistItemBox.height + 20, sidebarBox.y + sidebarBox.height - 5);
+        await window.mouse.click(sidebarBox.x + sidebarBox.width / 2, clickY);
+        await window.waitForTimeout(50);
+      }
+
+      // Verify selection is cleared
+      const selectedCount = await window.evaluate(() => {
+        return document.querySelectorAll('.tree-item-content.selected').length;
+      });
+      expect(selectedCount).toBe(0);
+    }
+  });
 });

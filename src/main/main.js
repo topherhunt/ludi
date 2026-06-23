@@ -9,6 +9,9 @@ let settingsWindow;
 
 // Check if running in development mode (with Vite dev server)
 const isDev = process.env.VITE_DEV === 'true';
+// Vite picks the next free port if 5173 is taken; the launcher passes the actual
+// port via VITE_PORT so we never load a stray server squatting on 5173.
+const devPort = process.env.VITE_PORT || '5173';
 
 // Suppress Electron security warnings in dev mode (CSP warnings from Vite's eval usage)
 if (isDev) {
@@ -40,9 +43,9 @@ function createWindow() {
 
   // Load from Vite dev server in development mode, otherwise load static file
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173/index.html');
+    mainWindow.loadURL(`http://localhost:${devPort}/index.html`);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
   }
 
   // Open DevTools in development (but not during tests, as it interferes with Playwright)
@@ -103,9 +106,9 @@ function createSettingsWindow() {
 
   // Load from Vite dev server in development mode, otherwise load static file
   if (isDev) {
-    settingsWindow.loadURL('http://localhost:5173/settings.html');
+    settingsWindow.loadURL(`http://localhost:${devPort}/settings.html`);
   } else {
-    settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
+    settingsWindow.loadFile(path.join(__dirname, '../../dist/renderer/settings.html'));
   }
 
   settingsWindow.on('closed', () => {
@@ -198,7 +201,11 @@ app.whenReady().then(() => {
     // DO NOT simplify this to just `net.fetch()` - it will break seeking!
     // ============================================================================
     protocol.handle('ludi-audio', async (request) => {
-      const filePath = decodeURIComponent(request.url.replace('ludi-audio://', ''));
+      // Strip any cache-busting query string (e.g. "?_=123") before touching disk.
+      // The renderer appends one per load so Chromium treats each playback as a
+      // distinct request rather than reusing/aborting an identical in-flight URL.
+      const withoutScheme = request.url.replace('ludi-audio://', '').split('?')[0];
+      const filePath = decodeURIComponent(withoutScheme);
 
       const stats = fs.statSync(filePath);
       const fileSize = stats.size;

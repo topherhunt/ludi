@@ -16,9 +16,10 @@ async function setupElectronApp() {
     return { electronApp, window, consoleMessages, consoleErrors };
   }
 
-  // Clean up test database and library before running tests
+  // Clean up test database and library before running tests.
+  // Must match the 'test' mode paths in src/main/database.js.
   const testDbPath = path.join(os.homedir(), '.ludi', 'ludi-library-test.sqlite');
-  const testLibraryPath = path.join(os.homedir(), '.ludi', 'library-test');
+  const testLibraryPath = path.join(os.homedir(), 'Music', 'Ludi Library Test');
   if (fs.existsSync(testDbPath)) {
     fs.unlinkSync(testDbPath);
   }
@@ -26,15 +27,19 @@ async function setupElectronApp() {
     fs.rmSync(testLibraryPath, { recursive: true, force: true });
   }
 
-  // Start Vite dev server
+  // Start Vite dev server in its own process group so teardown can kill the whole
+  // tree (npm -> vite -> esbuild). A bare SIGTERM to the npm shell leaks the rest.
   viteProcess = spawn('npm', ['run', 'vite'], {
     cwd: path.join(__dirname, '../..'),
     stdio: 'pipe',
-    shell: true
+    shell: true,
+    detached: true
   });
 
-  // Wait for Vite to be ready
-  await new Promise((resolve, reject) => {
+  // Wait for Vite to report its actual port. Vite drifts off 5173 when it's busy
+  // (e.g. another project's dev server), so we read the real port from its output
+  // and hand it to Electron rather than assuming 5173.
+  const vitePort = await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Vite server did not start within 30 seconds'));
     }, 30000);
@@ -42,9 +47,12 @@ async function setupElectronApp() {
     viteProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log('[Vite]:', output);
-      if (output.includes('Local:') || output.includes('ready')) {
+      // Vite colorizes output with ANSI escapes, so strip them before matching.
+      const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
+      const match = clean.match(/Local:\s+https?:\/\/localhost:(\d+)/);
+      if (match) {
         clearTimeout(timeout);
-        setTimeout(resolve, 1000);
+        setTimeout(() => resolve(match[1]), 1000);
       }
     });
 
@@ -64,7 +72,8 @@ async function setupElectronApp() {
     env: {
       ...process.env,
       NODE_ENV: 'test',
-      VITE_DEV: 'true'
+      VITE_DEV: 'true',
+      VITE_PORT: vitePort
     }
   });
 
@@ -106,7 +115,13 @@ async function teardownElectronApp() {
   }
 
   if (viteProcess) {
-    viteProcess.kill('SIGTERM');
+    // Kill the whole process group (npm -> vite -> esbuild); killing only the npm
+    // shell would orphan the real Vite/esbuild and leak ports across runs.
+    try {
+      process.kill(-viteProcess.pid, 'SIGTERM');
+    } catch (err) {
+      viteProcess.kill('SIGTERM');
+    }
     await new Promise(resolve => setTimeout(resolve, 500));
     viteProcess = null;
   }

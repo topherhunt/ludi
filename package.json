@@ -9,9 +9,10 @@
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173/index.html && VITE_DEV=true electron .\"",
     "vite": "vite",
     "vite:build": "vite build",
+    "dist": "vite build && electron-builder",
     "test": "playwright test",
     "test:unit": "vitest",
-    "postinstall": "electron-rebuild"
+    "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
     "music",
@@ -19,14 +20,30 @@
     "electron",
     "macos"
   ],
-  "author": "",
+  "author": "Topher Hunt",
   "license": "MIT",
+  "build": {
+    "appId": "com.topherhunt.ludi",
+    "productName": "Ludi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/renderer/**/*",
+      "src/main/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.music"
+    }
+  },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@solidjs/testing-library": "^0.8.10",
     "concurrently": "^9.2.1",
-    "electron": "^28.0.0",
-    "electron-rebuild": "^3.2.9",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
     "jsdom": "^27.3.0",
     "playwright": "^1.57.0",
     "vite": "^7.3.0",
@@ -35,7 +52,7 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
-    "better-sqlite3": "^9.2.0",
+    "better-sqlite3": "^12.11.1",
     "bootstrap-icons": "^1.13.1",
     "howler": "^2.2.4",
     "music-metadata": "^7.14.0",

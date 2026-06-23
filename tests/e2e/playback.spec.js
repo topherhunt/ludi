@@ -67,6 +67,12 @@ test.describe('Playback', () => {
     };
     window.on('console', errorHandler);
 
+    // Import a song so this test owns its data and does not depend on test order.
+    const testFilePath = path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    await window.evaluate(async (filePath) => {
+      await window.electronAPI.importFiles({ filePaths: [filePath], parentListId: 0, position: 0 });
+    }, testFilePath);
+
     const mainLibraryItem = await window.locator('.playlist-item').first();
     await mainLibraryItem.click();
     await window.waitForTimeout(100);
@@ -101,6 +107,12 @@ test.describe('Playback', () => {
       }
     };
     window.on('console', errorHandler);
+
+    // Import a song so this test owns its data and does not depend on test order.
+    const testFilePath = path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    await window.evaluate(async (filePath) => {
+      await window.electronAPI.importFiles({ filePaths: [filePath], parentListId: 0, position: 0 });
+    }, testFilePath);
 
     const mainLibraryItem = await window.locator('.playlist-item').first();
     await mainLibraryItem.click();

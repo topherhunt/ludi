@@ -1,7 +1,11 @@
 import { createSignal, onCleanup } from 'solid-js';
+import { Howl } from 'howler';
 import { setIsPlaying, setCurrentPlayingSongId } from '../stores/playback.js';
 import { getSong } from '../utils/api.js';
 import { showAlert } from '../stores/modals.js';
+
+// Monotonic counter used to make each audio load a unique URL (see fileUrl below).
+let loadCounter = 0;
 
 /**
  * Audio player hook using Howler.js
@@ -26,16 +30,6 @@ export function createAudioPlayer() {
   let onPlayCallback = null;
   let onPauseCallback = null;
   let onErrorCallback = null;
-
-  /**
-   * Get the Howl constructor (loaded via script tag)
-   */
-  function getHowl() {
-    if (typeof window !== 'undefined' && window.Howl) {
-      return window.Howl;
-    }
-    return null;
-  }
 
   /**
    * Start the time update interval
@@ -73,13 +67,6 @@ export function createAudioPlayer() {
    * @returns {Promise<boolean>} Success status
    */
   async function playSong(songId) {
-    const Howl = getHowl();
-    if (!Howl) {
-      console.error('Howler.js not loaded');
-      setError('Audio library not loaded');
-      return false;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -106,7 +93,10 @@ export function createAudioPlayer() {
       // DO NOT use file:// URLs directly - the custom protocol handler includes
       // critical Range request handling required for audio seeking to work correctly.
       // See the detailed comment in main.js protocol.handle() for explanation.
-      const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/');
+      // Append a unique cache-buster so reloading the same file right after an
+      // unload is treated as a fresh request. Without this, Chromium aborts the
+      // prior identical URL and the new load fails with MEDIA_ERR_NETWORK.
+      const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/') + '?_=' + (++loadCounter);
 
       // Create new Howl instance
       sound = new Howl({
