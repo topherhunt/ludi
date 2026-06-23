@@ -1,54 +1,83 @@
-const { test, expect, testAudioDir } = require('./fixtures');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-
-const MP3 = path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+const { test, expect } = require('./fixtures');
 
 let seq = 0;
-function uniqueCopy(label) {
-  const p = path.join(os.tmpdir(), `ludi-${label}-${Date.now()}-${seq++}.mp3`);
-  fs.copyFileSync(MP3, p);
-  return p;
+const uid = () => `${Date.now()}-${seq++}`;
+
+// Right-click a folder, hover "Sort by...", click a submenu option.
+async function sortFolderBy(window, folderTitle, optionText) {
+  const row = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: folderTitle });
+  await expect(row).toBeVisible({ timeout: 2000 });
+  await row.click({ button: 'right' });
+  await window.waitForTimeout(50);
+  await window.locator('.context-menu-item.has-submenu').filter({ hasText: 'Sort by' }).hover();
+  await window.waitForTimeout(50);
+  await window.locator('.context-submenu .context-menu-item').filter({ hasText: optionText }).click();
+  await window.waitForTimeout(200);
+  return row;
 }
 
-test.describe('Folder: Sort alphabetically', () => {
-  test('orders folders above songs, each alphabetical', async ({ window }) => {
-    const songFile = uniqueCopy('sort-song');
+async function deleteRow(window, row) {
+  await row.click();
+  await window.keyboard.press('Backspace');
+  await window.waitForTimeout(100);
+  await window.click('#modalYesBtn');
+  await window.waitForTimeout(100);
+}
 
-    // Build SortParent with subfolders [Zebra, Alpha] and a song inserted on top.
-    const parentId = await window.evaluate(async (file) => {
+test.describe('Folder: Sort by...', () => {
+  test('Title (alphabetical): folders above songs', async ({ window }) => {
+    const id = uid();
+    const parentId = await window.evaluate(async (suffix) => {
       const pid = await window.electronAPI.addFolder({ parentListId: 0, position: 0, title: 'SortParent' });
       await window.electronAPI.addFolder({ parentListId: pid, position: 0, title: 'Zebra' });
       await window.electronAPI.addFolder({ parentListId: pid, position: 1, title: 'Alpha' });
-      await window.electronAPI.importFiles({ filePaths: [file], parentListId: pid, position: 0 });
+      const sid = await window.electronAPI.addSong({
+        filePath: `fake/sort-${suffix}.mp3`, title: 'Song', artist: 'X', album: 'Y', durationSeconds: 100, trackNumber: 1,
+      });
+      await window.electronAPI.addSongToList({ songId: sid, parentListId: pid, position: 0 });
       return pid;
-    }, songFile);
+    }, id);
 
-    const mainLibraryItem = window.locator('.playlist-item').first();
-    await mainLibraryItem.click();
+    await window.locator('.playlist-item').first().click();
     await window.waitForTimeout(200);
 
-    const parentRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'SortParent' });
-    await expect(parentRow).toBeVisible({ timeout: 2000 });
-    await parentRow.click({ button: 'right' });
-    await window.waitForTimeout(50);
-    await window.locator('.context-menu-item').filter({ hasText: 'Sort alphabetically' }).click();
-    await window.waitForTimeout(200);
+    const row = await sortFolderBy(window, 'SortParent', 'Title (alphabetical)');
 
     const order = await window.evaluate(async (pid) => {
       const items = await window.electronAPI.getListItems(pid);
       return items.map((i) => (i.list_id !== null ? `folder:${i.list_title}` : 'song'));
     }, parentId);
-
     expect(order).toEqual(['folder:Alpha', 'folder:Zebra', 'song']);
 
-    // Cleanup
-    await parentRow.click();
-    await window.keyboard.press('Backspace');
-    await window.waitForTimeout(100);
-    await window.click('#modalYesBtn');
-    await window.waitForTimeout(100);
-    fs.rmSync(songFile, { force: true });
+    await deleteRow(window, row);
+  });
+
+  test('Artist, album, track #, title', async ({ window }) => {
+    const id = uid();
+    const parentId = await window.evaluate(async (suffix) => {
+      const pid = await window.electronAPI.addFolder({ parentListId: 0, position: 0, title: 'ArtistSortParent' });
+      const mk = async (fp, title, artist, album, track, pos) => {
+        const sid = await window.electronAPI.addSong({ filePath: fp, title, artist, album, durationSeconds: 100, trackNumber: track });
+        await window.electronAPI.addSongToList({ songId: sid, parentListId: pid, position: pos });
+      };
+      // Added scrambled; expected sorted order is Mango, Apple, Zed.
+      await mk(`fake/z-${suffix}.mp3`, 'Zed', 'Beatles', 'Abbey Road', 2, 0);
+      await mk(`fake/a-${suffix}.mp3`, 'Apple', 'Beatles', 'Abbey Road', 1, 1);
+      await mk(`fake/m-${suffix}.mp3`, 'Mango', 'ABBA', 'Gold', 1, 2);
+      return pid;
+    }, id);
+
+    await window.locator('.playlist-item').first().click();
+    await window.waitForTimeout(200);
+
+    const row = await sortFolderBy(window, 'ArtistSortParent', 'Artist, album, track');
+
+    const titles = await window.evaluate(async (pid) => {
+      const items = await window.electronAPI.getListItems(pid);
+      return items.map((i) => i.song_title);
+    }, parentId);
+    expect(titles).toEqual(['Mango', 'Apple', 'Zed']);
+
+    await deleteRow(window, row);
   });
 });

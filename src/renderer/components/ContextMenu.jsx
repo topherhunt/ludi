@@ -27,6 +27,10 @@ export function ContextMenu(props) {
 
   const isFolder = () => props.item?.list_id !== null;
   const hasSelection = () => selectedItems().size > 0;
+  const isMultiSelect = () => selectedItems().size > 1;
+  // Count selected folders via their rendered rows (selection is set before right-click).
+  const selectedFolderCount = () =>
+    document.querySelectorAll('.tree-item-content.selected[data-is-folder="true"]').length;
 
   return (
     <div
@@ -119,16 +123,31 @@ export function ContextMenu(props) {
 
         <div class="context-menu-separator" />
 
-        {/* Sort alphabetically */}
-        <div
-          class="context-menu-item"
-          onClick={() => {
-            const listId = props.item.list_id;
-            props.onClose?.();
-            props.onSortAlphabetically?.(listId);
-          }}
-        >
-          Sort alphabetically
+        {/* Sort by... submenu */}
+        <div class="context-menu-item has-submenu">
+          Sort by...
+          <div class="context-submenu">
+            <div
+              class="context-menu-item"
+              onClick={() => {
+                const listId = props.item.list_id;
+                props.onClose?.();
+                props.onSort?.(listId, 'artist');
+              }}
+            >
+              Artist, album, track #, title
+            </div>
+            <div
+              class="context-menu-item"
+              onClick={() => {
+                const listId = props.item.list_id;
+                props.onClose?.();
+                props.onSort?.(listId, 'title');
+              }}
+            >
+              Title (alphabetical)
+            </div>
+          </div>
         </div>
 
         {/* Flatten */}
@@ -146,8 +165,21 @@ export function ContextMenu(props) {
 
       <div class="context-menu-separator" />
 
-      {/* Rename (for folders only) */}
-      <Show when={isFolder()}>
+      {/* Batch rename when multiple items (incl. >=1 folder) are selected */}
+      <Show when={isMultiSelect() && selectedFolderCount() > 0}>
+        <div
+          class="context-menu-item"
+          onClick={() => {
+            props.onClose?.();
+            props.onBatchRename?.();
+          }}
+        >
+          Rename {selectedFolderCount()} folders...
+        </div>
+      </Show>
+
+      {/* Single-folder rename */}
+      <Show when={!isMultiSelect() && isFolder()}>
         <div
           class="context-menu-item"
           onClick={() => {

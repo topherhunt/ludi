@@ -493,16 +493,22 @@ function updateFolderExpanded(listId, isExpanded) {
   `).run(isExpanded ? 1 : 0, now, listId);
 }
 
-// Reorder a folder's direct contents alphabetically: folders first, then songs,
-// each group sorted case-insensitively by title. Only reassigns positions.
-function sortFolderContents(parentListId) {
+// Reorder a folder's direct contents. Folders always come first (alphabetical by
+// title); songs are ordered by `sortBy`:
+//   'title'  -> song title (alphabetical)
+//   'artist' -> artist, then album, then track number, then title
+// Only reassigns positions.
+function sortFolderContents(parentListId, sortBy = 'title') {
   const now = new Date().toISOString();
+
+  const cmpStr = (x, y) => (x || '').localeCompare(y || '', undefined, { sensitivity: 'base' });
+  const trackOf = (n) => (n == null ? Number.MAX_SAFE_INTEGER : n);
 
   return db.transaction(() => {
     const items = db.prepare(`
       SELECT li.id, li.list_id, li.song_id,
              l.title AS folder_title,
-             s.title AS song_title
+             s.title AS song_title, s.artist, s.album, s.track_number
       FROM list_items li
       LEFT JOIN lists l ON li.list_id = l.id
       LEFT JOIN songs s ON li.song_id = s.id
@@ -513,9 +519,16 @@ function sortFolderContents(parentListId) {
       const aIsFolder = a.list_id !== null;
       const bIsFolder = b.list_id !== null;
       if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1; // folders above songs
-      const aTitle = (aIsFolder ? a.folder_title : a.song_title) || '';
-      const bTitle = (bIsFolder ? b.folder_title : b.song_title) || '';
-      return aTitle.localeCompare(bTitle, undefined, { sensitivity: 'base' });
+      if (aIsFolder) return cmpStr(a.folder_title, b.folder_title);
+
+      // Both are songs.
+      if (sortBy === 'artist') {
+        return cmpStr(a.artist, b.artist)
+          || cmpStr(a.album, b.album)
+          || (trackOf(a.track_number) - trackOf(b.track_number))
+          || cmpStr(a.song_title, b.song_title);
+      }
+      return cmpStr(a.song_title, b.song_title);
     });
 
     items.forEach((item, index) => {

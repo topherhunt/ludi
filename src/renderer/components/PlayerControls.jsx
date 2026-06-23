@@ -92,7 +92,7 @@ export function PlayerControls(props) {
       <div class="playback-controls">
         <button
           id="shuffleBtn"
-          title="Shuffle"
+          data-tooltip="Shuffle"
           class="toggle-btn"
           classList={{ active: shuffleEnabled() }}
           onClick={toggleShuffle}
@@ -102,7 +102,7 @@ export function PlayerControls(props) {
 
         <button
           id="prevBtn"
-          title="Previous"
+          data-tooltip="Previous"
           disabled={!hasPreviousTrack()}
           onClick={onPrevious}
         >
@@ -111,7 +111,7 @@ export function PlayerControls(props) {
 
         <button
           id="playPauseBtn"
-          title="Play/Pause"
+          data-tooltip="Play/Pause"
           disabled={!hasPlaylist()}
           classList={{
             playing: isPlaying(),
@@ -125,7 +125,7 @@ export function PlayerControls(props) {
 
         <button
           id="nextBtn"
-          title="Next"
+          data-tooltip="Next"
           disabled={!hasNextTrack()}
           onClick={onNext}
         >
@@ -134,7 +134,7 @@ export function PlayerControls(props) {
 
         <button
           id="loopBtn"
-          title={loopTitle()}
+          data-tooltip={loopTitle()}
           class="toggle-btn"
           classList={{ active: loopMode() !== 'off' }}
           onClick={cycleLoopMode}
@@ -158,7 +158,7 @@ export function PlayerControls(props) {
       </div>
 
       <div class="volume-controls">
-        <button id="muteBtn" title="Mute" onClick={toggleMute}>
+        <button id="muteBtn" data-tooltip="Mute" onClick={toggleMute}>
           <i class={volumeIcon()}></i>
         </button>
         <input

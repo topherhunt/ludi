@@ -1,10 +1,11 @@
 import { createSignal, Show } from 'solid-js';
 import { currentListId } from '../stores/navigation.js';
-import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal } from '../stores/modals.js';
+import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal, showAlert } from '../stores/modals.js';
 import { ExplorerHeader } from './ExplorerHeader.jsx';
 import { ColumnHeaders } from './ColumnHeaders.jsx';
 import { TreeView } from './TreeView.jsx';
 import { ContextMenu } from './ContextMenu.jsx';
+import { BatchRenameModal } from './BatchRenameModal.jsx';
 import { RenameModal, ConfirmModal } from './Modal.jsx';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import {
@@ -22,6 +23,10 @@ import { selectedItems, clearSelection } from '../stores/navigation.js';
 export function Explorer(props) {
   // Context menu state
   const [contextMenu, setContextMenu] = createSignal(null);
+
+  // Batch-rename modal state
+  const [batchRenameOpen, setBatchRenameOpen] = createSignal(false);
+  const [batchRenameCount, setBatchRenameCount] = createSignal(0);
 
   // Tree refetch function
   let refetchTree = null;
@@ -154,9 +159,49 @@ export function Explorer(props) {
     });
   };
 
-  // Sort a folder's contents alphabetically (folders above songs)
-  const handleSortAlphabetically = async (listId) => {
-    await window.electronAPI?.sortFolderContents?.(listId);
+  // Sort a folder's contents (folders above songs) by the given key
+  const handleSort = async (listId, sortBy) => {
+    await window.electronAPI?.sortFolderContents?.(listId, sortBy);
+    refetchTree?.();
+  };
+
+  // Open the batch-rename modal for the selected folders
+  const handleBatchRename = () => {
+    const count = document.querySelectorAll('.tree-item-content.selected[data-is-folder="true"]').length;
+    if (count === 0) return;
+    setBatchRenameCount(count);
+    setBatchRenameOpen(true);
+  };
+
+  // Apply a find/replace rename across every selected folder
+  const applyBatchRename = async ({ pattern, mode, replacement }) => {
+    setBatchRenameOpen(false);
+    if (!pattern) return;
+
+    let regex = null;
+    if (mode === 'regex') {
+      try {
+        regex = new RegExp(pattern, 'g');
+      } catch (err) {
+        showAlert(
+          '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>Invalid Regex',
+          `<p>${err.message}</p>`
+        );
+        return;
+      }
+    }
+
+    for (const id of Array.from(selectedItems())) {
+      const item = await window.electronAPI?.getItem?.(id);
+      if (!item || item.list_id === null) continue; // folders only
+      const oldTitle = item.list_title;
+      const newTitle = mode === 'regex'
+        ? oldTitle.replace(regex, replacement)
+        : oldTitle.split(pattern).join(replacement);
+      if (newTitle !== oldTitle) {
+        await renameFolder(item.list_id, newTitle);
+      }
+    }
     refetchTree?.();
   };
 
@@ -285,14 +330,22 @@ export function Explorer(props) {
           onPlayFolder={props.onPlayFolder}
           onCollapseAll={props.onCollapseAll}
           onExpandAll={props.onExpandAll}
-          onSortAlphabetically={handleSortAlphabetically}
+          onSort={handleSort}
           onFlatten={handleFlatten}
           onRename={handleRename}
+          onBatchRename={handleBatchRename}
           onShowInFinder={handleShowInFinder}
           onCopyPath={handleCopyPath}
           onDelete={handleDelete}
         />
       </Show>
+
+      <BatchRenameModal
+        open={batchRenameOpen()}
+        folderCount={batchRenameCount()}
+        onApply={applyBatchRename}
+        onCancel={() => setBatchRenameOpen(false)}
+      />
     </main>
   );
 }

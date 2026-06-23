@@ -49,11 +49,11 @@ test.describe('App Basics', () => {
   test('should have collapse all and expand all buttons in the sidebar', async ({ window }) => {
     const collapseBtn = await window.locator('.qa-collapse-all');
     await expect(collapseBtn).toBeVisible();
-    await expect(collapseBtn).toHaveAttribute('title', 'Collapse All');
+    await expect(collapseBtn).toHaveAttribute('data-tooltip', 'Collapse All');
 
     const expandBtn = await window.locator('.qa-expand-all');
     await expect(expandBtn).toBeVisible();
-    await expect(expandBtn).toHaveAttribute('title', 'Expand All');
+    await expect(expandBtn).toHaveAttribute('data-tooltip', 'Expand All');
   });
 
   test('should open settings window', async ({ electronApp, window }) => {

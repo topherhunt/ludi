@@ -54,6 +54,17 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
+  // On macOS the window's X should hide the window (so playback keeps running in
+  // the background) instead of destroying it. The dock icon re-shows it via the
+  // 'activate' handler. A real quit (Cmd+Q) sets app.isQuitting in 'before-quit'
+  // so the window is allowed to actually close.
+  mainWindow.on('close', (e) => {
+    if (process.platform === 'darwin' && !app.isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -263,7 +274,10 @@ app.whenReady().then(() => {
     createWindow();
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
+      // Re-show the hidden window (or recreate it if it was actually destroyed).
+      if (mainWindow) {
+        mainWindow.show();
+      } else {
         createWindow();
       }
     });
@@ -282,6 +296,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// Mark a genuine quit so the window's 'close' handler stops hiding and lets it close.
+app.on('before-quit', () => {
+  app.isQuitting = true;
 });
 
 app.on('will-quit', () => {
@@ -334,8 +353,8 @@ ipcMain.handle('db:updateFolderExpanded', (event, { listId, isExpanded }) => {
   return db.updateFolderExpanded(listId, isExpanded);
 });
 
-ipcMain.handle('db:sortFolderContents', (event, listId) => {
-  return db.sortFolderContents(listId);
+ipcMain.handle('db:sortFolderContents', (event, { listId, sortBy }) => {
+  return db.sortFolderContents(listId, sortBy);
 });
 
 ipcMain.handle('db:flattenFolder', (event, listId) => {

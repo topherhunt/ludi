@@ -198,6 +198,7 @@ export function TreeItem(props) {
           <span
             class={iconContainerClass()}
             onClick={isFolder() ? handleChevronClick : undefined}
+            onDblClick={isFolder() ? (e) => e.stopPropagation() : undefined}
           >
             <i class={iconClass()}></i>
           </span>

@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteItem: (itemId) => ipcRenderer.invoke('db:deleteItem', itemId),
   renameFolder: (data) => ipcRenderer.invoke('db:renameFolder', data),
   updateFolderExpanded: (data) => ipcRenderer.invoke('db:updateFolderExpanded', data),
-  sortFolderContents: (listId) => ipcRenderer.invoke('db:sortFolderContents', listId),
+  sortFolderContents: (listId, sortBy) => ipcRenderer.invoke('db:sortFolderContents', { listId, sortBy }),
   flattenFolder: (listId) => ipcRenderer.invoke('db:flattenFolder', listId),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
 
