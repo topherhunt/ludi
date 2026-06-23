@@ -3,12 +3,14 @@
 - [x] Create an app icon.
 - [x] Polish up basic features, ensure the basic MVP works, with folders etc.
 - [ ] Migrate all tasks here from within the README or within Obsidian, wherever it was.
+- [ ] Move the Collapse All and Expand All buttons to the right of the "+" button in the top of the left sidebar. Replace text w small button-icons `arrows-collapse` and `arrows-expand`.
+- [ ] Support search
+  - Search input in top-right corner (to the right of the top title). To its right, a dropdown button for advanced search (pops open the advanced search dialog).
+  - 
 - [ ] Add tagging support
   - Each song, and each folder/list, can be tagged. Items in a folder/list inherit its tags.
   - Show info about the selected item(s) in the bottom part of the left sidebar. Including all applied tags. Right-click a tag and click "Remove Tag" to remove it. Click the + next to tags to add a tag, by typing (with autocomplete).
   - Search bar (left sidebar, top) supports filtering by the presence / absence of a tag as well as booleans & parentheses so you can do things like `tag:fav AND (tag:instrumental OR tag:low-e)`
-  - 
-- [ ] 
 
 # Old notes
 

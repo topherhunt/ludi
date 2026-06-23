@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./database');
 const { parseFile } = require('music-metadata');
+const { audioContentType } = require('./audio-mime');
 
 let mainWindow;
 let settingsWindow;
@@ -206,6 +207,7 @@ app.whenReady().then(() => {
       // distinct request rather than reusing/aborting an identical in-flight URL.
       const withoutScheme = request.url.replace('ludi-audio://', '').split('?')[0];
       const filePath = decodeURIComponent(withoutScheme);
+      const contentType = audioContentType(filePath);
 
       const stats = fs.statSync(filePath);
       const fileSize = stats.size;
@@ -231,7 +233,7 @@ app.whenReady().then(() => {
           return new Response(buffer, {
             status: 206,
             headers: {
-              'Content-Type': 'audio/mpeg',
+              'Content-Type': contentType,
               'Content-Length': String(chunkSize),
               'Content-Range': `bytes ${start}-${end}/${fileSize}`,
               'Accept-Ranges': 'bytes',
@@ -245,7 +247,7 @@ app.whenReady().then(() => {
       return new Response(buffer, {
         status: 200,
         headers: {
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': contentType,
           'Content-Length': String(fileSize),
           'Accept-Ranges': 'bytes',
         },
