@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Database operations
   getLists: () => ipcRenderer.invoke('db:getLists'),
   getListItems: (listId) => ipcRenderer.invoke('db:getListItems', listId),
+  getAllListItems: () => ipcRenderer.invoke('db:getAllListItems'),
   getItem: (itemId) => ipcRenderer.invoke('db:getItem', itemId),
   getSong: (songId) => ipcRenderer.invoke('db:getSong', songId),
   addFolder: (data) => ipcRenderer.invoke('db:addFolder', data),

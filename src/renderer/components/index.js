@@ -14,3 +14,5 @@ export { TreeView } from './TreeView.jsx';
 // Main panels
 export { Explorer } from './Explorer.jsx';
 export { Settings } from './Settings.jsx';
+export { SearchResultsView } from './SearchResultsView.jsx';
+export { AdvancedSearchModal } from './AdvancedSearchModal.jsx';

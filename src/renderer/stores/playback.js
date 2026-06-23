@@ -38,7 +38,7 @@ const {
   const [shuffledIndices, setShuffledIndices] = createSignal([]);
 
   // Loop state: 'off' | 'all' | 'one'
-  const [loopMode, setLoopMode] = createSignal('off');
+  const [loopMode, setLoopMode] = createSignal('all');
 
   const actualTrackIndex = createMemo(() => {
     const idx = currentTrackIndex();

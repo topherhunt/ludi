@@ -1,9 +1,6 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- [ ] Support search
-  - Search input in top-right corner (to the right of the top title). To its right a`gear-wide-connected` icon button to open the advanced search modal (pops open the advanced search dialog GUI, with fields for searching by: song title, album, artist, presence or absence of tags).
-  - Type into the search input and press `enter` to run a basic search which matches across all fields (folder name, song title, album, artist).
-  - When displaying search results, the top title changes from `Main Library` to `Search Results`. After that title is a button to toggle between flat vs nested view (default to nested). Flat view just lists all matched songs with no folders. Nested view lists all matched songs, BUT anytime 2+ matched songs are direct children of the same subfolder of the Main Library, group them under that folder in the results list. So the search results view is
+- [ ] Default to loop=on please.
 - [ ] Add tagging support
   - Each song, and each folder/list, can be tagged. Items in a folder/list inherit its tags.
   - Show info about the selected item(s) in the bottom part of the left sidebar. Including all applied tags. Right-click a tag and click "Remove Tag" to remove it. Click the + next to tags to add a tag, by typing (with autocomplete).

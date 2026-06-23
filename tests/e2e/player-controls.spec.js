@@ -40,21 +40,14 @@ test.describe('Player Controls', () => {
     const loopBtn = await window.locator('#loopBtn');
 
     const initialMode = await window.evaluate(() => {
-      return window.loopMode || 'off';
-    });
-    expect(initialMode).toBe('off');
-
-    await loopBtn.click();
-
-    let loopMode = await window.evaluate(() => {
       return window.loopMode;
     });
-    expect(loopMode).toBe('all');
+    expect(initialMode).toBe('all');
     await expect(loopBtn).toHaveClass(/active/);
 
     await loopBtn.click();
 
-    loopMode = await window.evaluate(() => {
+    let loopMode = await window.evaluate(() => {
       return window.loopMode;
     });
     expect(loopMode).toBe('one');
@@ -72,6 +65,13 @@ test.describe('Player Controls', () => {
 
     const loopOffIcon = loopBtn.locator('i.bi-repeat');
     await expect(loopOffIcon).toBeVisible();
+
+    await loopBtn.click();
+
+    loopMode = await window.evaluate(() => {
+      return window.loopMode;
+    });
+    expect(loopMode).toBe('all');
   });
 
   test('should have volume controls', async ({ window }) => {

@@ -15,6 +15,7 @@ function getAPI() {
   return {
     getLists: async () => [],
     getListItems: async () => [],
+    getAllListItems: async () => [],
     getItem: async () => null,
     getSong: async () => null,
     addFolder: async () => ({ id: 0 }),
@@ -53,6 +54,10 @@ export async function getLists() {
  */
 export async function getListItems(listId) {
   return getAPI().getListItems(listId);
+}
+
+export async function getAllListItems() {
+  return getAPI().getAllListItems();
 }
 
 /**

@@ -38,6 +38,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      spellcheck: false,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -110,6 +111,7 @@ function createSettingsWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      spellcheck: false,
       preload: path.join(__dirname, 'preload.js')
     },
     parent: mainWindow,
@@ -315,6 +317,10 @@ ipcMain.handle('db:getLists', () => {
 
 ipcMain.handle('db:getListItems', (event, listId) => {
   return db.getListItems(listId);
+});
+
+ipcMain.handle('db:getAllListItems', () => {
+  return db.getAllListItems();
 });
 
 ipcMain.handle('db:getItem', (event, itemId) => {

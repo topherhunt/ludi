@@ -192,6 +192,24 @@ function getListItems(listId) {
   `).all(listId);
 }
 
+function getAllListItems() {
+  return db.prepare(`
+    SELECT
+      li.*,
+      l.title as list_title,
+      l.is_expanded as list_is_expanded,
+      s.title as song_title,
+      s.artist,
+      s.album,
+      s.duration_seconds,
+      s.track_number
+    FROM list_items li
+    LEFT JOIN lists l ON li.list_id = l.id
+    LEFT JOIN songs s ON li.song_id = s.id
+    ORDER BY li.parent_list_id, li.position
+  `).all();
+}
+
 function getItem(itemId) {
   return db.prepare(`
     SELECT
@@ -585,6 +603,7 @@ module.exports = {
   initialize,
   getLists,
   getListItems,
+  getAllListItems,
   getItem,
   getSong,
   getSongByPath,

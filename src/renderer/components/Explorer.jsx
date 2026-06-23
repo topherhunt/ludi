@@ -16,6 +16,9 @@ import {
   getSong,
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
+import { isSearching, runSearch } from '../stores/search.js';
+import { SearchResultsView } from './SearchResultsView.jsx';
+import { AdvancedSearchModal } from './AdvancedSearchModal.jsx';
 
 /**
  * Explorer panel - contains header, column headers, and tree view
@@ -23,6 +26,9 @@ import { selectedItems, clearSelection } from '../stores/navigation.js';
 export function Explorer(props) {
   // Context menu state
   const [contextMenu, setContextMenu] = createSignal(null);
+
+  // Advanced search modal state
+  const [advancedSearchOpen, setAdvancedSearchOpen] = createSignal(false);
 
   // Batch-rename modal state
   const [batchRenameOpen, setBatchRenameOpen] = createSignal(false);
@@ -306,16 +312,26 @@ export function Explorer(props) {
 
   return (
     <main class="main-panel">
-      <ExplorerHeader title={getListTitle()} />
+      <ExplorerHeader
+        title={getListTitle()}
+        advancedSearchOpen={advancedSearchOpen()}
+        onAdvancedSearch={() => setAdvancedSearchOpen(true)}
+      />
 
       <ColumnHeaders />
 
-      <TreeView
-        onRefetch={handleRefetch}
-        onPlayFolder={props.onPlayFolder}
-        onPlaySong={props.onPlaySong}
-        onContextMenu={handleContextMenu}
-      />
+      <Show when={isSearching()} fallback={
+        <TreeView
+          onRefetch={handleRefetch}
+          onPlayFolder={props.onPlayFolder}
+          onPlaySong={props.onPlaySong}
+          onContextMenu={handleContextMenu}
+        />
+      }>
+        <SearchResultsView
+          onPlaySong={props.onPlaySong}
+        />
+      </Show>
 
       {/* Context Menu */}
       <Show when={contextMenu()}>
@@ -345,6 +361,12 @@ export function Explorer(props) {
         folderCount={batchRenameCount()}
         onApply={applyBatchRename}
         onCancel={() => setBatchRenameOpen(false)}
+      />
+
+      <AdvancedSearchModal
+        open={advancedSearchOpen()}
+        onClose={() => setAdvancedSearchOpen(false)}
+        onSearch={(query) => runSearch(query)}
       />
     </main>
   );
