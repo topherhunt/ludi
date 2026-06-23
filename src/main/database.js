@@ -224,6 +224,12 @@ function getSongByPath(filePath) {
   return db.prepare('SELECT * FROM songs WHERE file_path = ?').get(filePath);
 }
 
+// Returns every song's stored (library-relative) file_path. Used to diff the
+// library folder against what's already ingested.
+function getAllSongFilePaths() {
+  return db.prepare('SELECT file_path FROM songs').all().map(row => row.file_path);
+}
+
 function isSongInList(songId, parentListId) {
   const item = db.prepare('SELECT * FROM list_items WHERE song_id = ? AND parent_list_id = ?').get(songId, parentListId);
   return item !== undefined;
@@ -494,6 +500,7 @@ module.exports = {
   getItem,
   getSong,
   getSongByPath,
+  getAllSongFilePaths,
   isSongInList,
   isSongInLibrary,
   addFolder,

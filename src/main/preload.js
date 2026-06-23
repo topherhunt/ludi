@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File import operations
   importFiles: (data) => ipcRenderer.invoke('files:import', data),
 
+  // Library scan (find audio files in the library folder not yet in the DB)
+  scanLibraryForNewFiles: () => ipcRenderer.invoke('library:scanMissing'),
+  ingestFilesInPlace: (relativePaths) => ipcRenderer.invoke('library:ingestMissing', relativePaths),
+
   // Settings operations
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
@@ -34,5 +38,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Column settings refresh
   onColumnSettingsChanged: (callback) => {
     ipcRenderer.on('column-settings-changed', (event, settings) => callback(settings));
+  },
+
+  // Library changed (e.g. songs ingested from the Settings window) - refresh the tree
+  onLibraryChanged: (callback) => {
+    ipcRenderer.on('library-changed', () => callback());
   }
 });

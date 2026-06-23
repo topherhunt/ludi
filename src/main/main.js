@@ -456,6 +456,28 @@ function scanFolderForAudio(folderPath) {
 }
 
 /**
+ * Recursively collect absolute paths of all supported audio files under a folder.
+ * Flat list (no tree); skips unsupported/hidden files via isSupportedAudio.
+ * @param {string} folderPath - Absolute path to the folder
+ * @returns {string[]} Absolute file paths
+ */
+function walkAudioFiles(folderPath) {
+  const found = [];
+  const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(folderPath, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...walkAudioFiles(entryPath));
+    } else if (entry.isFile() && isSupportedAudio(entryPath)) {
+      found.push(entryPath);
+    }
+  }
+
+  return found;
+}
+
+/**
  * Import a single audio file and add to a list
  * @returns {{ songId, title, artist, album } | null}
  */
@@ -620,6 +642,99 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
         results.errors.push({ file: path.basename(filePath), error: error.message });
       }
     }
+  }
+
+  return results;
+});
+
+// Scan the library folder for audio files that aren't yet in the database.
+// Returns library-relative paths (sorted) so the renderer can list them.
+ipcMain.handle('library:scanMissing', () => {
+  const settings = db.getSettings();
+  const libraryPath = settings.library_path;
+
+  const ingested = new Set(db.getAllSongFilePaths());
+
+  const missing = walkAudioFiles(libraryPath)
+    .map(absPath => path.relative(libraryPath, absPath))
+    .filter(relativePath => !ingested.has(relativePath));
+
+  missing.sort((a, b) => a.localeCompare(b));
+  return missing;
+});
+
+// Ingest already-in-library files (given as library-relative paths) WITHOUT
+// copying or moving them. Songs are grouped into freshly created
+// "{artist} - {album}" folders appended to the Main Library.
+ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
+  const settings = db.getSettings();
+  const libraryPath = settings.library_path;
+
+  const results = { imported: [], errors: [] };
+
+  // Read metadata first so we can group by artist/album before touching the DB.
+  const parsed = [];
+  for (const relativePath of relativePaths) {
+    try {
+      const absPath = path.join(libraryPath, relativePath);
+      const metadata = await parseFile(absPath);
+      const ext = path.extname(relativePath);
+      parsed.push({
+        relativePath,
+        title: metadata.common.title || path.basename(relativePath, ext),
+        artist: metadata.common.artist || 'Unknown',
+        album: metadata.common.album || 'Unknown',
+        durationSeconds: Math.floor(metadata.format.duration || 0),
+        trackNumber: metadata.common.track?.no || null,
+      });
+    } catch (error) {
+      console.error('Error reading metadata for:', relativePath, error);
+      results.errors.push({ file: path.basename(relativePath), error: error.message });
+    }
+  }
+
+  // Group by "{artist} - {album}", preserving first-seen (alphabetical) order.
+  const groups = new Map();
+  for (const song of parsed) {
+    const key = `${song.artist} - ${song.album}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(song);
+  }
+
+  // Append each group as a new folder at the end of the Main Library (list 0).
+  let folderPosition = db.getListItems(0).length;
+  for (const [folderTitle, songs] of groups) {
+    const folderId = db.addFolder(0, folderPosition, folderTitle);
+    folderPosition++;
+
+    let songPosition = 0;
+    for (const song of songs) {
+      try {
+        const songId = db.addSong(
+          song.relativePath, song.title, song.artist, song.album,
+          song.durationSeconds, song.trackNumber
+        );
+        db.addSongToList(songId, folderId, songPosition);
+        songPosition++;
+        results.imported.push({
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          file_path: song.relativePath,
+        });
+      } catch (error) {
+        // A UNIQUE violation means it was ingested between scan and import.
+        console.error('Error ingesting file:', song.relativePath, error);
+        results.errors.push({ file: path.basename(song.relativePath), error: error.message });
+      }
+    }
+  }
+
+  // Tell the main window to refresh its tree so the new songs appear.
+  if (results.imported.length > 0 && mainWindow) {
+    mainWindow.webContents.send('library-changed');
   }
 
   return results;

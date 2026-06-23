@@ -1,4 +1,7 @@
-import { createSignal, createResource, onMount, onCleanup } from 'solid-js';
+import { createSignal, createResource, onMount, onCleanup, Show } from 'solid-js';
+import { AlertModal } from './Modal.jsx';
+import { ScanResultsModal } from './ScanResultsModal.jsx';
+import { showAlert, alertModalState, hideAlertModal } from '../stores/modals.js';
 
 /**
  * Load column settings from localStorage
@@ -57,6 +60,11 @@ export function Settings() {
   const [colAlbum, setColAlbum] = createSignal(true);
   const [colTags, setColTags] = createSignal(true);
 
+  // Library scan state
+  const [scanning, setScanning] = createSignal(false);
+  const [scanModalOpen, setScanModalOpen] = createSignal(false);
+  const [scannedFiles, setScannedFiles] = createSignal([]);
+
   // Load settings on mount
   onMount(async () => {
     // Load app settings
@@ -89,6 +97,58 @@ export function Settings() {
   // Show library path in Finder
   const handleShowLibraryInFinder = () => {
     window.electronAPI?.showInFinder?.(libraryPath());
+  };
+
+  // Scan the library folder for audio files not yet in the database
+  const handleScan = async () => {
+    setScanning(true);
+    try {
+      const files = await window.electronAPI?.scanLibraryForNewFiles?.() || [];
+      if (files.length === 0) {
+        showAlert(
+          '<i class="bi bi-search" style="margin-right: 8px;"></i>Scan Complete',
+          '<p>No new files found in your library folder.</p>'
+        );
+      } else {
+        setScannedFiles(files);
+        setScanModalOpen(true);
+      }
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // Import all scanned files in place, then show a summary
+  const handleImportAll = async () => {
+    const files = scannedFiles();
+    setScanModalOpen(false);
+
+    const result = await window.electronAPI?.ingestFilesInPlace?.(files) || { imported: [], errors: [] };
+    const imported = result.imported || [];
+    const errors = result.errors || [];
+
+    let html = `<p>Imported ${imported.length} file${imported.length === 1 ? '' : 's'} into your library.</p>`;
+    if (imported.length > 0) {
+      const list = imported.map(s => `<li>${s.file_path}</li>`).join('');
+      html += `<div class="skipped-files-list"><ul>${list}</ul></div>`;
+    }
+    if (errors.length > 0) {
+      const list = errors.map(e => `<li>${e.file}: ${e.error}</li>`).join('');
+      html += `<p>${errors.length} file${errors.length === 1 ? '' : 's'} could not be imported:</p>`;
+      html += `<div class="skipped-files-list"><ul>${list}</ul></div>`;
+    }
+
+    setScannedFiles([]);
+    showAlert(
+      '<i class="bi bi-check-circle" style="margin-right: 8px;"></i>Import Summary',
+      html
+    );
+  };
+
+  // Cancel the scan results modal without importing
+  const handleCancelScan = () => {
+    setScanModalOpen(false);
+    setScannedFiles([]);
   };
 
   // Handle cancel button
@@ -125,6 +185,8 @@ export function Settings() {
   onMount(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
+        // Let an open modal handle Escape itself instead of closing Settings.
+        if (scanModalOpen() || alertModalState().isOpen) return;
         handleSave();
       }
     };
@@ -178,6 +240,20 @@ export function Settings() {
               Show in Finder
             </button>
           </div>
+        </div>
+
+        <div class="setting-item">
+          <label class="setting-label">Library scan</label>
+          <div class="setting-description">
+            Find audio files in your library folder that aren't in your library yet, and import them in place.
+          </div>
+          <button
+            class="browse-btn qa-scan-library"
+            onClick={handleScan}
+            disabled={scanning()}
+          >
+            {scanning() ? 'Scanning...' : 'Scan for new music files in library folder'}
+          </button>
         </div>
 
         <div class="setting-item">
@@ -243,6 +319,24 @@ export function Settings() {
           Save
         </button>
       </footer>
+
+      {/* Scan results modal (lists files to import in place) */}
+      <ScanResultsModal
+        open={scanModalOpen()}
+        files={scannedFiles()}
+        onImportAll={handleImportAll}
+        onCancel={handleCancelScan}
+      />
+
+      {/* Alert modal host (no-files-found and import summary) */}
+      <Show when={alertModalState().isOpen}>
+        <AlertModal
+          open={true}
+          title={alertModalState().title}
+          message={alertModalState().message}
+          onClose={hideAlertModal}
+        />
+      </Show>
     </div>
   );
 }

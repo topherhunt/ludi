@@ -65,6 +65,13 @@ export function App() {
     onCleanup(() => cleanup?.());
   });
 
+  // Refresh the tree when songs are ingested from the Settings window scan
+  onMount(() => {
+    window.electronAPI?.onLibraryChanged?.(() => {
+      explorerRefetch?.();
+    });
+  });
+
   // Listen for media key events (play/pause, next, previous)
   onMount(() => {
     window.electronAPI?.onMediaKey?.((action) => {

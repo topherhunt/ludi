@@ -158,6 +158,121 @@ body {
   transform: translateY(1px);
 }
 
+.browse-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Modal styles (mirrors the main window's modals in styles.css) so the
+   scan results / import summary popups look consistent in the Settings window. */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.modal-overlay.visible {
+  display: flex;
+}
+
+.modal-dialog {
+  background-color: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  min-width: 400px;
+  max-width: 520px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.scan-results-dialog {
+  min-width: 440px;
+  max-width: 520px;
+}
+
+.modal-title {
+  padding: 12px 16px;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.modal-content {
+  padding: 20px 24px;
+  color: #cccccc;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: left;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.modal-buttons {
+  padding: 16px 24px;
+  border-top: 1px solid #3e3e42;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  background-color: #0e639c;
+  color: #ffffff;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 2px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 80px;
+}
+
+.modal-btn:hover {
+  background-color: #1177bb;
+}
+
+.modal-btn:active {
+  background-color: #0d5a8f;
+}
+
+.modal-btn-secondary {
+  background-color: #3e3e42;
+}
+
+.modal-btn-secondary:hover {
+  background-color: #505050;
+}
+
+.modal-btn-secondary:active {
+  background-color: #2d2d30;
+}
+
+.skipped-files-list {
+  margin-top: 12px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+}
+
+.skipped-files-list ul {
+  margin: 0;
+  padding: 8px 8px 8px 28px;
+  list-style-type: disc;
+}
+
+.skipped-files-list li {
+  padding: 2px 0;
+  word-break: break-all;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 10px;
