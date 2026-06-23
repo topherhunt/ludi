@@ -332,15 +332,13 @@ ipcMain.handle('db:updateFolderExpanded', (event, { listId, isExpanded }) => {
   return db.updateFolderExpanded(listId, isExpanded);
 });
 
-ipcMain.handle('db:deleteItemWithFiles', (event, itemId) => {
-  const fs = require('fs');
-
-  // Get file paths and delete from database
+ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {
+  // Remove from the database first, then move the now-orphaned audio files to
+  // the OS Trash (recoverable, unlike a permanent delete).
   const filePaths = db.deleteItemWithFiles(itemId);
 
-  // Delete the actual audio files
   const errors = [];
-  let deletedCount = 0;
+  let trashedCount = 0;
   const settings = db.getSettings();
   const libraryPath = settings.library_path;
 
@@ -350,48 +348,40 @@ ipcMain.handle('db:deleteItemWithFiles', (event, itemId) => {
 
   for (const filePath of filePaths) {
     try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log('Deleted audio file:', filePath);
-        deletedCount++;
-
-        // Clean up empty parent directories
-        let currentDir = path.dirname(filePath);
-        console.log('Checking parent directories starting from:', currentDir);
-        console.log('Library path:', libraryPath);
-
-        while (currentDir !== libraryPath && currentDir.startsWith(libraryPath)) {
-          try {
-            const dirContents = fs.readdirSync(currentDir);
-            console.log(`Directory ${currentDir} contains:`, dirContents);
-
-            if (dirContents.length === 0) {
-              fs.rmdirSync(currentDir);
-              console.log('Deleted empty directory:', currentDir);
-              currentDir = path.dirname(currentDir);
-            } else {
-              // Directory not empty, stop checking parents
-              console.log('Directory not empty, stopping cleanup');
-              break;
-            }
-          } catch (dirError) {
-            console.warn('Could not check/delete directory:', currentDir, dirError.message);
-            break;
-          }
-        }
-      } else {
+      if (!fs.existsSync(filePath)) {
         console.warn('Audio file not found:', filePath);
         errors.push({ filePath, error: 'File not found' });
+        continue;
+      }
+
+      await shell.trashItem(filePath);
+      console.log('Moved audio file to Trash:', filePath);
+      trashedCount++;
+
+      // Clean up now-empty parent directories up to the library root.
+      let currentDir = path.dirname(filePath);
+      while (currentDir !== libraryPath && currentDir.startsWith(libraryPath)) {
+        try {
+          if (fs.readdirSync(currentDir).length === 0) {
+            fs.rmdirSync(currentDir);
+            currentDir = path.dirname(currentDir);
+          } else {
+            break;
+          }
+        } catch (dirError) {
+          console.warn('Could not check/delete directory:', currentDir, dirError.message);
+          break;
+        }
       }
     } catch (error) {
-      console.error('Error deleting audio file:', filePath, error);
+      console.error('Error trashing audio file:', filePath, error);
       errors.push({ filePath, error: error.message });
     }
   }
 
   return {
     totalFiles: filePaths.length,
-    deletedFiles: deletedCount,
+    deletedFiles: trashedCount,
     errors: errors
   };
 });

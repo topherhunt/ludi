@@ -18,7 +18,7 @@ npm run dev
 npm test
 
 # Build a packaged macOS app + .dmg (output in release/)
-npm run dist
+npm run release
 ```
 
 The integration tests use Playwright to launch the app, verify the UI is displayed correctly, and confirm no errors occurred during startup.

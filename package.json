@@ -9,7 +9,7 @@
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173/index.html && VITE_DEV=true electron .\"",
     "vite": "vite",
     "vite:build": "vite build",
-    "dist": "vite build && electron-builder",
+    "release": "vite build && electron-builder",
     "test": "playwright test",
     "test:unit": "vitest",
     "postinstall": "electron-builder install-app-deps"

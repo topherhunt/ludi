@@ -9,7 +9,7 @@ import { RenameModal, ConfirmModal } from './Modal.jsx';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import {
   addFolder,
-  deleteItem,
+  deleteItemWithFiles,
   renameFolder,
   getListItems,
   updateFolderExpanded,
@@ -148,20 +148,20 @@ export function Explorer(props) {
     if (itemIds.length === 0) return;
 
     // Get item descriptions for confirm dialog
-    let message = `Delete ${itemIds.length} item${itemIds.length > 1 ? 's' : ''}?`;
+    let message = `Move ${itemIds.length} item${itemIds.length > 1 ? 's' : ''} to the Trash?`;
 
     if (itemIds.length === 1) {
       const item = await window.electronAPI?.getItem?.(itemIds[0]);
       if (item) {
         const name = item.list_id !== null ? item.list_title : item.song_title;
         const truncated = name.length > 50 ? name.substring(0, 50) + '...' : name;
-        message = `Delete "${truncated}"?`;
+        message = `Move "${truncated}" to the Trash?`;
       }
     }
 
     showConfirmModal('<i class="bi bi-trash" style="margin-right: 8px;"></i>Confirm Delete', message, async () => {
       for (const id of itemIds) {
-        await deleteItem(id);
+        await deleteItemWithFiles(id);
       }
       clearSelection();
       refetchTree?.();
