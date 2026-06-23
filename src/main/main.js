@@ -334,6 +334,14 @@ ipcMain.handle('db:updateFolderExpanded', (event, { listId, isExpanded }) => {
   return db.updateFolderExpanded(listId, isExpanded);
 });
 
+ipcMain.handle('db:sortFolderContents', (event, listId) => {
+  return db.sortFolderContents(listId);
+});
+
+ipcMain.handle('db:flattenFolder', (event, listId) => {
+  return db.flattenFolder(listId);
+});
+
 ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {
   // Remove from the database first, then move the now-orphaned audio files to
   // the OS Trash (recoverable, unlike a permanent delete).

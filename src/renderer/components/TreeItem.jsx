@@ -45,6 +45,14 @@ export function TreeItem(props) {
     }
   );
 
+  // Recursive song count for folders -- drives the count label and the
+  // "empty folder" dimming (a folder with no songs anywhere inside it).
+  const [songCount] = createResource(
+    () => isFolder() ? props.item.list_id : null,
+    async (listId) => countSongsInList(listId)
+  );
+  const isEmptyFolder = () => isFolder() && songCount() === 0;
+
   // Selection state
   const isSelected = createMemo(() => selectedItems().has(props.item.id));
 
@@ -167,7 +175,7 @@ export function TreeItem(props) {
     <li class="tree-item" data-item-id={props.item.id}>
       <div
         class="tree-item-content"
-        classList={{ selected: isSelected() }}
+        classList={{ selected: isSelected(), 'folder-empty': isEmptyFolder() }}
         data-item-id={props.item.id}
         data-is-folder={isFolder()}
         data-folder-id={isFolder() ? props.item.list_id : undefined}
@@ -196,7 +204,7 @@ export function TreeItem(props) {
           <span class="tree-item-label">
             {isFolder() ? props.item.list_title : props.item.song_title}
             <Show when={isFolder()}>
-              <FolderItemCount listId={props.item.list_id} />
+              <FolderItemCount count={songCount()} />
             </Show>
           </span>
         </span>
@@ -275,20 +283,14 @@ export function TreeItem(props) {
 }
 
 /**
- * Folder song count (loaded asynchronously, counts all songs recursively)
+ * Folder song count display. The recursive count is computed once in the parent
+ * TreeItem (it also drives empty-folder dimming) and passed in here.
  */
 function FolderItemCount(props) {
-  const [count] = createResource(
-    () => props.listId,
-    async (listId) => {
-      return await countSongsInList(listId);
-    }
-  );
-
   return (
     <span class="tree-item-count">
-      <Show when={count() !== undefined}>
-        {count()} {pluralize(count(), 'song')}
+      <Show when={props.count !== undefined}>
+        {props.count} {pluralize(props.count, 'song')}
       </Show>
     </span>
   );

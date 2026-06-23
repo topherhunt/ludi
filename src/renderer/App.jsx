@@ -303,6 +303,21 @@ export function App() {
     }
   };
 
+  // Collapse / expand every folder in the explorer tree. Lives here (not in the
+  // Explorer) so the sidebar header buttons and the folder context menu share it.
+  const setAllFoldersExpanded = async (isExpanded) => {
+    const folders = document.querySelectorAll('[data-folder-id]');
+    for (const folder of folders) {
+      await window.electronAPI?.updateFolderExpanded?.({
+        listId: parseInt(folder.dataset.folderId),
+        isExpanded,
+      });
+    }
+    explorerRefetch?.();
+  };
+  const handleCollapseAll = () => setAllFoldersExpanded(false);
+  const handleExpandAll = () => setAllFoldersExpanded(true);
+
   // Handle new folder from sidebar
   const handleNewFolder = async () => {
     // Get position for new folder (end of current list)
@@ -325,6 +340,8 @@ export function App() {
       <Sidebar
         onListChange={handleListChange}
         onNewFolder={handleNewFolder}
+        onCollapseAll={handleCollapseAll}
+        onExpandAll={handleExpandAll}
       />
 
       {/* Draggable divider to resize the sidebar */}
@@ -339,6 +356,8 @@ export function App() {
         onPlayFolder={handlePlayFolder}
         onPlaySong={handlePlaySong}
         onSeek={handleSeek}
+        onCollapseAll={handleCollapseAll}
+        onExpandAll={handleExpandAll}
         onRefetchReady={(fn) => {
           explorerRefetch = fn;
           // Expose for testing

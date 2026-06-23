@@ -493,6 +493,81 @@ function updateFolderExpanded(listId, isExpanded) {
   `).run(isExpanded ? 1 : 0, now, listId);
 }
 
+// Reorder a folder's direct contents alphabetically: folders first, then songs,
+// each group sorted case-insensitively by title. Only reassigns positions.
+function sortFolderContents(parentListId) {
+  const now = new Date().toISOString();
+
+  return db.transaction(() => {
+    const items = db.prepare(`
+      SELECT li.id, li.list_id, li.song_id,
+             l.title AS folder_title,
+             s.title AS song_title
+      FROM list_items li
+      LEFT JOIN lists l ON li.list_id = l.id
+      LEFT JOIN songs s ON li.song_id = s.id
+      WHERE li.parent_list_id = ?
+    `).all(parentListId);
+
+    items.sort((a, b) => {
+      const aIsFolder = a.list_id !== null;
+      const bIsFolder = b.list_id !== null;
+      if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1; // folders above songs
+      const aTitle = (aIsFolder ? a.folder_title : a.song_title) || '';
+      const bTitle = (bIsFolder ? b.folder_title : b.song_title) || '';
+      return aTitle.localeCompare(bTitle, undefined, { sensitivity: 'base' });
+    });
+
+    items.forEach((item, index) => {
+      db.prepare('UPDATE list_items SET position = ?, updated_at = ? WHERE id = ?')
+        .run(index, now, item.id);
+    });
+  })();
+}
+
+// Flatten a folder: move every descendant song directly into this folder
+// (depth-first, so the visible top-to-bottom order is preserved), then delete
+// all of the now-empty subfolders.
+function flattenFolder(folderListId) {
+  const now = new Date().toISOString();
+
+  return db.transaction(() => {
+    const songItemIds = [];        // song list_item ids, in DFS order
+    const subfolderItemIds = [];   // list_item ids pointing at subfolders (to delete)
+    const subfolderListIds = [];    // the subfolder list ids themselves (to delete)
+
+    const traverse = (listId) => {
+      const items = db.prepare(
+        'SELECT id, list_id, song_id FROM list_items WHERE parent_list_id = ? ORDER BY position'
+      ).all(listId);
+      for (const item of items) {
+        if (item.song_id !== null) {
+          songItemIds.push(item.id);
+        } else if (item.list_id !== null) {
+          traverse(item.list_id);          // collect the subfolder's songs first
+          subfolderItemIds.push(item.id);
+          subfolderListIds.push(item.list_id);
+        }
+      }
+    };
+    traverse(folderListId);
+
+    // Reparent every song directly under this folder, in DFS order.
+    songItemIds.forEach((itemId, index) => {
+      db.prepare('UPDATE list_items SET parent_list_id = ?, position = ?, updated_at = ? WHERE id = ?')
+        .run(folderListId, index, now, itemId);
+    });
+
+    // Remove the subfolder placements first (FK), then the subfolder lists.
+    for (const itemId of subfolderItemIds) {
+      db.prepare('DELETE FROM list_items WHERE id = ?').run(itemId);
+    }
+    for (const listId of subfolderListIds) {
+      db.prepare('DELETE FROM lists WHERE id = ?').run(listId);
+    }
+  })();
+}
+
 module.exports = {
   initialize,
   getLists,
@@ -511,6 +586,8 @@ module.exports = {
   deleteItemWithFiles,
   renameFolder,
   updateFolderExpanded,
+  sortFolderContents,
+  flattenFolder,
   getSettings,
   updateSetting,
   getDbPath,

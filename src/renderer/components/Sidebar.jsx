@@ -46,14 +46,30 @@ export function Sidebar(props) {
     <aside class="sidebar" onClick={handleSidebarClick}>
       <div class="sidebar-header">
         <h2>Library</h2>
-        <button
-          id="addLibraryBtn"
-          class="add-btn"
-          title="Add"
-          onClick={toggleDropdown}
-        >
-          +
-        </button>
+        <div class="sidebar-actions">
+          <button
+            id="addLibraryBtn"
+            class="add-btn"
+            title="Add"
+            onClick={toggleDropdown}
+          >
+            +
+          </button>
+          <button
+            class="add-btn qa-collapse-all"
+            title="Collapse All"
+            onClick={() => props.onCollapseAll?.()}
+          >
+            <i class="bi bi-arrows-collapse"></i>
+          </button>
+          <button
+            class="add-btn qa-expand-all"
+            title="Expand All"
+            onClick={() => props.onExpandAll?.()}
+          >
+            <i class="bi bi-arrows-expand"></i>
+          </button>
+        </div>
         <Show when={isDropdownOpen()}>
           <div id="addLibraryDropdown" class="dropdown-menu visible">
             <div

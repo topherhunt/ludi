@@ -1,12 +1,16 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- [x] Create an app icon.
-- [x] Polish up basic features, ensure the basic MVP works, with folders etc.
-- [ ] Migrate all tasks here from within the README or within Obsidian, wherever it was.
-- [ ] Move the Collapse All and Expand All buttons to the right of the "+" button in the top of the left sidebar. Replace text w small button-icons `arrows-collapse` and `arrows-expand`.
+- [ ] Currently many buttons have OS-native tooltips which have too long a delay before displaying. Please either shorten the delay to 0.5s if you can, or if not, replace with simple css tooltips that display below the button after 0.5s.
+- [ ] If you click the + button, an option for New Folder appears; pressing `esc` or clicking anywhere on the page OTHER than in that dropdown menu should hide the dropdown menu.
+- [ ] In the folder right-click context menu, please replace the "Sort Alphabetically" option with "Sort  with a "Sort by..." submenu with options "Artist, album, track #, title", and "Title (alphabetical)" (That latter one works identical to the current sort alphabetically option).
+- [ ] If you double click on a song or folder, currently it starts playing that song or folder, which is fine. But if you double click on the collapse expand caret for a folder, it should not start playing it. It should only do the collapse or expand twice. Like clicking on the collapse or expand toggle caret should be exempt from the double click trigger for starting playback. 
+- [ ] If multiple items are selected and I right-click on them, the Rename option should be changed to "Rename N folders..." (indicating how many folders are selected) and it should display 2 textboxes: the text/regex to match (with a dropdown to select "exact match" or "regex" mode) and the text to replace it with. So I can batch-rename multiple folders at once.
+- [ ] Clicking the X should not abort playback. It should just hide the window so my music keeps playing in the background, and I click on the dock icon to re-show it.
+
 - [ ] Support search
-  - Search input in top-right corner (to the right of the top title). To its right, a dropdown button for advanced search (pops open the advanced search dialog).
-  - 
+  - Search input in top-right corner (to the right of the top title). To its right a`gear-wide-connected` icon button to open the advanced search modal (pops open the advanced search dialog GUI, with fields for searching by: song title, album, artist, presence or absence of tags).
+  - Type into the search input and press `enter` to run a basic search which matches across all fields (folder name, song title, album, artist).
+  - When displaying search results, the top title changes from `Main Library` to `Search Results`. After that title is a button to toggle between flat vs nested view (default to nested). Flat view just lists all matched songs with no folders. Nested view lists all matched songs, BUT anytime 2+ matched songs are direct children of the same subfolder of the Main Library, group them under that folder in the results list. So the search results view is
 - [ ] Add tagging support
   - Each song, and each folder/list, can be tagged. Items in a folder/list inherit its tags.
   - Show info about the selected item(s) in the bottom part of the left sidebar. Including all applied tags. Right-click a tag and click "Remove Tag" to remove it. Click the + next to tags to add a tag, by typing (with autocomplete).
@@ -17,6 +21,8 @@
 - 2026-02-12 Incorporate idea: Tags can do most of what I want groupings and playlists for.
   - like tags for `festive`, `christmas`, `low-key`, `meditative`, `dark`, `happy`, `high-e`, `⭐⭐⭐⭐⭐`, `⭐⭐⭐⭐` etc - any combination is possible.
 - TODO: Dig up all my old notes & ideas for this app, copy them here, analyze w Claude.
+- For music library: when viewing any given song in any list, or a selection of songs, if you're viewing the column for a facet / category (eg energy or genre) you can click on a dropdown arrow next to the current value to see all options, and click an option to set that new value for all selected songs.
+- To add to my vision for a music library app: default "timeline view" similar to Google photos, where I can scroll back and see music / playlists I was listening to during specific periods. Chronology-first rather than alphabetical-first.
 
 ### Tasks
 

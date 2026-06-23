@@ -13,7 +13,6 @@ import {
   renameFolder,
   getListItems,
   getSong,
-  updateFolderExpanded,
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
 
@@ -155,6 +154,18 @@ export function Explorer(props) {
     });
   };
 
+  // Sort a folder's contents alphabetically (folders above songs)
+  const handleSortAlphabetically = async (listId) => {
+    await window.electronAPI?.sortFolderContents?.(listId);
+    refetchTree?.();
+  };
+
+  // Flatten a folder: move all subfolder contents into it and delete the subfolders
+  const handleFlatten = async (listId) => {
+    await window.electronAPI?.flattenFolder?.(listId);
+    refetchTree?.();
+  };
+
   // Delete item(s) with confirmation dialog
   // Used by both context menu and keyboard shortcut for consistent behavior
   const handleDeleteWithConfirm = async (itemIds) => {
@@ -191,26 +202,6 @@ export function Explorer(props) {
   const handleDeleteSelected = () => {
     const selected = Array.from(selectedItems());
     handleDeleteWithConfirm(selected);
-  };
-
-  // Collapse all folders
-  const handleCollapseAll = async () => {
-    const folders = document.querySelectorAll('[data-folder-id]');
-    for (const folder of folders) {
-      const folderId = parseInt(folder.dataset.folderId);
-      await updateFolderExpanded(folderId, false);
-    }
-    refetchTree?.();
-  };
-
-  // Expand all folders
-  const handleExpandAll = async () => {
-    const folders = document.querySelectorAll('[data-folder-id]');
-    for (const folder of folders) {
-      const folderId = parseInt(folder.dataset.folderId);
-      await updateFolderExpanded(folderId, true);
-    }
-    refetchTree?.();
   };
 
   // Get visible item IDs for keyboard navigation
@@ -270,11 +261,7 @@ export function Explorer(props) {
 
   return (
     <main class="main-panel">
-      <ExplorerHeader
-        title={getListTitle()}
-        onCollapseAll={handleCollapseAll}
-        onExpandAll={handleExpandAll}
-      />
+      <ExplorerHeader title={getListTitle()} />
 
       <ColumnHeaders />
 
@@ -296,8 +283,10 @@ export function Explorer(props) {
           onAddFolderAfter={handleAddFolderAfter}
           onMoveIntoNewFolder={handleMoveIntoNewFolder}
           onPlayFolder={props.onPlayFolder}
-          onCollapseAll={handleCollapseAll}
-          onExpandAll={handleExpandAll}
+          onCollapseAll={props.onCollapseAll}
+          onExpandAll={props.onExpandAll}
+          onSortAlphabetically={handleSortAlphabetically}
+          onFlatten={handleFlatten}
           onRename={handleRename}
           onShowInFinder={handleShowInFinder}
           onCopyPath={handleCopyPath}

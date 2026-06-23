@@ -116,6 +116,32 @@ export function ContextMenu(props) {
         >
           Expand All
         </div>
+
+        <div class="context-menu-separator" />
+
+        {/* Sort alphabetically */}
+        <div
+          class="context-menu-item"
+          onClick={() => {
+            const listId = props.item.list_id;
+            props.onClose?.();
+            props.onSortAlphabetically?.(listId);
+          }}
+        >
+          Sort alphabetically
+        </div>
+
+        {/* Flatten */}
+        <div
+          class="context-menu-item"
+          onClick={() => {
+            const listId = props.item.list_id;
+            props.onClose?.();
+            props.onFlatten?.(listId);
+          }}
+        >
+          Flatten
+        </div>
       </Show>
 
       <div class="context-menu-separator" />

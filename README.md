@@ -8,10 +8,13 @@ Claude agents: see @AGENTS.md
 # Install dependencies (automatically rebuilds native modules)
 npm install
 
-# Run the app (production mode)
+# Run the app (production mode). Rebuilds the renderer bundle first (via the
+# `prestart` hook), so it always reflects the current source. For live, instant
+# updates while developing, use `npm run dev` instead.
 npm start
 
-# Run in development mode (with Vite hot reload + DevTools)
+# Run in development mode (Vite live reload + DevTools). Reflects source changes
+# immediately -- prefer this while iterating on the UI.
 npm run dev
 
 # Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)

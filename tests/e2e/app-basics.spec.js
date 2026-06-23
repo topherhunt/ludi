@@ -46,14 +46,14 @@ test.describe('App Basics', () => {
     expect(realErrors).toHaveLength(0);
   });
 
-  test('should have collapse all and expand all buttons', async ({ window }) => {
-    const collapseBtn = await window.locator('#collapseAllBtn');
+  test('should have collapse all and expand all buttons in the sidebar', async ({ window }) => {
+    const collapseBtn = await window.locator('.qa-collapse-all');
     await expect(collapseBtn).toBeVisible();
-    await expect(collapseBtn).toHaveText('Collapse All');
+    await expect(collapseBtn).toHaveAttribute('title', 'Collapse All');
 
-    const expandBtn = await window.locator('#expandAllBtn');
+    const expandBtn = await window.locator('.qa-expand-all');
     await expect(expandBtn).toBeVisible();
-    await expect(expandBtn).toHaveText('Expand All');
+    await expect(expandBtn).toHaveAttribute('title', 'Expand All');
   });
 
   test('should open settings window', async ({ electronApp, window }) => {

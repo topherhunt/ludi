@@ -107,6 +107,17 @@ body.resizing-sidebar {
   border-color: #999;
 }
 
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Bootstrap icons sit a touch smaller than the "+" glyph inside the 20px buttons */
+.sidebar-actions .bi {
+  font-size: 13px;
+}
+
 .dropdown-menu {
   position: absolute;
   top: 40px;
@@ -181,22 +192,6 @@ body.resizing-sidebar {
 .explorer-header h1 {
   font-size: 24px;
   font-weight: 600;
-}
-
-.explorer-controls button {
-  padding: 6px 12px;
-  margin-left: 8px;
-  background-color: #3e3e42;
-  color: #d4d4d4;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  -webkit-app-region: no-drag; /* Keep buttons clickable */
-}
-
-.explorer-controls button:hover {
-  background-color: #505050;
 }
 
 .explorer-container {
@@ -277,8 +272,20 @@ body.resizing-sidebar {
   min-width: 0;
 }
 
+/* Folder titles: bold and slightly gray-blue to distinguish them from songs */
+.tree-item-content[data-is-folder="true"] .tree-item-label {
+  font-weight: 700;
+  color: #8ea2c4;
+}
+
+/* Empty folders (no songs anywhere inside) are dimmed */
+.tree-item-content.folder-empty {
+  opacity: 0.6;
+}
+
 .tree-item-count {
   font-size: 11px;
+  font-weight: 400;
   color: #6e6e6e;
   margin-left: 0.5rem;
 }

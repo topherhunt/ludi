@@ -5,6 +5,7 @@
   "description": "Fast, intuitive, lightweight MacOS music library & player",
   "main": "src/main/main.js",
   "scripts": {
+    "prestart": "vite build",
     "start": "electron .",
     "dev": "node scripts/dev.js",
     "vite": "vite",
