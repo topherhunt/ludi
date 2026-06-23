@@ -17,17 +17,21 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding-top: 20px; /* Account for macOS traffic lights */
 }
 
+/* The header is the full-width title bar: draggable edge-to-edge from the very
+   top, with left padding so the "Settings" text clears the macOS traffic lights. */
 .settings-header {
-  padding: 20px 24px;
+  min-height: 52px;
+  padding: 0 24px 0 80px;
+  display: flex;
+  align-items: center;
   border-bottom: 1px solid #3e3e42;
   -webkit-app-region: drag;
 }
 
 .settings-header h1 {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 600;
 }
 
@@ -192,8 +196,10 @@ body {
 }
 
 .scan-results-dialog {
-  min-width: 440px;
-  max-width: 520px;
+  /* ~50% wider than the standard dialog so a full song path fits on one line.
+     max-width: 90vw keeps it inside the window if it is resized narrower. */
+  width: 780px;
+  max-width: 90vw;
 }
 
 .modal-title {

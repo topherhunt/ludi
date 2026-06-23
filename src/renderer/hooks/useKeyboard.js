@@ -16,9 +16,9 @@ import { getItemById } from '../utils/api.js';
  * @param {Object} options
  * @param {Function} options.getVisibleItemIds - Returns array of visible item IDs
  * @param {Function} options.onDelete - Called when backspace pressed with selection
- * @param {Function} options.onPlayFolder - Called when Enter/Space pressed on folder
- * @param {Function} options.onPlaySong - Called when Enter/Space pressed on song
- * @param {Function} options.onToggleFolder - Called when Left/Right pressed on folder
+ * @param {Function} options.onPlayFolder - Called when Space pressed on a folder
+ * @param {Function} options.onPlaySong - Called when Enter/Space pressed on a song
+ * @param {Function} options.onRenameFolder - Called when Enter pressed on a single selected folder
  * @param {Function} options.onSeek - Called when Left/Right pressed with no folder selected
  * @param {Function} options.scrollSelectedIntoView - Called after arrow navigation
  */
@@ -28,7 +28,7 @@ export function useKeyboard(options) {
     onDelete,
     onPlayFolder,
     onPlaySong,
-    onToggleFolder,
+    onRenameFolder,
     onSeek,
     scrollSelectedIntoView,
   } = options;
@@ -141,20 +141,21 @@ export function useKeyboard(options) {
       }
 
       if (hasSelectedFolder) {
-        // Collapse (left) or expand (right) selected folders
+        // Collapse (left) or expand (right) selected folders. Click the chevron so
+        // this uses the exact same smooth, no-refetch code path as a manual chevron
+        // click -- the old refetch path reloaded the whole tree, flashing "Loading..."
+        // and jumping the scroll position.
         for (const itemId of selected) {
           const element = document.querySelector(
             `.tree-item-content[data-item-id="${itemId}"]`
           );
           if (element && element.dataset.isFolder === 'true') {
-            const folderId = parseInt(element.dataset.folderId);
-            const isExpanded = element
-              .querySelector('.tree-item-icon.chevron')
-              ?.classList.contains('expanded');
+            const chevron = element.querySelector('.tree-item-icon.chevron');
+            const isExpanded = chevron?.classList.contains('expanded');
             const shouldExpand = e.key === 'ArrowRight';
 
             if (shouldExpand !== isExpanded) {
-              await onToggleFolder?.(folderId);
+              chevron?.click();
             }
           }
         }
@@ -166,7 +167,8 @@ export function useKeyboard(options) {
       return;
     }
 
-    // Enter or Space to play selected item
+    // Enter renames a single selected folder (same as right-click -> Rename).
+    // Space plays a folder; Enter/Space both play a song.
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
 
@@ -180,8 +182,13 @@ export function useKeyboard(options) {
       if (!element) return;
 
       if (element.dataset.isFolder === 'true') {
-        const folderId = parseInt(element.dataset.folderId);
-        onPlayFolder?.(folderId);
+        if (e.key === 'Enter' && selected.size === 1) {
+          const item = await getItemById(firstSelectedId);
+          if (item) onRenameFolder?.(item);
+        } else {
+          const folderId = parseInt(element.dataset.folderId);
+          onPlayFolder?.(folderId);
+        }
       } else {
         const songId = parseInt(element.dataset.songId);
         const item = await getItemById(firstSelectedId);

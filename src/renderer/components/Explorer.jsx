@@ -244,24 +244,13 @@ export function Explorer(props) {
     }
   };
 
-  // Toggle folder expansion
-  const handleToggleFolder = async (folderId) => {
-    const el = document.querySelector(`[data-folder-id="${folderId}"]`);
-    if (!el) return;
-
-    const icon = el.querySelector('.tree-item-icon.chevron');
-    const isExpanded = icon?.classList.contains('expanded');
-    await updateFolderExpanded(folderId, !isExpanded);
-    refetchTree?.();
-  };
-
   // Initialize keyboard navigation
   useKeyboard({
     getVisibleItemIds,
     onDelete: handleDeleteSelected,
     onPlayFolder: props.onPlayFolder,
     onPlaySong: props.onPlaySong,
-    onToggleFolder: handleToggleFolder,
+    onRenameFolder: handleRename,
     onSeek: props.onSeek,
     scrollSelectedIntoView,
   });

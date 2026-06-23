@@ -90,9 +90,9 @@ function createSettingsWindow() {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 600,
+    width: 900,
     height: 500,
-    minWidth: 500,
+    minWidth: 600,
     minHeight: 400,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
