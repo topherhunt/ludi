@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notifyColumnSettingsChanged: (settings) => ipcRenderer.invoke('settings:columnsChanged', settings),
   showInFinder: (filePath) => ipcRenderer.invoke('shell:showInFinder', filePath),
   copyToClipboard: (text) => ipcRenderer.invoke('clipboard:writeText', text),
+  fileExists: (filePath) => ipcRenderer.invoke('fs:fileExists', filePath),
 
   // Media key events
   onMediaKey: (callback) => {

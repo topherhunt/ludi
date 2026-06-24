@@ -98,8 +98,14 @@ export function createAudioPlayer() {
       // prior identical URL and the new load fails with MEDIA_ERR_NETWORK.
       const fileUrl = 'ludi-audio://' + fullPath.replace(/\\/g, '/') + '?_=' + (++loadCounter);
 
-      // Create new Howl instance
-      sound = new Howl({
+      // Create new Howl instance.
+      // 'thisSound' lets the callbacks below detect if they're firing for a stale
+      // (already-replaced) Howl -- e.g. when seeking near the end causes the song
+      // to finish, 'handleTrackEnd' calls playSong again, which calls sound.unload()
+      // on the old Howl while its Range request is still in flight.  Unloading aborts
+      // the request and Howler fires onloaderror for the OLD instance.  Without the
+      // guard, that stale error would show a spurious "File Not Found" dialog.
+      const thisSound = (sound = new Howl({
         src: [fileUrl],
         html5: true,  // Required for long audio files
         volume: isMuted() ? 0 : volume(),
@@ -136,23 +142,35 @@ export function createAudioPlayer() {
           }
           setIsLoading(false);
         },
-        onloaderror: (id, err) => {
+        onloaderror: async (id, err) => {
+          if (sound !== thisSound) return; // stale error from an already-replaced Howl
           console.error('Error loading audio:', err, 'Path:', fileUrl);
-          setError(`Failed to load audio: ${err}`);
+          // Always clear the loading spinner -- otherwise a transient (file-exists)
+          // error would leave the play button stuck spinning forever.
           setIsLoading(false);
-          showAlert(
-            '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>File Not Found',
-            `<p>Could not find audio file:</p><p style="word-break: break-all; font-family: monospace; font-size: 12px;">${fullPath}</p>`
-          );
-          onErrorCallback?.(err);
+
+          // Before showing "File Not Found", verify the file is actually missing.
+          // Howler fires onloaderror for transient streaming errors too (e.g. a
+          // Range request aborted mid-seek), so we must not alarm the user when the
+          // file is present and the error is just a blip in playback.
+          const fileExists = await window.electronAPI.fileExists(fullPath);
+          if (!fileExists) {
+            setError(`Failed to load audio: ${err}`);
+            showAlert(
+              '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>File Not Found',
+              `<p>Could not find audio file:</p><p style="word-break: break-all; font-family: monospace; font-size: 12px;">${fullPath}</p>`
+            );
+            onErrorCallback?.(err);
+          }
         },
         onplayerror: (id, err) => {
+          if (sound !== thisSound) return; // stale error from an already-replaced Howl
           console.error('Error playing audio:', err, 'Path:', fileUrl);
           setError(`Failed to play audio: ${err}`);
           setIsPlaying(false);
           onErrorCallback?.(err);
         },
-      });
+      }));
 
       // Update the playing song ID in the store
       setCurrentPlayingSongId(songId);

@@ -22,7 +22,7 @@ if (isDev) {
 // Register custom protocol for serving local audio files
 // Used in both dev and prod for consistent behavior and proper Range request support (needed for seeking)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'ludi-audio', privileges: { stream: true, bypassCSP: true } }
+  { scheme: 'ludi-audio', privileges: { standard: true, stream: true, bypassCSP: true } }
 ]);
 
 function createWindow() {
@@ -193,77 +193,74 @@ function createMenu() {
 
 app.whenReady().then(() => {
   try {
-    // Register custom protocol handler for local audio files
-    // Used in both dev and prod for consistent behavior
+    // Custom protocol handler for serving local audio files (dev + prod).
     //
     // ============================================================================
-    // CRITICAL: RANGE REQUEST HANDLING IS REQUIRED FOR AUDIO SEEKING
+    // TWO things are required for HTML5 Audio SEEKING to work over this protocol:
     // ============================================================================
-    // When HTML5 Audio elements seek to a position, they send HTTP Range requests
-    // (e.g., "Range: bytes=1000000-") expecting a 206 Partial Content response.
+    // 1. SCHEME PRIVILEGES: the scheme MUST be registered with `standard: true`
+    //    (see protocol.registerSchemesAsPrivileged near the top of this file).
+    //    Without it, Chromium's media stack treats ludi-audio:// as a non-standard
+    //    stream: it caps the forward buffer (~3MB here) and then FAILS to fetch
+    //    beyond it on seek -- the audio element fires MEDIA_ERR_NETWORK (code 2)
+    //    and freezes. Symptom: seek toward the end of a long song -> "Error loading
+    //    audio: 2" and playback stops (and, depending on bitrate, the song appears
+    //    truncated, e.g. only the first ~43s of a 192kbps track plays).
+    //    `standard: true` makes Chromium treat it like http and seek properly.
     //
-    // A naive implementation like `return net.fetch('file://' + filePath)` will
-    // NOT handle Range requests - it returns the entire file with 200 OK.
-    // This causes a subtle but severe bug:
-    //   - The seek bar UI updates correctly (shows the target position)
-    //   - But the actual audio plays from the WRONG position (often much earlier)
-    //   - The mismatch worsens with longer files (3+ minutes)
+    // 2. RANGE REQUESTS: HTML5 Audio seeks by sending "Range: bytes=START-" and
+    //    expects a 206 Partial Content response with a Content-Range header. We
+    //    parse the range and stream exactly those bytes. A naive full-file 200 for
+    //    every request makes the seek bar move while audio plays the wrong spot.
     //
-    // The fix: Manually parse Range headers and return proper 206 responses with
-    // Content-Range headers. This is how real HTTP servers serve streamable media.
-    //
-    // DO NOT simplify this to just `net.fetch()` - it will break seeking!
-    // ============================================================================
+    // Note: the initial request is the open-ended "bytes=0-" -- we answer it with a
+    // 206 spanning the whole file, which is correct. Chromium estimates duration
+    // from the bytes it actually receives, so we must NOT cap/truncate responses --
+    // doing so corrupts the reported duration (a capped 1MB chunk made a 2:33 song
+    // report as 0:32). (Both behaviors are covered by tests/e2e/seek-near-end.spec.js.)
     protocol.handle('ludi-audio', async (request) => {
-      // Strip any cache-busting query string (e.g. "?_=123") before touching disk.
-      // The renderer appends one per load so Chromium treats each playback as a
-      // distinct request rather than reusing/aborting an identical in-flight URL.
-      const withoutScheme = request.url.replace('ludi-audio://', '').split('?')[0];
-      const filePath = decodeURIComponent(withoutScheme);
+      // With `standard: true`, the URL parses as ludi-audio://<authority>/<path>.
+      // Our URLs are ludi-audio:///abs/path (empty authority), so strip the scheme
+      // and ensure a leading slash. Drop any "?_=N" cache-buster before touching disk.
+      const withoutScheme = request.url.replace(/^ludi-audio:\/\//, '').split('?')[0];
+      const filePath = decodeURIComponent(withoutScheme.startsWith('/') ? withoutScheme : '/' + withoutScheme);
       const contentType = audioContentType(filePath);
+      const toWeb = require('stream').Readable.toWeb;
 
-      const stats = fs.statSync(filePath);
-      const fileSize = stats.size;
-
-      // Check for Range header - this is how HTML5 Audio implements seeking
-      const rangeHeader = request.headers.get('Range');
-
-      if (rangeHeader) {
-        // Parse range header: "bytes=start-end" or "bytes=start-"
-        const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-        if (match) {
-          const start = parseInt(match[1], 10);
-          const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
-          const chunkSize = end - start + 1;
-
-          // Read the requested portion of the file
-          const buffer = Buffer.alloc(chunkSize);
-          const fd = fs.openSync(filePath, 'r');
-          fs.readSync(fd, buffer, 0, chunkSize, start);
-          fs.closeSync(fd);
-
-          // Return 206 Partial Content with proper headers
-          return new Response(buffer, {
-            status: 206,
-            headers: {
-              'Content-Type': contentType,
-              'Content-Length': String(chunkSize),
-              'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-              'Accept-Ranges': 'bytes',
-            },
-          });
-        }
+      let fileSize;
+      try {
+        fileSize = (await fs.promises.stat(filePath)).size;
+      } catch (err) {
+        console.error('ludi-audio: file not found:', filePath, err.message);
+        return new Response(null, { status: 404 });
       }
 
-      // No range header - return full file with Accept-Ranges header
-      const buffer = fs.readFileSync(filePath);
-      return new Response(buffer, {
+      // Range request (seeking, and the initial open-ended bytes=0-): 206 partial.
+      const rangeHeader = request.headers.get('Range');
+      const match = rangeHeader && rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+        // Guard a range starting past EOF (e.g. stored duration slightly long).
+        if (start >= fileSize) {
+          return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${fileSize}` } });
+        }
+        const clampedEnd = Math.min(end, fileSize - 1);
+        return new Response(toWeb(fs.createReadStream(filePath, { start, end: clampedEnd })), {
+          status: 206,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Length': String(clampedEnd - start + 1),
+            'Content-Range': `bytes ${start}-${clampedEnd}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
+      // No Range header: stream the whole file.
+      return new Response(toWeb(fs.createReadStream(filePath)), {
         status: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Content-Length': String(fileSize),
-          'Accept-Ranges': 'bytes',
-        },
+        headers: { 'Content-Type': contentType, 'Content-Length': String(fileSize), 'Accept-Ranges': 'bytes' },
       });
     });
 
@@ -812,4 +809,13 @@ ipcMain.handle('shell:showInFinder', (event, filePath) => {
 ipcMain.handle('clipboard:writeText', (event, text) => {
   clipboard.writeText(String(text));
   return true;
+});
+
+ipcMain.handle('fs:fileExists', (event, filePath) => {
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
 });
