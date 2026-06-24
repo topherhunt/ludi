@@ -1,6 +1,5 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- [ ] Current song should have a faint gray-blue background
 - [ ] Add tagging support
   - Each song, and each folder/list, can be tagged. Items in a folder/list inherit its tags.
   - Show info about the selected item(s) in the bottom part of the left sidebar. Including all applied tags. Right-click a tag and click "Remove Tag" to remove it. Click the + next to tags to add a tag, by typing (with autocomplete).

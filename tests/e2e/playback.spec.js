@@ -58,6 +58,32 @@ test.describe('Playback', () => {
     window.off('console', errorHandler);
   });
 
+  test('should highlight the currently-playing song row', async ({ window }) => {
+    const testFilePath = path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+    await window.evaluate(async (filePath) => {
+      await window.electronAPI.importFiles({ filePaths: [filePath], parentListId: 0, position: 0 });
+    }, testFilePath);
+
+    const mainLibraryItem = await window.locator('.playlist-item').first();
+    await mainLibraryItem.click();
+    await window.waitForTimeout(100);
+
+    const songItem = await window.locator('.tree-item-content[data-is-folder="false"]').first();
+    await expect(songItem).toBeVisible({ timeout: 2000 });
+
+    await songItem.dblclick();
+    await window.waitForTimeout(300);
+
+    const playPauseBtn = await window.locator('#playPauseBtn');
+    await expect(playPauseBtn).toHaveClass(/playing/);
+
+    // The playing song's row now gets the faint-green highlight class.
+    await expect(songItem).toHaveClass(/current-song/);
+
+    await playPauseBtn.click();
+    await window.waitForTimeout(50);
+  });
+
   test('should play song when Enter key is pressed', async ({ window }) => {
     const playbackErrors = [];
     const errorHandler = msg => {

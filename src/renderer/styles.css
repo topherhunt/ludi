@@ -256,6 +256,10 @@ body.resizing-sidebar {
 }
 
 /* Tree item states - moved base styles to column layout section */
+.tree-item-content.current-song {
+  background-color: rgba(78, 201, 176, 0.12);
+}
+
 .tree-item-content:hover {
   background-color: #2a2d2e;
 }

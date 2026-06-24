@@ -86,10 +86,26 @@ export function App() {
   // Get audio player (singleton)
   const player = getAudioPlayer();
 
+  // Keep the OS "Now Playing" media session in sync. macOS only routes the
+  // hardware next/previous-track keys to the app that owns an active media
+  // session with action handlers (set in the media-key onMount below); without
+  // this, only play/pause works -- Chromium binds that key to the <audio>
+  // element by default, but next/prev have no default and need this.
+  const updateMediaSession = (state) => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: songTitle() || 'Unknown',
+      artist: songArtist() || '',
+    });
+    navigator.mediaSession.playbackState = state;
+  };
+
   // Set up audio player callbacks
   onMount(() => {
     player.onEnd(handleTrackEnd);
     player.onError((err) => console.error('Audio error:', err));
+    player.onPlay(() => updateMediaSession('playing'));
+    player.onPause(() => updateMediaSession('paused'));
   });
 
   // Listen for column settings changes from Settings window
@@ -122,6 +138,16 @@ export function App() {
           break;
       }
     });
+
+    // Route the OS Now Playing controls / hardware media keys to the same
+    // handlers. This is what actually makes the next/previous keys work on
+    // macOS (the globalShortcut registrations in main.js do not fire there).
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
+      navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => handlePrevious());
+      navigator.mediaSession.setActionHandler('nexttrack', () => handleNext());
+    }
   });
 
   // Handle track end - play next, loop, or stop

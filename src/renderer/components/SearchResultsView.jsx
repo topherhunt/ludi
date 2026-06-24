@@ -93,6 +93,7 @@ function SearchSongRow(props) {
     <li class="tree-item">
       <div
         class="tree-item-content qa-search-song"
+        classList={{ 'current-song': isCurrent() }}
         style={{ 'grid-template-columns': gridTemplateColumns() }}
         data-item-id={props.song.item_id}
         data-is-folder="false"

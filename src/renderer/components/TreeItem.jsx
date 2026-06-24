@@ -175,7 +175,7 @@ export function TreeItem(props) {
     <li class="tree-item" data-item-id={props.item.id}>
       <div
         class="tree-item-content"
-        classList={{ selected: isSelected(), 'folder-empty': isEmptyFolder() }}
+        classList={{ selected: isSelected(), 'folder-empty': isEmptyFolder(), 'current-song': isCurrentSong() }}
         data-item-id={props.item.id}
         data-is-folder={isFolder()}
         data-folder-id={isFolder() ? props.item.list_id : undefined}

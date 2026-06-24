@@ -8,11 +8,22 @@ test.describe('Sidebar resize', () => {
     const resizer = window.locator('.qa-sidebar-resizer');
     await expect(resizer).toBeVisible();
 
+    // Start from a known narrow width so there's always room to grow. The app
+    // persists the width across the shared test session, so a prior test may
+    // have left it at the max -- clamp to the minimum first by dragging far left.
+    let box = await resizer.boundingBox();
+    let y = box.y + 120;
+    await window.mouse.move(box.x + box.width / 2, y);
+    await window.mouse.down();
+    await window.mouse.move(box.x + box.width / 2 - 600, y, { steps: 8 });
+    await window.mouse.up();
+    await window.waitForTimeout(50);
+
     const before = parseInt(await window.evaluate(readVar), 10);
 
     // Drag the divider 80px to the right.
-    const box = await resizer.boundingBox();
-    const y = box.y + 120;
+    box = await resizer.boundingBox();
+    y = box.y + 120;
     await window.mouse.move(box.x + box.width / 2, y);
     await window.mouse.down();
     await window.mouse.move(box.x + box.width / 2 + 80, y, { steps: 8 });
