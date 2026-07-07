@@ -1,6 +1,10 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Resolve the absolute filesystem path for a dropped File object.
+  // Electron 32+ removed File.path; webUtils.getPathForFile is the replacement.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+
   // Database operations
   getLists: () => ipcRenderer.invoke('db:getLists'),
   getListItems: (listId) => ipcRenderer.invoke('db:getListItems', listId),

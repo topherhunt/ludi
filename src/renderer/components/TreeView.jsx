@@ -253,8 +253,9 @@ export function TreeView(props) {
       e.preventDefault();
 
       const files = Array.from(e.dataTransfer.files);
-      // Pass all file/folder paths to the backend - it handles filtering and folder scanning
-      const paths = files.map((f) => f.path);
+      // Pass all file/folder paths to the backend - it handles filtering and folder scanning.
+      // Electron 32+ removed File.path; resolve via webUtils exposed in preload.
+      const paths = files.map((f) => window.electronAPI.getPathForFile(f));
 
       if (paths.length > 0 && externalDropTarget) {
         const result = await addSongsToList(externalDropTarget.listId, paths, externalDropTarget.position);
@@ -480,8 +481,9 @@ export function TreeView(props) {
     clearDragState();
 
     const files = Array.from(e.dataTransfer.files);
-    // Pass all file/folder paths to the backend - it handles filtering and folder scanning
-    const paths = files.map((f) => f.path);
+    // Pass all file/folder paths to the backend - it handles filtering and folder scanning.
+    // Electron 32+ removed File.path; resolve via webUtils exposed in preload.
+    const paths = files.map((f) => window.electronAPI.getPathForFile(f));
 
     if (paths.length > 0) {
       const dropTarget = externalDropTarget || { listId: currentListId(), position: undefined };

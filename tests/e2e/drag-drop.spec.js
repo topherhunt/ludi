@@ -1,5 +1,7 @@
 const { test, expect, testAudioDir } = require('./fixtures');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 test.describe('Drag and Drop', () => {
   // Ensure we have items to work with
@@ -405,5 +407,66 @@ test.describe('Drag and Drop', () => {
     await window.waitForTimeout(100);
     await window.click('#modalYesBtn');
     await window.waitForTimeout(100);
+  });
+
+  // Regression: Electron 32+ removed File.path, so dropping OS files sent
+  // `undefined` paths to files:import ("path argument must be of type string").
+  // The renderer must resolve paths via webUtils.getPathForFile (preload).
+  test('imports an OS file dropped onto the library (resolves real path via webUtils)', async ({ window }) => {
+    await window.keyboard.press('Escape');
+    await window.waitForTimeout(50);
+    await window.locator('.playlist-item').first().click();
+    await window.waitForTimeout(100);
+
+    // A uniquely-named copy guarantees a fresh import (no duplicate-skip),
+    // so a working drop always adds exactly one row.
+    const uniqueFile = path.join(os.tmpdir(), `ludi-dragdrop-${Date.now()}.m4a`);
+    fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), uniqueFile);
+
+    const songRows = window.locator('.tree-item-content[data-is-folder="false"]');
+    const before = await songRows.count();
+    const idsBefore = await window.$$eval('.tree-item-content[data-song-id]', els => els.map(e => e.dataset.songId));
+
+    // A real <input type=file> yields an OS-backed File; only then does
+    // webUtils.getPathForFile resolve a path (the exact thing the bug broke).
+    await window.evaluate(() => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'qa-drop-file-input';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+    });
+    await window.setInputFiles('#qa-drop-file-input', uniqueFile);
+
+    const resolvedPath = await window.evaluate(() => {
+      const f = document.getElementById('qa-drop-file-input').files[0];
+      return window.electronAPI.getPathForFile(f);
+    });
+    expect(resolvedPath).toContain('ludi-dragdrop-');
+
+    // Dispatch a real dragover+drop carrying that file onto the library container.
+    await window.evaluate(() => {
+      const f = document.getElementById('qa-drop-file-input').files[0];
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      const container = document.getElementById('explorerContainer');
+      for (const type of ['dragover', 'drop']) {
+        container.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }
+    });
+
+    await expect(songRows).toHaveCount(before + 1, { timeout: 2000 });
+
+    // Clean up: delete the newly added song and the temp file.
+    const newId = await window.evaluate((prev) => {
+      const ids = [...document.querySelectorAll('.tree-item-content[data-song-id]')].map(e => e.dataset.songId);
+      return ids.find(id => !prev.includes(id));
+    }, idsBefore);
+    await window.locator(`.tree-item-content[data-song-id="${newId}"]`).click();
+    await window.keyboard.press('Backspace');
+    await window.waitForTimeout(100);
+    await window.click('#modalYesBtn');
+    await window.waitForTimeout(100);
+    fs.unlinkSync(uniqueFile);
   });
 });
