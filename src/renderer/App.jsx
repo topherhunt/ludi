@@ -28,6 +28,7 @@ import {
   currentPlayingSongId,
   setCurrentPlayingSongId,
   setCurrentPlayingItemId,
+  setPlayingRootListId,
   isPlaying,
   setIsPlaying,
   hasNextTrack,
@@ -35,7 +36,7 @@ import {
   loopMode,
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
-import { getSongsInList, getSong } from './utils/api.js';
+import { getSongsInList, getSong, getRootListId } from './utils/api.js';
 
 /**
  * Main App component
@@ -224,6 +225,7 @@ export function App() {
 
     setPlaylist(songs);
     setCurrentTrackIndex(0);
+    setPlayingRootListId(await getRootListId(listId));
     await playCurrentTrack();
   };
 
@@ -240,6 +242,7 @@ export function App() {
 
     setPlaylist(songs);
     setCurrentTrackIndex(songIndex);
+    setPlayingRootListId(await getRootListId(parentListId));
     await playCurrentTrack();
   };
 
@@ -369,7 +372,7 @@ export function App() {
       });
       explorerRefetch?.();
       hideRenameModal();
-    });
+    }, 'Add Folder In Playlist');
   };
 
   return (
@@ -454,6 +457,7 @@ export function App() {
       <Show when={renameModalState().isOpen}>
         <RenameModal
           open={true}
+          title={renameModalState().title}
           value={renameModalState().defaultValue}
           onSubmit={(value) => {
             renameModalState().onConfirm?.(value);

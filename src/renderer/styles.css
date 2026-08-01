@@ -197,12 +197,31 @@ body.resizing-sidebar {
 }
 
 .playlist-item {
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
   margin-bottom: 4px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
   -webkit-app-region: no-drag;
+}
+
+/* Marks the playlist the current queue is playing from. Same colors as the
+   playing/paused song row in the tree. */
+.playlist-item-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.playlist-item-icon.playing {
+  color: #4ec9b0;
+}
+
+.playlist-item-icon.paused {
+  color: #e69500;
 }
 
 .playlist-item:hover {
@@ -693,6 +712,14 @@ body.resizing-sidebar {
 
 .context-menu-item:hover {
   background-color: #094771;
+}
+
+/* Leading glyph on a menu item; fixed width so the labels stay aligned. */
+.context-menu-icon {
+  display: inline-block;
+  width: 16px;
+  margin-right: 6px;
+  text-align: center;
 }
 
 .context-menu-separator {
@@ -1415,15 +1442,24 @@ body.resizing-sidebar {
 .tag-color-popover {
   position: fixed;
   z-index: 10001;
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 6px;
   padding: 10px;
   background: #3c3c3c;
   border: 1px solid #555;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   width: 220px;
+}
+.tag-color-popover-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #999;
+  margin-bottom: 8px;
+}
+.tag-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
 }
 .tag-color-swatch {
   width: 18px;

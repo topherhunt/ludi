@@ -9,6 +9,8 @@ const {
   setCurrentPlayingSongId,
   currentPlayingItemId,
   setCurrentPlayingItemId,
+  playingRootListId,
+  setPlayingRootListId,
   playlist,
   setPlaylist,
   currentTrackIndex,
@@ -34,6 +36,11 @@ const {
   // so the song id alone can't say which one -- rows are identified by their
   // list_items id.
   const [currentPlayingItemId, setCurrentPlayingItemId] = createSignal(null);
+
+  // Which sidebar playlist the current queue was started from. A queue can be
+  // scoped to a folder deep inside a playlist, so this is the ROOT list of that
+  // folder -- it's what the sidebar marks with the playing indicator.
+  const [playingRootListId, setPlayingRootListId] = createSignal(null);
 
   // Playlist state
   const [playlist, setPlaylist] = createSignal([]);
@@ -84,6 +91,8 @@ const {
     setCurrentPlayingSongId,
     currentPlayingItemId,
     setCurrentPlayingItemId,
+    playingRootListId,
+    setPlayingRootListId,
     playlist,
     setPlaylist,
     currentTrackIndex,
@@ -214,6 +223,7 @@ function clearPlayback() {
   setIsPlaying(false);
   setCurrentPlayingSongId(null);
   setCurrentPlayingItemId(null);
+  setPlayingRootListId(null);
   setPlaylist([]);
   setCurrentTrackIndex(-1);
   setCurrentPlaylistId(null);
@@ -242,6 +252,8 @@ export {
   setCurrentPlayingSongId,
   currentPlayingItemId,
   setCurrentPlayingItemId,
+  playingRootListId,
+  setPlayingRootListId,
   playlist,
   setPlaylist,
   currentTrackIndex,

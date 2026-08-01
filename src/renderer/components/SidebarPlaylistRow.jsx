@@ -1,4 +1,6 @@
+import { Show } from 'solid-js';
 import { currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { isPlaying, currentPlayingItemId, playingRootListId } from '../stores/playback.js';
 import {
   dragSource,
   draggedItemIds,
@@ -34,6 +36,11 @@ export function SidebarPlaylistRow(props) {
   let rowRef;
 
   const isMainLibrary = () => props.list.id === MAIN_LIBRARY_ID;
+
+  // The queue was built from this playlist (or from a folder inside it), so it
+  // gets the same play/pause marker a playing song row gets in the tree.
+  const isPlayingFromHere = () =>
+    currentPlayingItemId() !== null && playingRootListId() === props.list.id;
 
   // What this row would do with the drag currently in progress.
   const dropMode = (e) => {
@@ -135,7 +142,7 @@ export function SidebarPlaylistRow(props) {
       class="playlist-item qa-playlist-item"
       classList={{ active: currentListId() === props.list.id }}
       data-list-id={props.list.id}
-      style={{ 'padding-left': `${12 + props.depth * 16}px` }}
+      style={{ 'padding-left': `${6 + props.depth * 16}px` }}
       draggable={!isMainLibrary()}
       onClick={() => props.onSelect(props.list)}
       onDblClick={() => props.onPlay(props.list)}
@@ -146,6 +153,13 @@ export function SidebarPlaylistRow(props) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <Show when={isPlayingFromHere()}>
+        <i
+          class={`playlist-item-icon qa-playlist-playing bi ${
+            isPlaying() ? 'bi-play-fill playing' : 'bi-pause-fill paused'
+          }`}
+        />
+      </Show>
       {props.list.title}
     </div>
   );

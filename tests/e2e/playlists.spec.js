@@ -407,6 +407,124 @@ test.describe('Playlists', () => {
     await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), second.itemId);
   });
 
+  test('the playlist context menu reads Play / Rename / Delete, each with its icon', async ({ window }) => {
+    const name = `PL Menu ${STAMP}`;
+    await makePlaylist(window, name);
+
+    await playlistRow(window, name).click({ button: 'right' });
+    const menu = window.locator('.playlist-context-menu');
+    await expect(menu.locator('.qa-playlist-play')).toHaveText('Play');
+    await expect(menu.locator('.qa-playlist-rename')).toHaveText('Rename');
+    await expect(menu.locator('.qa-playlist-delete')).toHaveText('Delete');
+    await expect(menu.locator('.qa-playlist-play i')).toHaveClass(/bi-play-fill/);
+    await expect(menu.locator('.qa-playlist-rename i')).toHaveClass(/bi-pencil/);
+    await expect(menu.locator('.qa-playlist-delete i')).toHaveClass(/bi-trash/);
+
+    // The Main Library can only be played.
+    await window.keyboard.press('Escape');
+    await mainLibraryRow(window).click({ button: 'right' });
+    await expect(menu.locator('.qa-playlist-play')).toHaveText('Play');
+    await expect(menu.locator('.qa-playlist-rename')).toHaveCount(0);
+    await window.keyboard.press('Escape');
+
+    await removePlaylist(window, name);
+  });
+
+  test('the playlist rename dialog is titled "Rename Playlist"', async ({ window }) => {
+    const before = `PL RenA ${STAMP}`;
+    const after = `PL RenB ${STAMP}`;
+    await makePlaylist(window, before);
+
+    await playlistRow(window, before).click({ button: 'right' });
+    await window.click('.qa-playlist-rename');
+    await expect(window.locator('#renameModalTitle')).toHaveText('Rename Playlist');
+
+    await window.fill('#renameInput', after);
+    await window.click('#renameOkBtn');
+    await expect(playlistRow(window, after)).toBeVisible({ timeout: 2000 });
+    await expect(playlistRow(window, before)).toHaveCount(0);
+
+    await removePlaylist(window, after);
+  });
+
+  test('the sidebar marks which playlist the current queue is playing from', async ({ window }) => {
+    const name = `PL Ind ${STAMP}`;
+    await makePlaylist(window, name);
+    const listId = await playlistIdOf(window, name);
+    await window.evaluate(
+      ({ itemId, targetListId }) =>
+        window.electronAPI.copyItemsToList({ itemIds: [itemId], targetListId, skipSongIds: [] }),
+      { itemId: song.itemId, targetListId: listId }
+    );
+
+    const marker = (row) => row.locator('.qa-playlist-playing');
+    const playPauseBtn = window.locator('#playPauseBtn');
+
+    await playlistRow(window, name).dblclick();
+    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(marker(playlistRow(window, name))).toHaveClass(/bi-play-fill/);
+    await expect(marker(mainLibraryRow(window))).toHaveCount(0);
+
+    // Pausing keeps the marker where it is and switches it to the pause glyph.
+    await playPauseBtn.click();
+    await expect(playPauseBtn).not.toHaveClass(/playing/);
+    await expect(marker(playlistRow(window, name))).toHaveClass(/bi-pause-fill/);
+
+    // Playing the Main Library moves the marker there.
+    await mainLibraryRow(window).dblclick();
+    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(marker(mainLibraryRow(window))).toHaveClass(/bi-play-fill/);
+    await expect(marker(playlistRow(window, name))).toHaveCount(0);
+    await playPauseBtn.click();
+
+    await removePlaylist(window, name);
+  });
+
+  test('playing a song inside a folder marks the playlist that folder belongs to', async ({ window }) => {
+    const name = `PL Nest ${STAMP}`;
+    await makePlaylist(window, name);
+    const listId = await playlistIdOf(window, name);
+
+    // Copy the song in, then tuck that placement inside a folder. Double-clicking
+    // it scopes playback to the folder, so the marker has to walk up to the root.
+    const placedItemId = await window.evaluate(
+      async ({ itemId, targetListId }) => {
+        await window.electronAPI.copyItemsToList({ itemIds: [itemId], targetListId, skipSongIds: [] });
+        const items = await window.electronAPI.getListItems(targetListId);
+        const folderId = await window.electronAPI.addFolder({
+          parentListId: targetListId,
+          position: 0,
+          title: 'Nested',
+        });
+        await window.electronAPI.moveItem({
+          itemId: items[0].id,
+          newParentListId: folderId,
+          newPosition: 0,
+        });
+        return items[0].id;
+      },
+      { itemId: song.itemId, targetListId: listId }
+    );
+    expect(placedItemId).toBeTruthy();
+
+    await openList(window, playlistRow(window, name));
+    const folderRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'Nested' });
+    await expect(folderRow).toBeVisible({ timeout: 2000 });
+    await folderRow.locator('.tree-item-icon.chevron').click();
+
+    const nestedSong = songRow(window, song.songId);
+    await expect(nestedSong).toHaveCount(1, { timeout: 2000 });
+    await nestedSong.dblclick();
+
+    const playPauseBtn = window.locator('#playPauseBtn');
+    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playlistRow(window, name).locator('.qa-playlist-playing')).toHaveClass(/bi-play-fill/);
+    await expect(mainLibraryRow(window).locator('.qa-playlist-playing')).toHaveCount(0);
+    await playPauseBtn.click();
+
+    await removePlaylist(window, name);
+  });
+
   test('an OS file dropped on a playlist row lands in both the playlist and the Main Library', async ({ window }) => {
     const name = `PL Drop ${STAMP}`;
     await makePlaylist(window, name);

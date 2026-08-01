@@ -364,6 +364,12 @@ ipcMain.handle('db:flattenFolder', (event, listId) => {
   return db.flattenFolder(listId);
 });
 
+// The root list a (possibly nested) list belongs to -- i.e. which sidebar
+// playlist a folder lives in.
+ipcMain.handle('db:getRootListId', (event, listId) => {
+  return db.getRootListId(listId);
+});
+
 // ---- Playlists ----
 // Note: playlist rename goes through db:renameFolder -- it's the same UPDATE.
 ipcMain.handle('db:createPlaylist', (event, title) => {

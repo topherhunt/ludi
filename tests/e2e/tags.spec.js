@@ -176,6 +176,50 @@ test.describe('Tags', () => {
     expect(normalized).toBe(swatchColor);
   });
 
+  test('the tag rename dialog is titled "Rename Tag"', async ({ window }) => {
+    await gotoLibrary(window);
+    await window.locator(SONG_ROW).first().click();
+    await createTag(window, 'titledtag');
+
+    const chip = window.locator('.qa-tags-section .tag-pill', { hasText: 'titledtag' });
+    await chip.dispatchEvent('contextmenu');
+    await window.locator('.qa-tag-rename').click();
+
+    await expect(window.locator('#renameModalTitle')).toHaveText('Rename Tag');
+    await window.locator('#renameCancelBtn').click();
+  });
+
+  test('the color popover is titled "Pick tag color" and stays inside the viewport near an edge', async ({ window }) => {
+    await gotoLibrary(window);
+    await window.locator(SONG_ROW).first().click();
+    await createTag(window, 'edgetag');
+
+    await expect(window.locator('.qa-tags-section .tag-pill', { hasText: 'edgetag' })).toBeVisible();
+    const viewport = await window.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+    // Right-click in the bottom-right corner: the popover would otherwise open
+    // below the fold with nothing to scroll it back into view.
+    await window.evaluate(({ x, y }) => {
+      const el = [...document.querySelectorAll('.qa-tags-section .tag-pill')]
+        .find((p) => p.textContent === 'edgetag');
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }, { x: viewport.w - 20, y: viewport.h - 20 });
+    // The menu itself opens at the cursor and is mostly off-screen here, so the
+    // item is clicked by dispatch rather than by hit-testing a real mouse click.
+    await window.locator('.qa-tag-change-color').dispatchEvent('click');
+
+    const popover = window.locator('.tag-color-popover');
+    await expect(popover).toBeVisible();
+    await expect(popover.locator('.qa-tag-color-title')).toHaveText('Pick tag color');
+
+    const box = await popover.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.w);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.h);
+
+    await window.keyboard.press('Escape');
+  });
+
   test('Rename via context menu updates the chip and column pills', async ({ window }) => {
     await gotoLibrary(window);
     await window.locator(SONG_ROW).first().click();

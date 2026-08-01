@@ -143,8 +143,10 @@ function handleModalResponse(confirmed) {
  * Show rename modal
  * @param {string} defaultValue - Default value for the input field
  * @param {Function} onConfirm - Called with new value when user clicks OK
+ * @param {string} [title] - Dialog heading; falls back to "Rename" when omitted
  */
-function showRenameModal(defaultValue, onConfirm) {
+function showRenameModal(defaultValue, onConfirm, title = '') {
+  setRenameModalTitle(title);
   setRenameModalValue(defaultValue);
   setRenameModalCallback(() => (value) => {
     closeRenameModal();
@@ -245,11 +247,12 @@ function confirmModalState() {
 
 /**
  * Get rename modal state
- * @returns {{ isOpen: boolean, defaultValue: string, onConfirm: Function | null }}
+ * @returns {{ isOpen: boolean, title: string, defaultValue: string, onConfirm: Function | null }}
  */
 function renameModalState() {
   return {
     isOpen: isRenameModalOpen(),
+    title: renameModalTitle(),
     defaultValue: renameModalValue(),
     onConfirm: renameModalCallback(),
   };

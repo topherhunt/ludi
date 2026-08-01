@@ -21,6 +21,10 @@ import { isSearching, runSearch } from '../stores/search.js';
 import { SearchResultsView } from './SearchResultsView.jsx';
 import { AdvancedSearchModal } from './AdvancedSearchModal.jsx';
 
+// Every "create a folder here" dialog shares one heading, whether it is opened
+// from the sidebar's + menu or from the tree's context menu.
+const ADD_FOLDER_TITLE = 'Add Folder In Playlist';
+
 /**
  * Explorer panel - contains header, column headers, and tree view
  */
@@ -64,7 +68,7 @@ export function Explorer(props) {
       await addFolder(parentListId, 0, folderName);
       refetchTree?.();
       hideRenameModal();
-    });
+    }, ADD_FOLDER_TITLE);
   };
 
   // Add folder after an item
@@ -73,7 +77,7 @@ export function Explorer(props) {
       await addFolder(parentListId, position, folderName);
       refetchTree?.();
       hideRenameModal();
-    });
+    }, ADD_FOLDER_TITLE);
   };
 
   // Handle new folder from header dropdown
@@ -98,7 +102,7 @@ export function Explorer(props) {
       await addFolder(parentListId, position, folderName);
       refetchTree?.();
       hideRenameModal();
-    });
+    }, ADD_FOLDER_TITLE);
   };
 
   // Move selected items into a new folder

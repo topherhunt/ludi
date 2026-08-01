@@ -49,6 +49,25 @@ test.describe('Folder Operations', () => {
     await window.waitForTimeout(50);
   });
 
+  test('both Add Folder dialogs are titled "Add Folder In Playlist"', async ({ window }) => {
+    await window.keyboard.press('Escape');
+    await window.locator('.playlist-item').first().click();
+    await window.waitForTimeout(100);
+
+    // From the sidebar's + menu...
+    await window.click('#addLibraryBtn');
+    await window.click('#newFolderMenuItem');
+    await expect(window.locator('#renameModalTitle')).toHaveText('Add Folder In Playlist');
+    await window.locator('#renameCancelBtn').click();
+
+    // ...and from a song's context menu.
+    const songItem = window.locator('.tree-item-content[data-is-folder="false"]').first();
+    await songItem.click({ button: 'right' });
+    await window.getByText('Add Folder After', { exact: true }).click();
+    await expect(window.locator('#renameModalTitle')).toHaveText('Add Folder In Playlist');
+    await window.locator('#renameCancelBtn').click();
+  });
+
   test('should create new folder and then delete it', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);

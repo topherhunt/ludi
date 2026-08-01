@@ -16,6 +16,7 @@ function getAPI() {
     getLists: async () => [],
     getListItems: async () => [],
     getAllListItems: async () => [],
+    getRootListId: async (listId) => listId,
     getItem: async () => null,
     getSong: async () => null,
     addFolder: async () => ({ id: 0 }),
@@ -73,6 +74,16 @@ export async function getListItems(listId) {
 
 export async function getAllListItems() {
   return getAPI().getAllListItems();
+}
+
+/**
+ * Walk up to the root list a (possibly nested) list belongs to -- i.e. which
+ * sidebar playlist a folder lives in. A root list returns its own id.
+ * @param {number} listId
+ * @returns {Promise<number>}
+ */
+export async function getRootListId(listId) {
+  return getAPI().getRootListId(listId);
 }
 
 /**

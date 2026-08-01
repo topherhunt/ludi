@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateFolderExpanded: (data) => ipcRenderer.invoke('db:updateFolderExpanded', data),
   sortFolderContents: (listId, sortBy) => ipcRenderer.invoke('db:sortFolderContents', { listId, sortBy }),
   flattenFolder: (listId) => ipcRenderer.invoke('db:flattenFolder', listId),
+  getRootListId: (listId) => ipcRenderer.invoke('db:getRootListId', listId),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
 
   // Playlist operations (rename goes through renameFolder -- same UPDATE)

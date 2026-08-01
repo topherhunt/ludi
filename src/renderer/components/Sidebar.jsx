@@ -1,4 +1,4 @@
-import { For, createResource, createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { For, createResource, createSignal, createEffect, onMount, onCleanup, Show } from 'solid-js';
 import { currentListId, setCurrentListId, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import {
   getLists,
@@ -35,6 +35,7 @@ export function Sidebar(props) {
   const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
   let draggingTagId = null;
   let playlistListRef;
+  let colorPopoverRef;
 
   // Fetch lists from database
   const [lists, { refetch }] = createResource(getLists);
@@ -109,13 +110,27 @@ export function Sidebar(props) {
       }
       await renameTag(tag.id, trimmed);
       await refreshAfterTagChange();
-    });
+    }, 'Rename Tag');
   };
 
   const handleChangeColor = (tag, x, y) => {
     setTagMenu(null);
     setColorPicker({ x, y, tag });
   };
+
+  // The popover opens at the cursor, so right-clicking a tag low in the window
+  // would push it past the bottom edge -- and nothing scrolls to bring it back.
+  // Measure it once it's in the DOM and pull it back inside the viewport.
+  const VIEWPORT_MARGIN = 8;
+  createEffect(() => {
+    const picker = colorPicker();
+    if (!picker || !colorPopoverRef) return;
+    const { width, height } = colorPopoverRef.getBoundingClientRect();
+    const maxLeft = window.innerWidth - width - VIEWPORT_MARGIN;
+    const maxTop = window.innerHeight - height - VIEWPORT_MARGIN;
+    colorPopoverRef.style.left = `${Math.max(VIEWPORT_MARGIN, Math.min(picker.x, maxLeft))}px`;
+    colorPopoverRef.style.top = `${Math.max(VIEWPORT_MARGIN, Math.min(picker.y, maxTop))}px`;
+  });
 
   const handlePickColor = async (tag, color) => {
     setColorPicker(null);
@@ -202,7 +217,7 @@ export function Sidebar(props) {
       await renameFolder(list.id, trimmed);
       await refetch();
       if (currentListId() === list.id) props.onListChange?.(list.id);
-    });
+    }, 'Rename Playlist');
   };
 
   const handleDeletePlaylist = (list) => {
@@ -431,14 +446,14 @@ export function Sidebar(props) {
               handlePlayPlaylist(list);
             }}
           >
-            Play This Playlist
+            <i class="bi bi-play-fill context-menu-icon"></i>Play
           </div>
           <Show when={playlistMenu().list.id !== MAIN_LIBRARY_ID}>
             <div class="context-menu-item qa-playlist-rename" onClick={() => handleRenamePlaylist(playlistMenu().list)}>
-              Rename
+              <i class="bi bi-pencil context-menu-icon"></i>Rename
             </div>
             <div class="context-menu-item qa-playlist-delete" onClick={() => handleDeletePlaylist(playlistMenu().list)}>
-              Delete Playlist
+              <i class="bi bi-trash context-menu-icon"></i>Delete
             </div>
           </Show>
         </div>
@@ -468,18 +483,22 @@ export function Sidebar(props) {
       {/* Color-swatch popover */}
       <Show when={colorPicker()}>
         <div
+          ref={colorPopoverRef}
           class="tag-color-popover"
           style={{ left: `${colorPicker().x}px`, top: `${colorPicker().y}px` }}
         >
-          <For each={TAG_COLORS}>
-            {(color) => (
-              <span
-                class="tag-color-swatch qa-tag-color-swatch"
-                style={{ 'background-color': color }}
-                onClick={() => handlePickColor(colorPicker().tag, color)}
-              />
-            )}
-          </For>
+          <div class="tag-color-popover-title qa-tag-color-title">Pick tag color</div>
+          <div class="tag-color-grid">
+            <For each={TAG_COLORS}>
+              {(color) => (
+                <span
+                  class="tag-color-swatch qa-tag-color-swatch"
+                  style={{ 'background-color': color }}
+                  onClick={() => handlePickColor(colorPicker().tag, color)}
+                />
+              )}
+            </For>
+          </div>
         </div>
       </Show>
     </aside>
