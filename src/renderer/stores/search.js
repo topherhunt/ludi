@@ -100,6 +100,7 @@ async function runSearch(queryString) {
       album: item.album || '',
       track_number: item.track_number,
       ancestorFolderNames: ancestorFolders.map(f => f.title),
+      tags: (item.tags || []).map(t => t.name),
     };
 
     if (evaluateSong(ast, songData)) {
@@ -114,6 +115,7 @@ async function runSearch(queryString) {
         parent_list_id: item.parent_list_id,
         position: item.position,
         ancestor_folders: ancestorFolders,
+        tags: item.tags || [],
       });
     }
   }

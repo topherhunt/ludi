@@ -17,6 +17,7 @@ import {
 } from '../stores/columns.js';
 import { formatTime, pluralize } from '../utils/format.js';
 import { folderContainsSong, getItemById, countSongsInList } from '../utils/api.js';
+import { TagPillList } from './TagPill.jsx';
 
 /**
  * Single tree item (folder or song)
@@ -248,7 +249,9 @@ export function TreeItem(props) {
 
           {/* Tags column */}
           <Show when={visibility().tags}>
-            <span class="col-tags" data-column="tags"></span>
+            <span class="col-tags" data-column="tags">
+              <TagPillList tags={props.item.tags} />
+            </span>
           </Show>
         </Show>
       </div>

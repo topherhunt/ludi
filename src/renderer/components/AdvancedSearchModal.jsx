@@ -1,5 +1,6 @@
 import { For, Show, createContext, useContext } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
+import { tags } from '../stores/tags.js';
 
 const FIELD_OPTIONS = [
   { value: 'title', label: 'Title' },
@@ -7,13 +8,13 @@ const FIELD_OPTIONS = [
   { value: 'album', label: 'Album' },
   { value: 'any', label: 'Any field' },
   { value: 'track', label: 'Track #' },
-  { value: 'tag', label: 'Tags (coming soon)', disabled: true },
+  { value: 'tag', label: 'Tag' },
 ];
 
 let nextId = 0;
 const uid = () => String(++nextId);
 
-const makeCondition = () => ({ id: uid(), type: 'condition', field: 'title' });
+const makeCondition = () => ({ id: uid(), type: 'condition', field: 'title', negate: false });
 const makeGroup = (mode = 'any') => ({ id: uid(), type: 'group', mode, children: [makeCondition()] });
 
 // Recursively find a node by id and call fn(node)
@@ -45,7 +46,8 @@ function buildQuery(node, inputRefs, isRoot = false) {
     const val = (inputRefs.get(node.id)?.value || '').trim();
     if (!val) return '';
     const quoted = val.includes(' ') ? `"${val}"` : val;
-    return `${node.field}=${quoted}`;
+    const base = `${node.field}=${quoted}`;
+    return node.negate ? `NOT ${base}` : base;
   }
   if (node.type === 'group') {
     const op = node.mode === 'all' ? ' AND ' : ' OR ';
@@ -61,7 +63,7 @@ function buildQuery(node, inputRefs, isRoot = false) {
 const SearchCtx = createContext();
 
 function ConditionRow({ node, canRemove }) {
-  const { inputRefs, onFieldChange, onRemove } = useContext(SearchCtx);
+  const { inputRefs, onFieldChange, onNegateChange, onRemove } = useContext(SearchCtx);
 
   return (
     <div class="advsearch-condition-row">
@@ -76,13 +78,35 @@ function ConditionRow({ node, canRemove }) {
           )}
         </For>
       </select>
-      <input
-        ref={(el) => { if (el) inputRefs.set(node.id, el); }}
-        type="text"
-        class="advsearch-value-input"
-        spellcheck={false}
-        placeholder={node.field === 'track' ? 'e.g. 7' : 'Enter value...'}
-      />
+
+      <Show when={node.field === 'tag'} fallback={
+        <input
+          ref={(el) => { if (el) inputRefs.set(node.id, el); }}
+          type="text"
+          class="advsearch-value-input"
+          spellcheck={false}
+          placeholder={node.field === 'track' ? 'e.g. 7' : 'Enter value...'}
+        />
+      }>
+        {/* Tag condition: is / is not toggle + a dropdown of all defined tags */}
+        <select
+          class="advsearch-op-select"
+          value={node.negate ? 'not' : 'is'}
+          onChange={(e) => onNegateChange(node.id, e.target.value === 'not')}
+        >
+          <option value="is">is</option>
+          <option value="not">is not</option>
+        </select>
+        <select
+          ref={(el) => { if (el) inputRefs.set(node.id, el); }}
+          class="advsearch-value-input advsearch-tag-select"
+        >
+          <For each={tags()}>
+            {(tag) => <option value={tag.name}>{tag.name}</option>}
+          </For>
+        </select>
+      </Show>
+
       <button
         class="advsearch-remove-btn"
         onClick={() => onRemove(node.id)}
@@ -154,6 +178,7 @@ export function AdvancedSearchModal(props) {
 
   const onModeChange = (id, mode) => mutate(id, node => { node.mode = mode; });
   const onFieldChange = (id, field) => mutate(id, node => { node.field = field; });
+  const onNegateChange = (id, negate) => mutate(id, node => { node.negate = negate; });
   const onAddCondition = (parentId) => mutate(parentId, node => { node.children.push(makeCondition()); });
   const onAddGroup = (parentId) => mutate(parentId, node => { node.children.push(makeGroup('any')); });
 
@@ -183,7 +208,7 @@ export function AdvancedSearchModal(props) {
   };
 
   return (
-    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onAddCondition, onAddGroup, onRemove }}>
+    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onNegateChange, onAddCondition, onAddGroup, onRemove }}>
       <Show when={props.open}>
         <div
           class="modal-overlay visible"

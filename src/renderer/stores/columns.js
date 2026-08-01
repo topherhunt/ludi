@@ -81,7 +81,10 @@ const {
     if (vis.duration) cols.push(`${widths.duration || 60}px`);
     if (vis.artist) cols.push(`${widths.artist || 150}px`);
     if (vis.album) cols.push(`${widths.album || 150}px`);
-    if (vis.tags) cols.push(`${widths.tags || 100}px`);
+    // Tags is the last column: let it stretch to fill the remaining width (with a
+    // sensible minimum) rather than sitting at a fixed ~100px with empty space
+    // to its right.
+    if (vis.tags) cols.push('minmax(100px, 1fr)');
 
     return cols.join(' ');
   });

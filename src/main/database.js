@@ -151,6 +151,37 @@ function createTables() {
     )
   `);
 
+  // Tags table -- free-form, label-style tags (name + color). `position` gives a
+  // manual drag-to-reorder sort order used wherever tags are listed. Name is
+  // unique case-insensitively.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      color TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      inserted_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  // Song<->tag associations (many-to-many). No ON DELETE CASCADE: per the
+  // project convention, deletion cleanup is handled in JS app logic (see
+  // deleteTag and deleteItemWithFiles).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS song_tags (
+      song_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      inserted_at TEXT NOT NULL,
+      PRIMARY KEY (song_id, tag_id),
+      FOREIGN KEY (song_id) REFERENCES songs(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_song_tags_tag_id ON song_tags(tag_id);
+  `);
+
   // Migrations - Add is_expanded column if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(lists)").all();
   const hasExpandedColumn = columns.some(col => col.name === 'is_expanded');
@@ -173,8 +204,19 @@ function getLists() {
   return db.prepare('SELECT * FROM lists WHERE is_subfolder = 0 ORDER BY sidebar_position').all();
 }
 
+// Parse each row's `tags` JSON column (from json_group_array) into an array of
+// {id, name, color, position} sorted by position. Mutates rows in place.
+function parseTagsColumn(rows) {
+  for (const row of rows) {
+    const parsed = row.tags ? JSON.parse(row.tags) : [];
+    parsed.sort((a, b) => a.position - b.position);
+    row.tags = parsed;
+  }
+  return rows;
+}
+
 function getListItems(listId) {
-  return db.prepare(`
+  return parseTagsColumn(db.prepare(`
     SELECT
       li.*,
       l.title as list_title,
@@ -183,17 +225,20 @@ function getListItems(listId) {
       s.artist,
       s.album,
       s.duration_seconds,
-      s.track_number
+      s.track_number,
+      (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color, 'position', t.position))
+         FROM song_tags st JOIN tags t ON t.id = st.tag_id
+        WHERE st.song_id = s.id) as tags
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
     WHERE li.parent_list_id = ?
     ORDER BY li.position
-  `).all(listId);
+  `).all(listId));
 }
 
 function getAllListItems() {
-  return db.prepare(`
+  return parseTagsColumn(db.prepare(`
     SELECT
       li.*,
       l.title as list_title,
@@ -202,12 +247,15 @@ function getAllListItems() {
       s.artist,
       s.album,
       s.duration_seconds,
-      s.track_number
+      s.track_number,
+      (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color, 'position', t.position))
+         FROM song_tags st JOIN tags t ON t.id = st.tag_id
+        WHERE st.song_id = s.id) as tags
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
     ORDER BY li.parent_list_id, li.position
-  `).all();
+  `).all());
 }
 
 function getItem(itemId) {
@@ -461,6 +509,8 @@ function deleteItemWithFiles(itemId) {
       const songId = songIds[i];
       const refCount = db.prepare('SELECT COUNT(*) as count FROM list_items WHERE song_id = ?').get(songId);
       if (refCount.count === 0) {
+        // Remove tag associations first (FK; no DB-layer cascade by convention)
+        db.prepare('DELETE FROM song_tags WHERE song_id = ?').run(songId);
         db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
         filesToDelete.push(filePaths[i]);
       }
@@ -469,6 +519,81 @@ function deleteItemWithFiles(itemId) {
     // Return only the file paths for songs that were actually deleted
     return filesToDelete;
   })();
+}
+
+// ---- Tags ----------------------------------------------------------------
+
+function getAllTags() {
+  return db.prepare('SELECT * FROM tags ORDER BY position').all();
+}
+
+// Create a tag at the end of the sort order. Throws on a duplicate name
+// (case-insensitive) via the UNIQUE constraint -- callers should pre-check.
+function createTag(name, color) {
+  const now = new Date().toISOString();
+  const nextPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM tags').get().pos;
+  const result = db.prepare(`
+    INSERT INTO tags (name, color, position, inserted_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(name, color, nextPos, now, now);
+  return db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid);
+}
+
+function renameTag(tagId, newName) {
+  const now = new Date().toISOString();
+  db.prepare('UPDATE tags SET name = ?, updated_at = ? WHERE id = ?').run(newName, now, tagId);
+}
+
+function setTagColor(tagId, color) {
+  const now = new Date().toISOString();
+  db.prepare('UPDATE tags SET color = ?, updated_at = ? WHERE id = ?').run(color, now, tagId);
+}
+
+// Delete a tag and all of its song associations.
+function deleteTag(tagId) {
+  return db.transaction(() => {
+    db.prepare('DELETE FROM song_tags WHERE tag_id = ?').run(tagId);
+    db.prepare('DELETE FROM tags WHERE id = ?').run(tagId);
+  })();
+}
+
+// Rewrite tag positions to match the given order of tag ids.
+function reorderTags(orderedIds) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    orderedIds.forEach((tagId, index) => {
+      db.prepare('UPDATE tags SET position = ?, updated_at = ? WHERE id = ?').run(index, now, tagId);
+    });
+  })();
+}
+
+function addTagToSongs(tagId, songIds) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    const stmt = db.prepare('INSERT OR IGNORE INTO song_tags (song_id, tag_id, inserted_at) VALUES (?, ?, ?)');
+    for (const songId of songIds) stmt.run(songId, tagId, now);
+  })();
+}
+
+function removeTagFromSongs(tagId, songIds) {
+  return db.transaction(() => {
+    const stmt = db.prepare('DELETE FROM song_tags WHERE tag_id = ? AND song_id = ?');
+    for (const songId of songIds) stmt.run(tagId, songId);
+  })();
+}
+
+// ---- Song metadata -------------------------------------------------------
+
+// Update editable song metadata. Only the provided fields are changed. Writes
+// to the DB only; the audio file's embedded tags are NOT updated (see TASKS.md).
+function updateSong(songId, fields) {
+  const allowed = ['title', 'artist', 'album', 'track_number'];
+  const keys = Object.keys(fields).filter(k => allowed.includes(k));
+  if (keys.length === 0) return;
+  const now = new Date().toISOString();
+  const setClause = keys.map(k => `${k} = ?`).join(', ');
+  const values = keys.map(k => fields[k]);
+  db.prepare(`UPDATE songs SET ${setClause}, updated_at = ? WHERE id = ?`).run(...values, now, songId);
 }
 
 function getSettings() {
@@ -620,6 +745,15 @@ module.exports = {
   updateFolderExpanded,
   sortFolderContents,
   flattenFolder,
+  getAllTags,
+  createTag,
+  renameTag,
+  setTagColor,
+  deleteTag,
+  reorderTags,
+  addTagToSongs,
+  removeTagFromSongs,
+  updateSong,
   getSettings,
   updateSetting,
   getDbPath,

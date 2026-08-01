@@ -34,8 +34,15 @@ export function useKeyboard(options) {
   } = options;
 
   const handleKeyDown = async (e) => {
-    // Only handle keyboard shortcuts when not in an input field
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    // Only handle keyboard shortcuts when not in an input field. The tag editor
+    // captures its own arrow/Backspace keys (pill navigation + removal) while the
+    // focus sits on its container div (not an <input>), so guard against it too --
+    // otherwise those keys leak to folder expand/collapse and song deletion.
+    if (
+      e.target.tagName === 'INPUT' ||
+      e.target.tagName === 'TEXTAREA' ||
+      e.target.closest?.('.tag-editor')
+    ) {
       return;
     }
 

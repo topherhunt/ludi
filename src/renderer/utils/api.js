@@ -26,6 +26,15 @@ function getAPI() {
     renameFolder: async () => true,
     updateFolderExpanded: async () => true,
     deleteItemWithFiles: async () => ({ totalFiles: 0, deletedFiles: 0, errors: [] }),
+    getAllTags: async () => [],
+    createTag: async ({ name, color }) => ({ id: 0, name, color, position: 0 }),
+    renameTag: async () => {},
+    setTagColor: async () => {},
+    deleteTag: async () => {},
+    reorderTags: async () => {},
+    addTagToSongs: async () => {},
+    removeTagFromSongs: async () => {},
+    updateSong: async () => {},
     importFiles: async () => ({ imported: [], unsupported: [], errors: [] }),
     getSettings: async () => ({ library_path: '', database_path: '' }),
     saveSettings: async () => true,
@@ -161,6 +170,53 @@ export async function updateFolderExpanded(listId, isExpanded) {
  */
 export async function deleteItemWithFiles(itemId) {
   return getAPI().deleteItemWithFiles(itemId);
+}
+
+// Tag operations
+
+/** Get all defined tags, ordered by position. */
+export async function getAllTags() {
+  return getAPI().getAllTags();
+}
+
+/** Create a tag (name + color). Returns the created tag row. */
+export async function createTag(name, color) {
+  return getAPI().createTag({ name, color });
+}
+
+/** Rename a tag (applies to all its usages). */
+export async function renameTag(tagId, newName) {
+  return getAPI().renameTag({ tagId, newName });
+}
+
+/** Change a tag's color. */
+export async function setTagColor(tagId, color) {
+  return getAPI().setTagColor({ tagId, color });
+}
+
+/** Delete a tag and all its song associations. */
+export async function deleteTag(tagId) {
+  return getAPI().deleteTag(tagId);
+}
+
+/** Rewrite tag sort order to match the given array of tag ids. */
+export async function reorderTags(orderedIds) {
+  return getAPI().reorderTags(orderedIds);
+}
+
+/** Apply a tag to the given songs. */
+export async function addTagToSongs(tagId, songIds) {
+  return getAPI().addTagToSongs({ tagId, songIds });
+}
+
+/** Remove a tag from the given songs. */
+export async function removeTagFromSongs(tagId, songIds) {
+  return getAPI().removeTagFromSongs({ tagId, songIds });
+}
+
+/** Update editable song metadata (title/artist/album/track_number). DB only. */
+export async function updateSong(songId, fields) {
+  return getAPI().updateSong({ songId, fields });
 }
 
 // File operations

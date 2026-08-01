@@ -364,6 +364,43 @@ ipcMain.handle('db:flattenFolder', (event, listId) => {
   return db.flattenFolder(listId);
 });
 
+// ---- Tags ----
+ipcMain.handle('db:getAllTags', () => {
+  return db.getAllTags();
+});
+
+ipcMain.handle('db:createTag', (event, { name, color }) => {
+  return db.createTag(name, color);
+});
+
+ipcMain.handle('db:renameTag', (event, { tagId, newName }) => {
+  return db.renameTag(tagId, newName);
+});
+
+ipcMain.handle('db:setTagColor', (event, { tagId, color }) => {
+  return db.setTagColor(tagId, color);
+});
+
+ipcMain.handle('db:deleteTag', (event, tagId) => {
+  return db.deleteTag(tagId);
+});
+
+ipcMain.handle('db:reorderTags', (event, orderedIds) => {
+  return db.reorderTags(orderedIds);
+});
+
+ipcMain.handle('db:addTagToSongs', (event, { tagId, songIds }) => {
+  return db.addTagToSongs(tagId, songIds);
+});
+
+ipcMain.handle('db:removeTagFromSongs', (event, { tagId, songIds }) => {
+  return db.removeTagFromSongs(tagId, songIds);
+});
+
+ipcMain.handle('db:updateSong', (event, { songId, fields }) => {
+  return db.updateSong(songId, fields);
+});
+
 ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {
   // Remove from the database first, then move the now-orphaned audio files to
   // the OS Trash (recoverable, unlike a permanent delete).

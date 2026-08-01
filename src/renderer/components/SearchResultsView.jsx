@@ -4,6 +4,7 @@ import { currentPlayingSongId, isPlaying } from '../stores/playback.js';
 import { columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { formatTime } from '../utils/format.js';
 import { selectOnly } from '../stores/navigation.js';
+import { TagPillList } from './TagPill.jsx';
 
 /**
  * Given matched songs with ancestor_folders, build a virtual nested tree.
@@ -129,7 +130,9 @@ function SearchSongRow(props) {
           </span>
         </Show>
         <Show when={columnVisibility().tags}>
-          <span class="col-tags" />
+          <span class="col-tags">
+            <TagPillList tags={props.song.tags} />
+          </span>
         </Show>
       </div>
     </li>

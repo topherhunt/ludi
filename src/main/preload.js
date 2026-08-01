@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   flattenFolder: (listId) => ipcRenderer.invoke('db:flattenFolder', listId),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
 
+  // Tag operations
+  getAllTags: () => ipcRenderer.invoke('db:getAllTags'),
+  createTag: (data) => ipcRenderer.invoke('db:createTag', data),
+  renameTag: (data) => ipcRenderer.invoke('db:renameTag', data),
+  setTagColor: (data) => ipcRenderer.invoke('db:setTagColor', data),
+  deleteTag: (tagId) => ipcRenderer.invoke('db:deleteTag', tagId),
+  reorderTags: (orderedIds) => ipcRenderer.invoke('db:reorderTags', orderedIds),
+  addTagToSongs: (data) => ipcRenderer.invoke('db:addTagToSongs', data),
+  removeTagFromSongs: (data) => ipcRenderer.invoke('db:removeTagFromSongs', data),
+  updateSong: (data) => ipcRenderer.invoke('db:updateSong', data),
+
   // File import operations
   importFiles: (data) => ipcRenderer.invoke('files:import', data),
 

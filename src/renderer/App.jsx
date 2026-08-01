@@ -18,6 +18,7 @@ import {
   clearSelection,
 } from './stores/navigation.js';
 import { applySettingsFromIPC } from './stores/columns.js';
+import { refreshTags } from './stores/tags.js';
 import {
   playlist,
   setPlaylist,
@@ -121,6 +122,11 @@ export function App() {
     window.electronAPI?.onLibraryChanged?.(() => {
       explorerRefetch?.();
     });
+  });
+
+  // Load the defined tags into the global store at startup
+  onMount(() => {
+    refreshTags();
   });
 
   // Listen for media key events (play/pause, next, previous)

@@ -8,9 +8,10 @@
  *   album=value    -- album contains value
  *   any=value      -- title/album/artist contains value
  *   track=7        -- track_number equals 7 (integer comparison)
- *   tag=name       -- always false (tags not yet implemented)
+ *   tag=name       -- song has a tag named exactly `name` (case-insensitive)
  *   A AND B        -- both must match
  *   A OR B         -- either must match
+ *   NOT A          -- A must not match (also `-A` shorthand, e.g. -tag=fav)
  *   (A OR B) AND C -- parentheses for grouping
  *   "quoted value" -- multi-word value (use in field or plain text)
  */
@@ -49,6 +50,10 @@ function tokenize(input) {
     if (ch === '(') { tokens.push({ type: 'LPAREN' }); i++; continue; }
     if (ch === ')') { tokens.push({ type: 'RPAREN' }); i++; continue; }
 
+    // Leading '-' is shorthand for NOT (e.g. -tag=fav). Internal hyphens in a
+    // word (hip-hop, low-e) are unaffected -- this only fires at a token boundary.
+    if (ch === '-') { tokens.push({ type: 'NOT' }); i++; continue; }
+
     if (ch === '"') {
       tokens.push({ type: 'PLAIN', value: readQuoted() });
       continue;
@@ -60,6 +65,7 @@ function tokenize(input) {
     const upper = word.toUpperCase();
     if (upper === 'AND') { tokens.push({ type: 'AND' }); continue; }
     if (upper === 'OR')  { tokens.push({ type: 'OR' });  continue; }
+    if (upper === 'NOT') { tokens.push({ type: 'NOT' }); continue; }
 
     // Check for field=value syntax
     if (FIELDS.includes(upper.toLowerCase()) && i < input.length && input[i] === '=') {
@@ -79,7 +85,8 @@ function tokenize(input) {
 }
 
 function isAtomStart(tok) {
-  return tok.type === 'PLAIN' || tok.type === 'FIELD_COND' || tok.type === 'LPAREN';
+  return tok.type === 'PLAIN' || tok.type === 'FIELD_COND' || tok.type === 'LPAREN'
+    || tok.type === 'NOT';
 }
 
 function parseExpr(tokens, pos) {
@@ -97,15 +104,15 @@ function parseOr(tokens, pos) {
 }
 
 function parseAnd(tokens, pos) {
-  let [left, cur] = parsePrimary(tokens, pos);
+  let [left, cur] = parseNot(tokens, pos);
   while (true) {
     if (tokens[cur]?.type === 'AND') {
-      const [right, next] = parsePrimary(tokens, cur + 1);
+      const [right, next] = parseNot(tokens, cur + 1);
       left = { type: 'AND', left, right };
       cur = next;
     } else if (isAtomStart(tokens[cur])) {
       // Implicit AND for adjacent terms
-      const [right, next] = parsePrimary(tokens, cur);
+      const [right, next] = parseNot(tokens, cur);
       left = { type: 'AND', left, right };
       cur = next;
     } else {
@@ -113,6 +120,15 @@ function parseAnd(tokens, pos) {
     }
   }
   return [left, cur];
+}
+
+// NOT binds tighter than AND/OR. Consecutive NOTs are allowed.
+function parseNot(tokens, pos) {
+  if (tokens[pos]?.type === 'NOT') {
+    const [child, next] = parseNot(tokens, pos + 1);
+    return [{ type: 'NOT', child }, next];
+  }
+  return parsePrimary(tokens, pos);
 }
 
 function parsePrimary(tokens, pos) {
@@ -174,7 +190,7 @@ const contains = (haystack, needle) =>
 export function evaluateSong(ast, songData) {
   if (!ast) return false;
 
-  const { title, artist, album, track_number, ancestorFolderNames } = songData;
+  const { title, artist, album, track_number, ancestorFolderNames, tags } = songData;
 
   switch (ast.type) {
     case 'OR':
@@ -182,6 +198,9 @@ export function evaluateSong(ast, songData) {
 
     case 'AND':
       return evaluateSong(ast.left, songData) && evaluateSong(ast.right, songData);
+
+    case 'NOT':
+      return !evaluateSong(ast.child, songData);
 
     case 'PLAIN': {
       const q = ast.value;
@@ -207,7 +226,9 @@ export function evaluateSong(ast, songData) {
           return !isNaN(n) && track_number === n;
         }
         case 'tag':
-          return false; // tags not yet implemented
+          // Exact (case-insensitive) tag-name match. `tags` is an array of the
+          // song's tag names.
+          return (tags || []).some(t => t.toLowerCase() === value.toLowerCase());
         default:
           return false;
       }

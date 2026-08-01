@@ -1,5 +1,6 @@
 import { For, Show, createResource, createMemo, onMount } from 'solid-js';
 import { currentListId, selectedItems, clearSelection } from '../stores/navigation.js';
+import { libraryVersion } from '../stores/tags.js';
 import { setDragState, clearDragState, isDropIndicatorVisible, dropIndicatorPosition } from '../stores/dragdrop.js';
 import { showAlert } from '../stores/modals.js';
 import { TreeItem } from './TreeItem.jsx';
@@ -14,9 +15,11 @@ export function TreeView(props) {
   let containerRef;
 
   // Fetch items for current list
+  // Depend on libraryVersion too, so tag/metadata edits (from the edit panel)
+  // refresh the tree reactively.
   const [items, { refetch: rawRefetch }] = createResource(
-    currentListId,
-    async (listId) => {
+    () => [currentListId(), libraryVersion()],
+    async ([listId]) => {
       return await getListItems(listId);
     }
   );
