@@ -1,14 +1,10 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- [ ] Fix shuffle, currently broken.
-- (TO ENSURE) Search supports `tag=name` (presence), `NOT tag=name` / `-tag=name` (absence), plus booleans & parentheses, e.g. `tag=fav AND (tag=instrumental OR tag=low-e)`. Advanced Search has a Tag condition with an is/is-not toggle.
-- 
+- When viewing search results, you should be able to select songs / items like you normally can. Currently selecting doesn't work when viewing search results. This is important so you can drag search-results songs into another playlist in the sidebar, edit song fields & tags, etc. (Note that you CANNOT drag/reorder search results within the search results list, that's an incoherent/meaningless operation.)
 - [ ] Support drag selected files (or files in selected folders) out to a finder folder, or to a G Drive folder in browser (?)
 - [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
-- [ ] The media-key "last track", if you're more than 1 second into the current track, should jump to the start of this track, rather than literally going to the prev track.
 - [ ] Consider: Instead of collapse/expand carets like what we've been doing in the Main Library UI so far, what if clicking on a folder just zoomed into that folder, and you see a breadcrumb at top showing where you've zoomed into? More Google Drive style?
   - ...talk throguh w Claude-- have it look at my data structure -- is "putting songs into nested folders" even a useful concept, like at all? Would it be better to list everything flat, and use "ephemeral folders" to support collapsing songs in the same album, to make my library more navigable?
-- When viewing search results, you can select songs / items like you normally can. Currently selecting doesn't work when viewing search results.
 - You can right-click selected items and click "Move..." to open a pop-up that lists all folders in the Main Library, with their dropdown toggles so you can zoom in and select a specific folder you want to drill into.
 - Misc
   - Fix bug: forward/back arrow keys (on keyboard) should seek in current song by only 5s regardless of the length of the song. (For very long songs, currently it's skipping 7 mins at a time.)

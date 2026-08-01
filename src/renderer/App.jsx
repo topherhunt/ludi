@@ -22,9 +22,10 @@ import { applySettingsFromIPC } from './stores/columns.js';
 import { refreshTags } from './stores/tags.js';
 import {
   playlist,
-  setPlaylist,
+  setCurrentPlaylist,
   currentTrackIndex,
   setCurrentTrackIndex,
+  currentSongFromPlaylist,
   currentPlayingSongId,
   setCurrentPlayingSongId,
   setCurrentPlayingItemId,
@@ -208,14 +209,12 @@ export function App() {
     }
   };
 
-  // Play current track from playlist
+  // Play current track from playlist. `currentTrackIndex` is a position in the
+  // queue order, which shuffle reorders -- so the song is always resolved
+  // through the store rather than indexed out of `playlist()` directly.
   const playCurrentTrack = async () => {
-    const idx = currentTrackIndex();
-    const list = playlist();
-
-    if (idx >= 0 && idx < list.length) {
-      await playSong(list[idx]);
-    }
+    const song = currentSongFromPlaylist();
+    if (song) await playSong(song);
   };
 
   // Handle play folder
@@ -223,8 +222,7 @@ export function App() {
     const songs = await getSongsInList(listId);
     if (songs.length === 0) return;
 
-    setPlaylist(songs);
-    setCurrentTrackIndex(0);
+    setCurrentPlaylist(songs, 0, listId);
     setPlayingRootListId(await getRootListId(listId));
     await playCurrentTrack();
   };
@@ -240,8 +238,7 @@ export function App() {
     const songIndex = songs.findIndex((s) => s.item_id === itemId);
     if (songIndex === -1) return;
 
-    setPlaylist(songs);
-    setCurrentTrackIndex(songIndex);
+    setCurrentPlaylist(songs, songIndex, parentListId);
     setPlayingRootListId(await getRootListId(parentListId));
     await playCurrentTrack();
   };
@@ -281,10 +278,20 @@ export function App() {
     await playCurrentTrack();
   };
 
-  // Handle previous track (manual navigation - always moves to previous song)
+  // Once you're this far into a track, "previous" restarts it instead of
+  // stepping back a song -- the behavior every other music player has.
+  const RESTART_TRACK_AFTER_SECONDS = 1;
+
+  // Handle previous track (restart the current song, or step back to the one
+  // before it if we're still at the very start)
   const handlePrevious = async () => {
     const pl = playlist();
     if (pl.length === 0) return;
+
+    if (player.currentTime() > RESTART_TRACK_AFTER_SECONDS) {
+      player.seek(0);
+      return;
+    }
 
     const idx = currentTrackIndex();
     const loop = loopMode();

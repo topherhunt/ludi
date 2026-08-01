@@ -44,6 +44,7 @@ test.describe('Folder Operations', () => {
     await expect(renameInput).toBeVisible();
     const inputValue = await renameInput.inputValue();
     expect(inputValue).toBe('New Folder');
+    await expect(window.locator('#renameModalTitle')).toHaveText('Move Into New Folder');
 
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);

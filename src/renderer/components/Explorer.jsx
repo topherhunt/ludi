@@ -143,7 +143,7 @@ export function Explorer(props) {
       clearSelection();
       refetchTree?.();
       hideRenameModal();
-    });
+    }, 'Move Into New Folder');
   };
 
   // Reveal a song's audio file in Finder (opens the folder and selects the file)

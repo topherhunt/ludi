@@ -190,7 +190,7 @@ export function Sidebar(props) {
       const playlist = await createPlaylist(trimmed);
       await refetch();
       handlePlaylistClick(playlist);
-    });
+    }, 'New Playlist');
   };
 
   // Play a whole playlist from the top. Shared by the double-click and the

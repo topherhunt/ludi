@@ -31,6 +31,7 @@ async function makePlaylist(window, name) {
   await window.keyboard.press('Escape');
   await window.click('#addLibraryBtn');
   await window.click('#newPlaylistMenuItem');
+  await expect(window.locator('#renameModalTitle')).toHaveText('New Playlist');
   await window.fill('#renameInput', name);
   await window.click('#renameOkBtn');
   const row = playlistRow(window, name);

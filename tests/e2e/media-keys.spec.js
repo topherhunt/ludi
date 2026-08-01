@@ -8,6 +8,8 @@ const path = require('path');
 // is populated on play -- proof the Now Playing integration is actually active,
 // which is the prerequisite for macOS to deliver the next/prev keys at all.
 test.describe('Media keys / Now Playing', () => {
+  const toSec = (s) => { const [m, sec] = s.split(':').map(Number); return m * 60 + sec; };
+
   async function importTwoSongs(window) {
     const files = [
       path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3'),
@@ -46,6 +48,38 @@ test.describe('Media keys / Now Playing', () => {
     await window.waitForTimeout(300);
     expect(await window.locator('.player-info .song-title').textContent()).toBe(firstTitle);
     await expect(songRows.first()).toHaveClass(/current-song/);
+
+    await window.locator('#playPauseBtn').click();
+    await window.waitForTimeout(50);
+  });
+
+  test('previous restarts the current song once you are more than a second in', async ({ window }) => {
+    await importTwoSongs(window);
+
+    // This clip is ~2:33, so a small seek still lands well past the 1s mark.
+    const row = window
+      .locator('.tree-item-content[data-is-folder="false"]', { hasText: 'Jump Into My Mouth' })
+      .first();
+    await expect(row).toBeVisible({ timeout: 2000 });
+    await row.dblclick();
+    await expect(window.locator('#playPauseBtn')).toHaveClass(/playing/);
+    const title = await window.locator('.player-info .song-title').textContent();
+    await window.waitForTimeout(400); // let Howler report a real duration to seek against
+
+    await window.evaluate(() => {
+      const bar = document.getElementById('seekBar');
+      bar.value = '2';
+      bar.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await window.waitForTimeout(200);
+    expect(toSec(await window.locator('#currentTime').textContent())).toBeGreaterThan(1);
+
+    await window.locator('#prevBtn').click();
+    await window.waitForTimeout(200);
+
+    expect(await window.locator('.player-info .song-title').textContent()).toBe(title);
+    expect(toSec(await window.locator('#currentTime').textContent())).toBeLessThanOrEqual(1);
+    await expect(row).toHaveClass(/current-song/);
 
     await window.locator('#playPauseBtn').click();
     await window.waitForTimeout(50);

@@ -16,6 +16,8 @@ import {
   hasPreviousTrack,
   playlist,
   currentTrackIndex,
+  shuffledIndices,
+  currentSongFromPlaylist,
 } from '../../src/renderer/stores/playback.js';
 
 describe('Playback Store', () => {
@@ -59,6 +61,31 @@ describe('Playback Store', () => {
 
       toggleShuffle();
       expect(shuffleEnabled()).toBe(false);
+    });
+
+    it('should keep the current song playing when turned on and off mid-queue', () => {
+      setCurrentPlaylist([10, 20, 30, 40, 50], 2);
+      expect(currentSongFromPlaylist()).toBe(30);
+
+      toggleShuffle();
+      expect(currentSongFromPlaylist()).toBe(30); // pinned at the front, not restarted elsewhere
+      expect(shuffledIndices()[0]).toBe(2);
+      expect(currentTrackIndex()).toBe(0);
+
+      toggleShuffle();
+      expect(currentSongFromPlaylist()).toBe(30);
+      expect(currentTrackIndex()).toBe(2); // back to its real position in the list
+    });
+
+    it('should walk the shuffled order, visiting every song exactly once', () => {
+      setCurrentPlaylist([10, 20, 30, 40, 50], 0);
+      toggleShuffle();
+
+      const played = [currentSongFromPlaylist()];
+      for (let i = 0; i < 4; i++) played.push(nextTrack());
+
+      expect(played[0]).toBe(10);
+      expect([...played].sort()).toEqual([10, 20, 30, 40, 50]);
     });
   });
 

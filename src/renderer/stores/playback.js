@@ -113,20 +113,31 @@ const {
 });
 
 /**
- * Toggle shuffle mode
+ * Toggle shuffle mode.
+ *
+ * `currentTrackIndex` is a position in the *queue order*, which shuffle
+ * redefines -- so flipping the mode has to re-point it at the song that is
+ * playing right now, or the queue silently jumps to an unrelated track.
  */
 function toggleShuffle() {
-  setShuffleEnabled((prev) => {
-    const newValue = !prev;
-    if (newValue) {
-      const pl = playlist();
-      const indices = createShuffledIndices(pl.length);
-      setShuffledIndices(indices);
-    } else {
-      setShuffledIndices([]);
-    }
-    return newValue;
-  });
+  const pl = playlist();
+  const playingIdx = actualTrackIndex(); // real playlist index, before the flip
+
+  if (shuffleEnabled()) {
+    setShuffledIndices([]);
+    setShuffleEnabled(false);
+    if (playingIdx >= 0) setCurrentTrackIndex(playingIdx);
+  } else {
+    // Pin the current song at the front so turning shuffle on never cuts it
+    // off; the rest of the queue is reshuffled behind it.
+    setShuffledIndices(
+      playingIdx >= 0
+        ? createShuffledIndicesWithPin(pl.length, playingIdx)
+        : createShuffledIndices(pl.length)
+    );
+    setShuffleEnabled(true);
+    if (playingIdx >= 0) setCurrentTrackIndex(0);
+  }
 }
 
 /**
