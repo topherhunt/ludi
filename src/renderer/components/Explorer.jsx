@@ -297,7 +297,8 @@ export function Explorer(props) {
         parent = parent.parentElement;
       }
 
-      if (visible) {
+      // Search results render virtual folder rows that have no placement id.
+      if (visible && el.dataset.itemId) {
         ids.push(parseInt(el.dataset.itemId));
       }
     });

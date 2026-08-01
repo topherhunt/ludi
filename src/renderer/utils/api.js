@@ -27,6 +27,8 @@ function getAPI() {
     renameFolder: async () => true,
     updateFolderExpanded: async () => true,
     deleteItemWithFiles: async () => ({ totalFiles: 0, deletedFiles: 0, errors: [] }),
+    getSongFilePathsForItems: async () => [],
+    startFileDragForItems: () => {},
     createPlaylist: async (title) => ({ id: 0, title, is_subfolder: 0, sidebar_position: 0 }),
     deletePlaylist: async () => {},
     reorderPlaylists: async () => {},
@@ -187,6 +189,16 @@ export async function updateFolderExpanded(listId, isExpanded) {
  */
 export async function deleteItemWithFiles(itemId) {
   return getAPI().deleteItemWithFiles(itemId);
+}
+
+/**
+ * Hand a selection of tree items to the OS as a native file drag, so dropping on
+ * the Desktop or a Finder folder copies those audio files there. Fire-and-forget
+ * by necessity: it must run synchronously inside `dragstart`.
+ * @param {number[]} itemIds
+ */
+export function startFileDragForItems(itemIds) {
+  getAPI().startFileDragForItems(itemIds);
 }
 
 // Playlist operations

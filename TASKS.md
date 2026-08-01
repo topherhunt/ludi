@@ -1,20 +1,17 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
 - When viewing search results, you should be able to select songs / items like you normally can. Currently selecting doesn't work when viewing search results. This is important so you can drag search-results songs into another playlist in the sidebar, edit song fields & tags, etc. (Note that you CANNOT drag/reorder search results within the search results list, that's an incoherent/meaningless operation.)
-- [ ] Support drag selected files (or files in selected folders) out to a finder folder, or to a G Drive folder in browser (?)
+- Fix bug: forward/back arrow keys (on keyboard) should seek in current song by only 5s regardless of the length of the song. (For very long songs, currently it's skipping 7 mins at a time.)
+- When dragging into the playlist (from a file or from list items selected), if within 4em of the top or bottom of the viewport, autoscroll at a slow steady speed up/down. Speed accelerates the closer to the top/bottom you are. Currently you Need to drag onto a very narrow band right near the top or bottom border in order to get auto-scroll in the list and the speed is hard to control. 
+- Support dragging a selection of songs/items out to desktop or a Finder folder. Doing so copies each included-in-selection audiofile into that target folder.
+
 - [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
 - [ ] Consider: Instead of collapse/expand carets like what we've been doing in the Main Library UI so far, what if clicking on a folder just zoomed into that folder, and you see a breadcrumb at top showing where you've zoomed into? More Google Drive style?
   - ...talk throguh w Claude-- have it look at my data structure -- is "putting songs into nested folders" even a useful concept, like at all? Would it be better to list everything flat, and use "ephemeral folders" to support collapsing songs in the same album, to make my library more navigable?
 - You can right-click selected items and click "Move..." to open a pop-up that lists all folders in the Main Library, with their dropdown toggles so you can zoom in and select a specific folder you want to drill into.
 - Misc
-  - Fix bug: forward/back arrow keys (on keyboard) should seek in current song by only 5s regardless of the length of the song. (For very long songs, currently it's skipping 7 mins at a time.)
-  - When dragging into the playlist (from a file or from list items selected), if within 4em of the top or bottom of the viewport, autoscroll at a slow linear speed up/down.
   - Check if bug still occurs: when you put songs into a folder, then you select everything & delete, songs within the subfolder do NOT have their audiofiles deleted.
-  - Fix: if you double-click a song in a folder, it starts playback scoped to that folder. That should not happen, playback should be scoped to the whole playlist unless you specifically double-click the folder itself.
-  - ✅ Support double-click on a playlist (incl Main Library) to start playback at the top.
-  - Support dragging a selection of songs out to a Finder folder (copy the files).
   - On import: Warning message if any unsupported filetypes were dragged in, listing them and saying they'll be ignored.
-- Support editing title, album, artist, and tags
 - Sanity & safety checks
   - Keep an append-only text log, of every song deleted & every song added. Also keep an append-only `audit_log` table of each ListItem or Song creation and deletion events.
   - Utilities -> "Health Check" window
@@ -31,17 +28,13 @@
 - Setting: "Delay between songs (in seconds, negative = crossfade)"
 - [ ] Search syntax: support `sort=...` where sort values include: default (natural), random. Have a sort dropdown on the Advanced Search modal so this feature is easily discoverable.
 - [ ] Support saving searches
-- ✅ Support playlists
-  - ✅ When dragging songs into a playlist from the outside world, also add them to Main Library. Every song added should be in the Main Library.
 
 # Old notes
 
 - OMG I'm having a new brainwave about my music library app.
   - So first of all, it needs to be something that I can navigate and organize organically. So it's gonna be Claude Code Vibed Up Music Library app that kind of randomly picks songs for me and I give feedback on whether that's in the same genre and whether I like it. And I can give negative feedback of at least two different axes. It can be either I don't like this song, play it less. Or it can be this song, I like it, but it's not my mood right now. Um, or the opposite, I can say, I like this song, play it more, and or I can say this song really fits my mood right now. And so um I think Claude Code could help me plan out a way that the the app can use that input to build up a network, like a graph database of which songs are linked to which other songs. And then I can have some sort of visual or CLI based explorer or like a web view based explorer that allows me to navigate the relationships that I've built up between my music.
 
-- 
-
-## Also, are there a AI libraries that will listen to a music file and give information about how it sounds, what qualities or aesthetic characteristics it has, and what genres and moods it fits with, because maybe I could use AI to frickin' auto-categorize my library and then I just throw everything together and create a navigator which is already pre-populated with a terrain of the music that I have. And then I don't need to worry about manually inventing that terrain from scratch. It would be nice to have some feedback mechanisms so that I can organically adjust the terrain, but I want I want to be able to dump in a folder in there and have AI crunch through it, and organize my music by type and feel and mood. Mood is the word that really resonates with me most strongly right now.
+Also, are there a AI libraries that will listen to a music file and give information about how it sounds, what qualities or aesthetic characteristics it has, and what genres and moods it fits with, because maybe I could use AI to frickin' auto-categorize my library and then I just throw everything together and create a navigator which is already pre-populated with a terrain of the music that I have. And then I don't need to worry about manually inventing that terrain from scratch. It would be nice to have some feedback mechanisms so that I can organically adjust the terrain, but I want I want to be able to dump in a folder in there and have AI crunch through it, and organize my music by type and feel and mood. Mood is the word that really resonates with me most strongly right now.
 
 > [*Claude*](https://claude.ai/chat/ebf3e97f-e1ec-41e2-aae4-8c883440f743): Yes, this is very doable! There are several libraries that do exactly this kind of audio analysis. Here's the landscape:
 

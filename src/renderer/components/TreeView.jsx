@@ -1,4 +1,4 @@
-import { For, Show, createResource, createMemo, onMount } from 'solid-js';
+import { For, Show, createResource, createMemo, onMount, onCleanup } from 'solid-js';
 import { currentListId, selectedItems, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { libraryVersion } from '../stores/tags.js';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../stores/dragdrop.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
+import { startNativeFileDrag } from '../utils/dragOut.js';
 import { TreeItem } from './TreeItem.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { getListItems, getItemById, moveItem, addSongsToList } from '../utils/api.js';
@@ -75,6 +76,67 @@ export function TreeView(props) {
   // Track if dropping into folder should insert at start (for expanded folders, bottom zone)
   let insertAtFolderStart = false;
 
+  // ---- Drag autoscroll ----
+  //
+  // Chromium's own drag autoscroll only fires in a couple of pixels right at the
+  // edge and runs at one fixed speed, which is near-impossible to aim at. This
+  // replaces it with a generous band whose speed ramps up as you approach the
+  // edge, so a slow crawl and a fast scroll are both reachable.
+  const AUTOSCROLL_BAND_EM = 4;
+  const AUTOSCROLL_MIN_PX_PER_SEC = 60;
+  const AUTOSCROLL_MAX_PX_PER_SEC = 1400;
+
+  let autoScrollVelocity = 0; // px/sec, negative = up
+  let autoScrollFrame = null;
+  let lastFrameTime = 0;
+
+  const stepAutoScroll = (now) => {
+    if (!containerRef || autoScrollVelocity === 0) {
+      autoScrollFrame = null;
+      return;
+    }
+    const elapsed = (now - lastFrameTime) / 1000;
+    lastFrameTime = now;
+    containerRef.scrollTop += autoScrollVelocity * elapsed;
+    autoScrollFrame = requestAnimationFrame(stepAutoScroll);
+  };
+
+  const updateAutoScroll = (clientY) => {
+    if (!containerRef) return;
+
+    const rect = containerRef.getBoundingClientRect();
+    const band = AUTOSCROLL_BAND_EM * parseFloat(getComputedStyle(containerRef).fontSize);
+    const fromTop = clientY - rect.top;
+    const fromBottom = rect.bottom - clientY;
+
+    // 0 outside the band, 1 at (or past) the edge itself.
+    let intensity = 0;
+    if (fromTop < band) intensity = -(1 - Math.max(fromTop, 0) / band);
+    else if (fromBottom < band) intensity = 1 - Math.max(fromBottom, 0) / band;
+
+    // Squared so the slow end of the band stays genuinely slow and controllable.
+    autoScrollVelocity = intensity === 0
+      ? 0
+      : Math.sign(intensity) *
+        (AUTOSCROLL_MIN_PX_PER_SEC +
+          (AUTOSCROLL_MAX_PX_PER_SEC - AUTOSCROLL_MIN_PX_PER_SEC) * intensity * intensity);
+
+    if (autoScrollVelocity !== 0 && autoScrollFrame === null) {
+      lastFrameTime = performance.now();
+      autoScrollFrame = requestAnimationFrame(stepAutoScroll);
+    }
+  };
+
+  const stopAutoScroll = () => {
+    autoScrollVelocity = 0;
+    if (autoScrollFrame !== null) {
+      cancelAnimationFrame(autoScrollFrame);
+      autoScrollFrame = null;
+    }
+  };
+
+  onCleanup(stopAutoScroll);
+
   // Get all visible item IDs in order (for range selection)
   const getVisibleItemIds = () => {
     const ids = [];
@@ -108,15 +170,16 @@ export function TreeView(props) {
 
   // Handle drag start
   const handleDragStart = (e, itemId) => {
-    isInternalDrag = true;
-
     // If the dragged item is selected, drag all selected items
     // Otherwise, just drag this one item
-    if (selectedItems().has(itemId)) {
-      draggedItems = Array.from(selectedItems());
-    } else {
-      draggedItems = [itemId];
-    }
+    const ids = selectedItems().has(itemId) ? Array.from(selectedItems()) : [itemId];
+
+    // Option-drag hands the files to the OS instead; that cancels the HTML5 drag,
+    // so nothing below should run.
+    if (startNativeFileDrag(e, ids)) return;
+
+    isInternalDrag = true;
+    draggedItems = ids;
 
     // 'copyMove', not 'move': the same drag can be dropped inside the tree (a
     // move) or onto a sidebar playlist (a copy). Chromium refuses a drop whose
@@ -268,6 +331,7 @@ export function TreeView(props) {
 
   // Handle drop
   const handleDrop = async (e, targetItemId) => {
+    stopAutoScroll();
     const isExternalFile = e.dataTransfer.types.includes('Files');
     const itemsToMove = [...draggedItems];
 
@@ -414,6 +478,7 @@ export function TreeView(props) {
 
   // Handle drag end
   const handleDragEnd = (e) => {
+    stopAutoScroll();
     isInternalDrag = false;
     draggedItems = [];
     clearDragState();
@@ -428,6 +493,10 @@ export function TreeView(props) {
 
   // Handle external file drops on container (empty space)
   const handleContainerDragOver = async (e) => {
+    // Every dragover bubbles up to here, whatever is being dragged, so this is
+    // the one place that sees the pointer for the whole surface.
+    updateAutoScroll(e.clientY);
+
     if (!e.dataTransfer.types.includes('Files') || isInternalDrag) {
       return;
     }
@@ -483,6 +552,7 @@ export function TreeView(props) {
   };
 
   const handleContainerDrop = async (e) => {
+    stopAutoScroll();
     if (!e.dataTransfer.types.includes('Files') || isInternalDrag) {
       return;
     }
@@ -507,6 +577,7 @@ export function TreeView(props) {
   const handleContainerDragLeave = (e) => {
     // Only clear if actually leaving the container
     if (!containerRef?.contains(e.relatedTarget)) {
+      stopAutoScroll();
       // Leaving the tree is exactly the "dragging to the sidebar" case, so hide
       // the visuals but keep the payload alive until dragend.
       hideDropIndicator();

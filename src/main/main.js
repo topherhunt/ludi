@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
@@ -901,6 +901,34 @@ ipcMain.handle('shell:showInFinder', (event, filePath) => {
     return true;
   }
   return false;
+});
+
+// Which audio files a selection of tree items resolves to. Exposed on its own
+// (rather than only inside the drag handler below) so the resolution -- folder
+// recursion, dedupe, order -- is testable without starting a real drag session.
+ipcMain.handle('db:getSongFilePathsForItems', (event, itemIds) => {
+  return db.getSongFilePathsForItems(itemIds);
+});
+
+// Hand the selection to the OS as a native file drag, so dropping on the Desktop
+// or a Finder folder copies the audio files there.
+//
+// This must be `send`, not `invoke`: startDrag only works while the mouse is
+// still down, so the renderer calls it synchronously from `dragstart` and cannot
+// await anything first. Resolving the paths here (better-sqlite3 is synchronous)
+// keeps the whole round trip inside that window.
+ipcMain.on('drag:startForItems', (event, itemIds) => {
+  const filePaths = db.getSongFilePathsForItems(itemIds).filter((p) => fs.existsSync(p));
+  if (filePaths.length === 0) return;
+
+  // startDrag rejects an empty icon, and the drag image is what the user sees
+  // following the cursor. NSImageNameMultipleDocuments is available synchronously;
+  // app.getFileIcon is not, and awaiting it would outlive the drag gesture.
+  const icon = process.platform === 'darwin'
+    ? nativeImage.createFromNamedImage('NSImageNameMultipleDocuments', [0, 0, 1])
+    : nativeImage.createEmpty();
+
+  event.sender.startDrag({ files: filePaths, icon });
 });
 
 ipcMain.handle('clipboard:writeText', (event, text) => {

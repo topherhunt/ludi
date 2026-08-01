@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   flattenFolder: (listId) => ipcRenderer.invoke('db:flattenFolder', listId),
   getRootListId: (listId) => ipcRenderer.invoke('db:getRootListId', listId),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
+  getSongFilePathsForItems: (itemIds) => ipcRenderer.invoke('db:getSongFilePathsForItems', itemIds),
+
+  // Native drag-out to Finder. `send`, not `invoke`: it has to run synchronously
+  // inside the renderer's dragstart while the mouse is still down.
+  startFileDragForItems: (itemIds) => ipcRenderer.send('drag:startForItems', itemIds),
 
   // Playlist operations (rename goes through renameFolder -- same UPDATE)
   createPlaylist: (title) => ipcRenderer.invoke('db:createPlaylist', title),

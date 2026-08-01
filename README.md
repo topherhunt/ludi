@@ -53,6 +53,7 @@ Features:
 
 - Instead of a playlists sidebar in the style of iTunes or Swinsian, the main interface panel uses a "nested folders" metaphor, like a Finder / File Explorer window, where each folder can be expanded to reveal the subfolders. (This song explorer/organization view is virtual, stored in the .sqlite db, and does NOT correspond to where songs' audiofiles are stored on-disk.)
 - Songs and folders can easily be rearranged via drag and drop to reorder them.
+- Hold Option while dragging a selection to drag the audio files out to the Desktop or a Finder folder instead (the OS copies them). It has to be a modifier: Electron's native file drag cancels the in-app HTML5 drag, so one gesture can't be both.
 - There IS a left-hand sidebar, but it's only used for defining playlists and saved searches.
 - You can right-click on any folder (either in the main view or within a playlist) and click "Play this folder".
 - Changing shuffle and loop settings take effect immediately on next song play, unlike Swinsian which has a long-standing bug where those settings changes don't take effect until you select a different song to play.

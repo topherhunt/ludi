@@ -1,4 +1,5 @@
-const { test, expect } = require('./fixtures');
+const { test, expect, testAudioDir } = require('./fixtures');
+const path = require('path');
 
 test.describe('Player Controls', () => {
   test('should have shuffle and loop control buttons', async ({ window }) => {
@@ -99,5 +100,56 @@ test.describe('Player Controls', () => {
 
     const nextBtn = await window.locator('#nextBtn');
     await expect(nextBtn).toBeVisible();
+  });
+
+  // Regression: #seekBar is a 0-100 range input, so once it had focus Chromium's
+  // native arrow-key step took over and moved 1% of the song per press -- 1.5s in
+  // this ~2:33 clip, and minutes in a long one. Arrows must always seek 5s.
+  test('arrow keys on the focused seek bar seek 5s per press, not 1% of the song', async ({ window }) => {
+    const toSec = (s) => { const [m, sec] = s.split(':').map(Number); return m * 60 + sec; };
+
+    await window.evaluate(async (fp) => {
+      await window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 });
+    }, path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3'));
+
+    await window.locator('.playlist-item').first().click();
+    const row = window
+      .locator('.tree-item-content[data-is-folder="false"]', { hasText: 'Jump Into My Mouth' })
+      .first();
+    await expect(row).toBeVisible({ timeout: 2000 });
+    await row.dblclick();
+    await expect(window.locator('#playPauseBtn')).toHaveClass(/playing/);
+    await window.waitForTimeout(400); // let Howler report a real duration to seek against
+
+    // Pause so the only thing moving currentTime is the arrow keys.
+    await window.locator('#playPauseBtn').click();
+    await window.waitForTimeout(100);
+
+    // The clip must be long enough that 1%-per-press is clearly distinguishable
+    // from 5s-per-press (~1.5s vs 5s here).
+    expect(toSec(await window.locator('#totalTime').textContent())).toBeGreaterThan(120);
+
+    // Start from the middle, so neither direction clamps at an end.
+    await window.evaluate(() => {
+      const bar = document.getElementById('seekBar');
+      bar.value = '50';
+      bar.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await window.waitForTimeout(100);
+
+    // Four presses: 20s if the fix holds, ~6s if the native 1% step is back.
+    // #currentTime has 1s resolution, so the two are unambiguous over 4 presses.
+    const seekBar = window.locator('#seekBar');
+    await seekBar.focus();
+    const start = toSec(await window.locator('#currentTime').textContent());
+
+    for (let i = 0; i < 4; i++) await seekBar.press('ArrowRight');
+    await window.waitForTimeout(100);
+    expect(toSec(await window.locator('#currentTime').textContent()) - start).toBeGreaterThanOrEqual(19);
+    expect(toSec(await window.locator('#currentTime').textContent()) - start).toBeLessThanOrEqual(21);
+
+    for (let i = 0; i < 4; i++) await seekBar.press('ArrowLeft');
+    await window.waitForTimeout(100);
+    expect(toSec(await window.locator('#currentTime').textContent()) - start).toBeLessThanOrEqual(1);
   });
 });

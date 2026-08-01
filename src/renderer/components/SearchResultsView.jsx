@@ -3,8 +3,25 @@ import { searchResults, searchError, searchViewMode, searchRootListId } from '..
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { formatTime } from '../utils/format.js';
-import { selectOnly } from '../stores/navigation.js';
+import {
+  selectedItems,
+  lastSelectedItemId,
+  selectOnly,
+  toggleSelection,
+  rangeSelect,
+  setLastSelectedItemId,
+  clearSelection,
+} from '../stores/navigation.js';
+import { startInternalDrag, endDrag } from '../stores/dragdrop.js';
+import { startNativeFileDrag } from '../utils/dragOut.js';
 import { TagPillList } from './TagPill.jsx';
+
+// Row order for SHIFT-range selection. Collapsed folders drop their children
+// from the DOM entirely here, so document order is exactly what the user sees.
+// Virtual folder rows have no placement id and are skipped.
+const visibleSearchItemIds = () =>
+  Array.from(document.querySelectorAll('#explorerTree .tree-item-content[data-item-id]'))
+    .map((el) => parseInt(el.dataset.itemId));
 
 /**
  * Given matched songs with ancestor_folders, build a virtual nested tree rooted
@@ -81,6 +98,32 @@ function buildNestedTree(matchedSongs, rootListId) {
 
 function SearchSongRow(props) {
   const isCurrent = createMemo(() => props.song.item_id === currentPlayingItemId());
+  const isSelected = createMemo(() => selectedItems().has(props.song.item_id));
+
+  // Same selection gestures as the tree: plain click replaces, CMD toggles,
+  // SHIFT extends from the last click.
+  const handleClick = (e) => {
+    if (e.shiftKey && lastSelectedItemId() !== null) {
+      rangeSelect(props.song.item_id, visibleSearchItemIds());
+    } else if (e.metaKey || e.ctrlKey) {
+      toggleSelection(props.song.item_id);
+    } else {
+      selectOnly(props.song.item_id);
+    }
+    setLastSelectedItemId(props.song.item_id);
+  };
+
+  // Search results can be dragged OUT (onto a sidebar playlist) but never
+  // rearranged: their order belongs to the query, not to any list. Publishing
+  // the payload is all this needs -- the view itself is not a drop target.
+  const handleDragStart = (e) => {
+    const ids = selectedItems().has(props.song.item_id)
+      ? Array.from(selectedItems())
+      : [props.song.item_id];
+    if (startNativeFileDrag(e, ids)) return;
+    e.dataTransfer.effectAllowed = 'copy';
+    startInternalDrag(ids, 'tree');
+  };
 
   const iconClass = createMemo(() => {
     if (isCurrent()) return isPlaying() ? 'bi bi-play-fill' : 'bi bi-pause-fill';
@@ -97,12 +140,15 @@ function SearchSongRow(props) {
     <li class="tree-item">
       <div
         class="tree-item-content qa-search-song"
-        classList={{ 'current-song': isCurrent() }}
+        classList={{ 'current-song': isCurrent(), selected: isSelected() }}
         style={{ 'grid-template-columns': gridTemplateColumns() }}
         data-item-id={props.song.item_id}
         data-is-folder="false"
         data-song-id={props.song.song_id}
-        onClick={() => selectOnly(props.song.item_id)}
+        draggable={true}
+        onClick={handleClick}
+        onDragStart={handleDragStart}
+        onDragEnd={() => endDrag()}
       >
         <span
           class="col-title"
@@ -212,10 +258,15 @@ export function SearchResultsView(props) {
     }
   };
 
+  const handleContainerClick = (e) => {
+    if (!e.target.closest('.tree-item-content')) clearSelection();
+  };
+
   return (
     <div
       class="explorer-container"
       id="explorerContainer"
+      onClick={handleContainerClick}
       onDblClick={handleContainerDblClick}
     >
       <Show

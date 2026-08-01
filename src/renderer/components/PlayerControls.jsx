@@ -28,6 +28,7 @@ export function PlayerControls(props) {
     toggleMute,
     onNext,
     onPrevious,
+    onSeekBy,
   } = props;
 
   // Calculate progress percentage
@@ -43,6 +44,19 @@ export function PlayerControls(props) {
   // Handle seek bar change
   const handleSeek = (e) => {
     seekToPercent?.(parseFloat(e.target.value));
+  };
+
+  // The seek bar is a 0-100 range input, so its native arrow-key step is 1% of
+  // the song -- minutes at a time in a long recording. Seek by the same fixed
+  // amount the explorer's arrow keys use instead.
+  const SEEK_STEP_SECONDS = 5;
+  const ARROW_DIRECTION = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 };
+
+  const handleSeekKeyDown = (e) => {
+    const direction = ARROW_DIRECTION[e.key];
+    if (direction === undefined) return;
+    e.preventDefault();
+    onSeekBy(direction * SEEK_STEP_SECONDS);
   };
 
   // Handle volume change
@@ -153,6 +167,7 @@ export function PlayerControls(props) {
           value={progress()}
           disabled={!hasPlaylist()}
           onInput={handleSeek}
+          onKeyDown={handleSeekKeyDown}
         />
         <span id="totalTime">{formatTime(duration?.() || 0)}</span>
       </div>

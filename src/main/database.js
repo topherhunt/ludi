@@ -877,6 +877,23 @@ function collectSongsInItems(itemIds) {
   return songs;
 }
 
+// Absolute paths of every audio file reachable from `itemIds`, deduped and in
+// depth-first display order. Backs the drag-out-to-Finder gesture: dragging the
+// same song twice would still copy one file, so the same song is listed once.
+function getSongFilePathsForItems(itemIds) {
+  const settings = getSettings();
+  const seen = new Set();
+  const paths = [];
+  for (const { song_id } of collectSongsInItems(itemIds)) {
+    if (seen.has(song_id)) continue;
+    seen.add(song_id);
+    const song = db.prepare('SELECT file_path FROM songs WHERE id = ?').get(song_id);
+    if (!song) throw new Error(`No such song: ${song_id}`);
+    paths.push(path.join(settings.library_path, song.file_path));
+  }
+  return paths;
+}
+
 // Every song id anywhere under `listId`, recursing into folders.
 function collectSongIdsInList(listId) {
   const ids = new Set();
@@ -978,6 +995,7 @@ module.exports = {
   getSong,
   getSongByPath,
   getAllSongFilePaths,
+  getSongFilePathsForItems,
   isSongInList,
   isSongInMainLibrary,
   findSongPlacementInMainLibrary,

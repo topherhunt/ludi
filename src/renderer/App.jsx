@@ -429,6 +429,7 @@ export function App() {
         toggleMute={toggleMute}
         onNext={handleNext}
         onPrevious={handlePrevious}
+        onSeekBy={handleSeek}
       />
 
       {/* Alert Modal */}
