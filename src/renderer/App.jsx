@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar.jsx';
 import { Explorer } from './components/Explorer.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
 import { AlertModal, ConfirmModal, RenameModal } from './components/Modal.jsx';
+import { DuplicateSongsModal } from './components/DuplicateSongsModal.jsx';
 import {
   alertModalState,
   confirmModalState,
@@ -26,6 +27,7 @@ import {
   setCurrentTrackIndex,
   currentPlayingSongId,
   setCurrentPlayingSongId,
+  setCurrentPlayingItemId,
   isPlaying,
   setIsPlaying,
   hasNextTrack,
@@ -180,6 +182,7 @@ export function App() {
       // At end, no loop: stop playback
       setIsPlaying(false);
       setCurrentPlayingSongId(null);
+      setCurrentPlayingItemId(null);
     }
   };
 
@@ -189,6 +192,10 @@ export function App() {
       // Update display info
       setSongTitle(song.title || 'Unknown');
       setSongArtist(song.artist || '');
+
+      // Which row is playing. A playlist can hold the same song twice, so the
+      // song id alone can't identify the row that should be highlighted.
+      setCurrentPlayingItemId(song.item_id);
 
       // Use the audio player's playSong method which handles loading and playing
       const success = await player.playSong(song.id);
@@ -220,14 +227,15 @@ export function App() {
     await playCurrentTrack();
   };
 
-  // Handle play song in context
-  const handlePlaySong = async (songId, parentListId) => {
+  // Handle play song in context. Identified by its list_items id, not its song
+  // id -- the same song can appear more than once in one playlist.
+  const handlePlaySong = async (itemId, parentListId) => {
     // Get all songs in the parent list to build playlist
     const songs = await getSongsInList(parentListId);
     if (songs.length === 0) return;
 
-    // Find the index of the clicked song
-    const songIndex = songs.findIndex((s) => s.id === songId);
+    // Find the index of the clicked row
+    const songIndex = songs.findIndex((s) => s.item_id === itemId);
     if (songIndex === -1) return;
 
     setPlaylist(songs);
@@ -325,14 +333,11 @@ export function App() {
       explorerRefetch();
     }
 
-    // Update title
-    if (listId === 0) {
-      setListTitle('Main Library');
-    } else {
-      const lists = await window.electronAPI?.getLists?.();
-      const list = lists?.find((l) => l.id === listId);
-      setListTitle(list?.title || 'Library');
-    }
+    // Update title. The Main Library is just another row in `lists`, so it
+    // resolves the same way every playlist does.
+    const lists = await window.electronAPI?.getLists?.();
+    const list = lists?.find((l) => l.id === listId);
+    setListTitle(list?.title || 'Library');
   };
 
   // Collapse / expand every folder in the explorer tree. Lives here (not in the
@@ -372,6 +377,7 @@ export function App() {
       <Sidebar
         onListChange={handleListChange}
         onNewFolder={handleNewFolder}
+        onPlayFolder={handlePlayFolder}
         onCollapseAll={handleCollapseAll}
         onExpandAll={handleExpandAll}
       />
@@ -440,6 +446,9 @@ export function App() {
           }}
         />
       </Show>
+
+      {/* Duplicate-songs dialog for adds into a playlist */}
+      <DuplicateSongsModal />
 
       {/* Rename Modal */}
       <Show when={renameModalState().isOpen}>

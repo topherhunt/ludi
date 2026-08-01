@@ -5,6 +5,11 @@ const os = require('os');
 
 const DB_DIR = path.join(os.homedir(), '.ludi');
 
+// The master library: the one mandatory root list that every song must appear in.
+// This means "the master library" -- NOT "the first row of the sidebar" and NOT
+// "the root of the sidebar tree". Keep those ideas separate.
+const MAIN_LIBRARY_ID = 0;
+
 // Electron's app is used only to detect a packaged ("live") build. Guarded so
 // this module can still be required outside Electron (e.g. unit tests).
 let electronApp = null;
@@ -301,12 +306,29 @@ function isSongInList(songId, parentListId) {
   return item !== undefined;
 }
 
-function isSongInLibrary(songId) {
-  // Check if the song exists anywhere in any list
-  // For now, all lists are part of the Main Library
-  // Later when playlists are added, this would need to filter by library vs playlist
-  const item = db.prepare('SELECT 1 FROM list_items WHERE song_id = ? LIMIT 1').get(songId);
-  return item !== undefined;
+// Walk up the folder chain to the root list (a playlist, or the Main Library)
+// that ultimately contains `listId`. A list is a root when nothing places it
+// inside another list.
+function getRootListId(listId) {
+  const stmt = db.prepare('SELECT parent_list_id FROM list_items WHERE list_id = ?');
+  const seen = new Set();
+  let currentId = listId;
+  while (true) {
+    if (seen.has(currentId)) {
+      throw new Error(`Cycle in list hierarchy at list ${currentId}`);
+    }
+    seen.add(currentId);
+    const placement = stmt.get(currentId);
+    if (!placement) return currentId;
+    currentId = placement.parent_list_id;
+  }
+}
+
+// Every song must live in the Main Library somewhere (playlists only reference
+// songs). Placements under a playlist root don't count.
+function isSongInMainLibrary(songId) {
+  const placements = db.prepare('SELECT parent_list_id FROM list_items WHERE song_id = ?').all(songId);
+  return placements.some(p => getRootListId(p.parent_list_id) === MAIN_LIBRARY_ID);
 }
 
 function addFolder(parentListId, position, title) {
@@ -361,11 +383,28 @@ function addSongToList(songId, parentListId, position) {
     `).run(parentListId, position);
 
     // Add the song to the list
-    db.prepare(`
+    const result = db.prepare(`
       INSERT INTO list_items (parent_list_id, position, list_id, song_id, inserted_at, updated_at)
       VALUES (?, ?, NULL, ?, ?, ?)
     `).run(parentListId, position, songId, now, now);
+
+    return result.lastInsertRowid;
   })();
+}
+
+// The list_items row that places `songId` somewhere under the Main Library, or
+// null if it isn't in the library. Used by import to reuse an existing placement
+// instead of creating a second one.
+function findSongPlacementInMainLibrary(songId) {
+  const placements = db.prepare('SELECT id, parent_list_id FROM list_items WHERE song_id = ?').all(songId);
+  const match = placements.find(p => getRootListId(p.parent_list_id) === MAIN_LIBRARY_ID);
+  return match ? match.id : null;
+}
+
+// The list_items row that places folder `listId` inside its parent.
+function getFolderPlacementItemId(listId) {
+  const placement = db.prepare('SELECT id FROM list_items WHERE list_id = ?').get(listId);
+  return placement ? placement.id : null;
 }
 
 function moveItem(itemId, newParentListId, newPosition) {
@@ -492,7 +531,22 @@ function collectSongsToDelete(itemId, results = { songIds: [], filePaths: [] }) 
   return results;
 }
 
-// Delete item and its associated audio files
+// Close position gaps so a list's positions stay dense (0..n-1).
+function renumberList(parentListId) {
+  const now = new Date().toISOString();
+  const items = db.prepare(
+    'SELECT id FROM list_items WHERE parent_list_id = ? ORDER BY position'
+  ).all(parentListId);
+  items.forEach((item, index) => {
+    db.prepare('UPDATE list_items SET position = ?, updated_at = ? WHERE id = ?')
+      .run(index, now, item.id);
+  });
+}
+
+// Delete item and its associated audio files. This is the Main Library ("master")
+// delete: the song is removed from every playlist that references it, the songs
+// row goes, and the file is trashed. To remove a song from a playlist only, use
+// removeItemsFromList.
 function deleteItemWithFiles(itemId) {
   return db.transaction(() => {
     // First collect all songs to delete
@@ -502,21 +556,29 @@ function deleteItemWithFiles(itemId) {
     // This handles list_items, lists, and position adjustments
     deleteItem(itemId);
 
-    // Now delete the song records from the songs table
-    // Only delete songs that have no remaining list_item references
     const filesToDelete = [];
+    const processed = new Set(); // a song can appear more than once under one item
     for (let i = 0; i < songIds.length; i++) {
       const songId = songIds[i];
-      const refCount = db.prepare('SELECT COUNT(*) as count FROM list_items WHERE song_id = ?').get(songId);
-      if (refCount.count === 0) {
-        // Remove tag associations first (FK; no DB-layer cascade by convention)
-        db.prepare('DELETE FROM song_tags WHERE song_id = ?').run(songId);
-        db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
-        filesToDelete.push(filePaths[i]);
+      if (processed.has(songId)) continue;
+      processed.add(songId);
+
+      // Purge the song's remaining placements (playlists) so nothing dangles,
+      // then close the gaps that leaves behind in those lists.
+      const others = db.prepare('SELECT parent_list_id FROM list_items WHERE song_id = ?').all(songId);
+      if (others.length > 0) {
+        db.prepare('DELETE FROM list_items WHERE song_id = ?').run(songId);
+        for (const parentListId of new Set(others.map(o => o.parent_list_id))) {
+          renumberList(parentListId);
+        }
       }
+
+      // Remove tag associations first (FK; no DB-layer cascade by convention)
+      db.prepare('DELETE FROM song_tags WHERE song_id = ?').run(songId);
+      db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
+      filesToDelete.push(filePaths[i]);
     }
 
-    // Return only the file paths for songs that were actually deleted
     return filesToDelete;
   })();
 }
@@ -724,7 +786,190 @@ function flattenFolder(folderListId) {
   })();
 }
 
+// ---- Playlists -----------------------------------------------------------
+//
+// A playlist is a root list: `is_subfolder = 0` plus a `sidebar_position`. It
+// holds references to songs, never copies of them -- copying a folder into a
+// playlist creates new `lists`/`list_items` rows that point at the SAME `songs`
+// rows, and the audio files are untouched. Duplicates of one song within a
+// playlist are allowed by design (see the DROP INDEX in createTables).
+//
+// `sidebar_position` is read and written ONLY here and in getLists(). If the
+// sidebar ever grows folders-of-playlists, a `sidebar_items` placement table
+// replaces the column and these two functions are the whole migration surface.
+
+function createPlaylist(title) {
+  const now = new Date().toISOString();
+  const nextPos = db.prepare(
+    'SELECT COALESCE(MAX(sidebar_position), -1) + 1 AS pos FROM lists WHERE is_subfolder = 0'
+  ).get().pos;
+  const result = db.prepare(`
+    INSERT INTO lists (title, is_subfolder, sidebar_position, inserted_at, updated_at)
+    VALUES (?, 0, ?, ?, ?)
+  `).run(title, nextPos, now, now);
+  return db.prepare('SELECT * FROM lists WHERE id = ?').get(result.lastInsertRowid);
+}
+
+// Delete a playlist and every placement inside it. Songs and audio files are
+// never touched -- a playlist only ever held references.
+function deletePlaylist(listId) {
+  if (listId === MAIN_LIBRARY_ID) {
+    throw new Error('The Main Library cannot be deleted');
+  }
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(listId);
+  if (!list) throw new Error(`No such list: ${listId}`);
+  if (list.is_subfolder) throw new Error(`List ${listId} is a folder, not a playlist`);
+
+  return db.transaction(() => {
+    const items = db.prepare('SELECT id FROM list_items WHERE parent_list_id = ?').all(listId);
+    for (const item of items) deleteItem(item.id);
+    db.prepare('DELETE FROM lists WHERE id = ?').run(listId);
+  })();
+}
+
+// Rewrite sidebar order from an ordered array of playlist ids. Main Library is
+// pinned at position 0 and must not appear in `orderedIds`; the rest follow it.
+// The array signature (rather than "set playlist X to position N") is what lets
+// this become reorderSidebar({ parentFolderId, orderedIds }) later.
+function reorderPlaylists(orderedIds) {
+  if (orderedIds.includes(MAIN_LIBRARY_ID)) {
+    throw new Error('The Main Library cannot be reordered');
+  }
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    orderedIds.forEach((listId, index) => {
+      db.prepare('UPDATE lists SET sidebar_position = ?, updated_at = ? WHERE id = ?')
+        .run(index + 1, now, listId);
+    });
+  })();
+}
+
+// Remove placements only. deleteItem already recurses into folders and never
+// touches songs or files, which is exactly the playlist-removal semantics.
+function removeItemsFromList(itemIds) {
+  return db.transaction(() => {
+    for (const itemId of itemIds) deleteItem(itemId);
+  })();
+}
+
+// Every song reachable from `itemIds`, in depth-first display order. Songs
+// appearing more than once are listed more than once.
+function collectSongsInItems(itemIds) {
+  const songs = [];
+  const visit = (itemId) => {
+    const item = db.prepare(`
+      SELECT li.list_id, li.song_id, s.title AS song_title
+      FROM list_items li LEFT JOIN songs s ON li.song_id = s.id
+      WHERE li.id = ?
+    `).get(itemId);
+    if (!item) throw new Error(`No such list item: ${itemId}`);
+
+    if (item.song_id !== null) {
+      songs.push({ song_id: item.song_id, title: item.song_title });
+    } else {
+      const children = db.prepare(
+        'SELECT id FROM list_items WHERE parent_list_id = ? ORDER BY position'
+      ).all(item.list_id);
+      for (const child of children) visit(child.id);
+    }
+  };
+  for (const itemId of itemIds) visit(itemId);
+  return songs;
+}
+
+// Every song id anywhere under `listId`, recursing into folders.
+function collectSongIdsInList(listId) {
+  const ids = new Set();
+  const visit = (id) => {
+    const items = db.prepare('SELECT list_id, song_id FROM list_items WHERE parent_list_id = ?').all(id);
+    for (const item of items) {
+      if (item.song_id !== null) ids.add(item.song_id);
+      else visit(item.list_id);
+    }
+  };
+  visit(listId);
+  return ids;
+}
+
+// What would copying `itemIds` into `targetListId` bring in, and which of those
+// songs are already there? Drives the add/skip/cancel dialog. One row per
+// duplicated song, however many times it appears in the source.
+//
+// "Already there" means anywhere in the whole playlist, not just in the target
+// folder -- dropping into a subfolder of a playlist that already holds the song
+// elsewhere is still a duplicate as the user sees it.
+function previewCopyToList(itemIds, targetListId) {
+  const songs = collectSongsInItems(itemIds);
+  const existing = collectSongIdsInList(getRootListId(targetListId));
+
+  const seen = new Set();
+  const duplicates = [];
+  for (const song of songs) {
+    if (existing.has(song.song_id) && !seen.has(song.song_id)) {
+      seen.add(song.song_id);
+      duplicates.push(song);
+    }
+  }
+  return { totalSongs: songs.length, duplicates };
+}
+
+// Append copies of `itemIds` to the end of `targetListId`. Songs become new
+// placements pointing at the same `songs` row; folders get a brand-new `lists`
+// row and are copied recursively. Songs in `skipSongIds` are omitted -- a folder
+// left empty by that is still created, so the copied structure stays predictable.
+function copyItemsToList(itemIds, targetListId, skipSongIds = []) {
+  const now = new Date().toISOString();
+  const skip = new Set(skipSongIds);
+
+  return db.transaction(() => {
+    let added = 0;
+
+    const copyInto = (sourceItemId, parentListId, position) => {
+      const item = db.prepare('SELECT * FROM list_items WHERE id = ?').get(sourceItemId);
+      if (!item) throw new Error(`No such list item: ${sourceItemId}`);
+
+      if (item.song_id !== null) {
+        if (skip.has(item.song_id)) return false;
+        db.prepare(`
+          INSERT INTO list_items (parent_list_id, position, list_id, song_id, inserted_at, updated_at)
+          VALUES (?, ?, NULL, ?, ?, ?)
+        `).run(parentListId, position, item.song_id, now, now);
+        added++;
+        return true;
+      }
+
+      const source = db.prepare('SELECT title FROM lists WHERE id = ?').get(item.list_id);
+      const newFolderId = db.prepare(`
+        INSERT INTO lists (title, is_subfolder, sidebar_position, inserted_at, updated_at)
+        VALUES (?, 1, NULL, ?, ?)
+      `).run(source.title, now, now).lastInsertRowid;
+      db.prepare(`
+        INSERT INTO list_items (parent_list_id, position, list_id, song_id, inserted_at, updated_at)
+        VALUES (?, ?, ?, NULL, ?, ?)
+      `).run(parentListId, position, newFolderId, now, now);
+
+      const children = db.prepare(
+        'SELECT id FROM list_items WHERE parent_list_id = ? ORDER BY position'
+      ).all(item.list_id);
+      let childPosition = 0;
+      for (const child of children) {
+        if (copyInto(child.id, newFolderId, childPosition)) childPosition++;
+      }
+      return true;
+    };
+
+    let nextPosition = db.prepare(
+      'SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM list_items WHERE parent_list_id = ?'
+    ).get(targetListId).pos;
+    for (const itemId of itemIds) {
+      if (copyInto(itemId, targetListId, nextPosition)) nextPosition++;
+    }
+    return added;
+  })();
+}
+
 module.exports = {
+  MAIN_LIBRARY_ID,
   initialize,
   getLists,
   getListItems,
@@ -734,7 +979,16 @@ module.exports = {
   getSongByPath,
   getAllSongFilePaths,
   isSongInList,
-  isSongInLibrary,
+  isSongInMainLibrary,
+  findSongPlacementInMainLibrary,
+  getFolderPlacementItemId,
+  getRootListId,
+  createPlaylist,
+  deletePlaylist,
+  reorderPlaylists,
+  removeItemsFromList,
+  previewCopyToList,
+  copyItemsToList,
   addFolder,
   addSong,
   addSongToList,

@@ -9,6 +9,7 @@ import {
 } from '../stores/navigation.js';
 import {
   currentPlayingSongId,
+  currentPlayingItemId,
   isPlaying,
 } from '../stores/playback.js';
 import {
@@ -31,10 +32,12 @@ export function TreeItem(props) {
   // Determine if this is a folder
   const isFolder = () => props.item.list_id !== null;
 
-  // Check if this song is currently playing
+  // Check if this row is the one currently playing. Keyed on the placement, not
+  // the song: a playlist may hold the same song twice and only the row that was
+  // actually started should be highlighted.
   const isCurrentSong = createMemo(() => {
     if (isFolder()) return false;
-    return props.item.song_id === currentPlayingSongId();
+    return props.item.id === currentPlayingItemId();
   });
 
   // Check if this folder contains the currently playing song
@@ -132,7 +135,7 @@ export function TreeItem(props) {
     if (isFolder()) {
       props.onPlayFolder?.(props.item.list_id);
     } else {
-      props.onPlaySong?.(props.item.song_id, props.item.parent_list_id);
+      props.onPlaySong?.(props.item.id, props.item.parent_list_id);
     }
   };
 

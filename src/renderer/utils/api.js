@@ -26,6 +26,12 @@ function getAPI() {
     renameFolder: async () => true,
     updateFolderExpanded: async () => true,
     deleteItemWithFiles: async () => ({ totalFiles: 0, deletedFiles: 0, errors: [] }),
+    createPlaylist: async (title) => ({ id: 0, title, is_subfolder: 0, sidebar_position: 0 }),
+    deletePlaylist: async () => {},
+    reorderPlaylists: async () => {},
+    removeItemsFromList: async () => {},
+    previewCopyToList: async () => ({ totalSongs: 0, duplicates: [] }),
+    copyItemsToList: async () => 0,
     getAllTags: async () => [],
     createTag: async ({ name, color }) => ({ id: 0, name, color, position: 0 }),
     renameTag: async () => {},
@@ -35,7 +41,7 @@ function getAPI() {
     addTagToSongs: async () => {},
     removeTagFromSongs: async () => {},
     updateSong: async () => {},
-    importFiles: async () => ({ imported: [], unsupported: [], errors: [] }),
+    importFiles: async () => ({ imported: [], unsupported: [], errors: [], targetIsPlaylist: false, itemIds: [] }),
     getSettings: async () => ({ library_path: '', database_path: '' }),
     saveSettings: async () => true,
     selectDirectory: async () => null,
@@ -172,6 +178,52 @@ export async function deleteItemWithFiles(itemId) {
   return getAPI().deleteItemWithFiles(itemId);
 }
 
+// Playlist operations
+//
+// A playlist is a root list holding references to songs. Copying into one never
+// touches audio files. Playlist rename goes through renameFolder -- same UPDATE.
+
+/** Create an empty playlist at the end of the sidebar. Returns the new list row. */
+export async function createPlaylist(title) {
+  return getAPI().createPlaylist(title);
+}
+
+/** Delete a playlist and its placements. Songs and files are untouched. */
+export async function deletePlaylist(listId) {
+  return getAPI().deletePlaylist(listId);
+}
+
+/**
+ * Rewrite sidebar order from an ordered array of playlist ids.
+ * Must NOT include the Main Library -- it stays pinned at the top.
+ */
+export async function reorderPlaylists(orderedIds) {
+  return getAPI().reorderPlaylists(orderedIds);
+}
+
+/** Remove placements from their list. Never deletes songs or audio files. */
+export async function removeItemsFromList(itemIds) {
+  return getAPI().removeItemsFromList(itemIds);
+}
+
+/**
+ * What copying these items into a list would bring in, and which songs are
+ * already there. Drives the add/skip/cancel duplicates dialog.
+ * @returns {Promise<{ totalSongs: number, duplicates: Array<{ song_id, title }> }>}
+ */
+export async function previewCopyToList(itemIds, targetListId) {
+  return getAPI().previewCopyToList({ itemIds, targetListId });
+}
+
+/**
+ * Append copies of these items to the end of a list. Folders are recreated;
+ * songs become new references to the same song rows.
+ * @returns {Promise<number>} how many songs were added
+ */
+export async function copyItemsToList(itemIds, targetListId, skipSongIds = []) {
+  return getAPI().copyItemsToList({ itemIds, targetListId, skipSongIds });
+}
+
 // Tag operations
 
 /** Get all defined tags, ordered by position. */
@@ -226,7 +278,10 @@ export async function updateSong(songId, fields) {
  * @param {string[]} filePaths
  * @param {number} parentListId
  * @param {number} position
- * @returns {Promise<{ imported: Array, unsupported: Array, errors: Array }>}
+ * When parentListId resolves to a playlist, files are imported into the Main
+ * Library instead and `itemIds` holds the resulting library items, so the caller
+ * can copy them into the playlist.
+ * @returns {Promise<{ imported: Array, unsupported: Array, errors: Array, targetIsPlaylist: boolean, itemIds: number[] }>}
  */
 export async function importFiles(filePaths, parentListId, position) {
   return getAPI().importFiles({ filePaths, parentListId, position });
@@ -314,9 +369,11 @@ export async function getSongPath(songId) {
 }
 
 /**
- * Get all songs in a list (recursively including subfolders)
+ * Get all songs in a list (recursively including subfolders).
+ * `item_id` identifies the placement, and is what playback keys off -- the same
+ * song can appear more than once in a playlist, so `id` alone is ambiguous.
  * @param {number} listId
- * @returns {Promise<Array<{ id: number, title: string, artist: string, file_path: string }>>}
+ * @returns {Promise<Array<{ item_id: number, id: number, title: string, artist: string, file_path: string }>>}
  */
 export async function getSongsInList(listId) {
   const items = await getListItems(listId);
@@ -332,6 +389,7 @@ export async function getSongsInList(listId) {
       const song = await getSong(item.song_id);
       if (song) {
         songs.push({
+          item_id: item.id,
           id: song.id,
           title: song.title,
           artist: song.artist,

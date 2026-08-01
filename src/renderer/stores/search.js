@@ -1,5 +1,6 @@
 import { createSignal, createMemo, createRoot } from 'solid-js';
 import { getAllListItems } from '../utils/api.js';
+import { currentListId } from './navigation.js';
 import { parseQuery, evaluateSong, isInvalidQuery } from '../utils/searchParser.js';
 
 const {
@@ -11,12 +12,17 @@ const {
   setSearchError,
   searchViewMode,
   setSearchViewMode,
+  searchRootListId,
+  setSearchRootListId,
   isSearching,
 } = createRoot(() => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal(null); // null = not searching
   const [searchError, setSearchError] = createSignal(null);     // null | 'invalid_syntax'
   const [searchViewMode, setSearchViewMode] = createSignal('nested');
+  // The root list the current results came from -- results are scoped to the
+  // list you were viewing when you searched.
+  const [searchRootListId, setSearchRootListId] = createSignal(null);
   const isSearching = createMemo(() => searchResults() !== null);
 
   return {
@@ -28,13 +34,16 @@ const {
     setSearchError,
     searchViewMode,
     setSearchViewMode,
+    searchRootListId,
+    setSearchRootListId,
     isSearching,
   };
 });
 
 /**
- * Run a search against the full library.
- * Loads all list items, parses the query, filters songs, stores results.
+ * Run a search against the list currently being viewed (the Main Library or a
+ * playlist). Loads all list items, parses the query, filters songs, stores
+ * results.
  * @param {string} queryString
  */
 async function runSearch(queryString) {
@@ -44,7 +53,9 @@ async function runSearch(queryString) {
     return;
   }
 
+  const rootListId = currentListId();
   setSearchQuery(trimmed);
+  setSearchRootListId(rootListId);
 
   if (isInvalidQuery(trimmed)) {
     setSearchError('invalid_syntax');
@@ -64,18 +75,33 @@ async function runSearch(queryString) {
     }
   }
 
+  // Which root list (Main Library or playlist) an item ultimately sits under.
+  const rootCache = new Map();
+  function rootOf(listId) {
+    if (rootCache.has(listId)) return rootCache.get(listId);
+    const chain = [];
+    let id = listId;
+    while (id !== null && listIdToFolderItem.has(id)) {
+      chain.push(id);
+      id = listIdToFolderItem.get(id).parent_list_id;
+    }
+    for (const seen of chain) rootCache.set(seen, id);
+    rootCache.set(listId, id);
+    return id;
+  }
+
   function getAncestorFolders(item) {
     const ancestors = [];
-    let currentListId = item.parent_list_id;
-    while (currentListId !== 0 && currentListId !== null) {
-      const folderItem = listIdToFolderItem.get(currentListId);
+    let listId = item.parent_list_id;
+    while (listId !== rootListId && listId !== null) {
+      const folderItem = listIdToFolderItem.get(listId);
       if (!folderItem) break;
       ancestors.unshift({
-        list_id: currentListId,
+        list_id: listId,
         title: folderItem.list_title,
         position: folderItem.position,
       });
-      currentListId = folderItem.parent_list_id;
+      listId = folderItem.parent_list_id;
     }
     return ancestors;
   }
@@ -92,6 +118,7 @@ async function runSearch(queryString) {
   const results = [];
   for (const item of allItems) {
     if (item.song_id === null) continue;
+    if (rootOf(item.parent_list_id) !== rootListId) continue;
 
     const ancestorFolders = getAncestorFolders(item);
     const songData = {
@@ -130,6 +157,7 @@ function clearSearch() {
   setSearchResults(null);
   setSearchQuery('');
   setSearchError(null);
+  setSearchRootListId(null);
 }
 
 export {
@@ -139,6 +167,7 @@ export {
   searchError,
   searchViewMode,
   setSearchViewMode,
+  searchRootListId,
   isSearching,
   runSearch,
   clearSearch,

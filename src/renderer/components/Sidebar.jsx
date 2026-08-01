@@ -1,11 +1,26 @@
 import { For, createResource, createSignal, onMount, onCleanup, Show } from 'solid-js';
-import { currentListId, setCurrentListId, clearSelection } from '../stores/navigation.js';
-import { getLists, renameTag, setTagColor, deleteTag, reorderTags } from '../utils/api.js';
+import { currentListId, setCurrentListId, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import {
+  getLists,
+  renameTag,
+  setTagColor,
+  deleteTag,
+  reorderTags,
+  createPlaylist,
+  deletePlaylist,
+  reorderPlaylists,
+  renameFolder,
+  addSongsToList,
+} from '../utils/api.js';
 import { tags, refreshTags, bumpLibraryVersion, findTagByName } from '../stores/tags.js';
-import { runSearch, isSearching, searchQuery } from '../stores/search.js';
-import { showRenameModal, showConfirmModal, showAlert } from '../stores/modals.js';
+import { runSearch, isSearching, searchQuery, clearSearch } from '../stores/search.js';
+import { showRenameModal, hideRenameModal, showConfirmModal, showAlert } from '../stores/modals.js';
+import { copyIntoPlaylist } from '../stores/playlistCopy.js';
+import { showImportSummary } from '../utils/importSummary.js';
 import { TAG_COLORS } from '../utils/tagColors.js';
 import { TagPill } from './TagPill.jsx';
+import { SidebarPlaylistRow } from './SidebarPlaylistRow.jsx';
+import { DropIndicator } from './DropIndicator.jsx';
 import { SongEditPanel } from './SongEditPanel.jsx';
 
 /**
@@ -17,7 +32,9 @@ export function Sidebar(props) {
   // Tag context menu + color-picker popover state
   const [tagMenu, setTagMenu] = createSignal(null);       // { x, y, tag } | null
   const [colorPicker, setColorPicker] = createSignal(null); // { x, y, tag } | null
+  const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
   let draggingTagId = null;
+  let playlistListRef;
 
   // Fetch lists from database
   const [lists, { refetch }] = createResource(getLists);
@@ -138,11 +155,107 @@ export function Sidebar(props) {
     await refreshTags();
   };
 
-  // Handle clicking on a playlist item
-  const handlePlaylistClick = (listId) => {
-    setCurrentListId(listId);
+  // ---- Playlists ----
+
+  // Handle clicking on a playlist item. Switching lists drops any active search:
+  // results are scoped to one list, so keeping them would show stale hits.
+  const handlePlaylistClick = (list) => {
+    clearSearch();
+    setCurrentListId(list.id);
     clearSelection();
-    props.onListChange?.(listId);
+    props.onListChange?.(list.id);
+  };
+
+  const handleNewPlaylist = () => {
+    closeDropdown();
+    showRenameModal('New Playlist', async (title) => {
+      const trimmed = (title || '').trim();
+      hideRenameModal();
+      if (!trimmed) return;
+      const playlist = await createPlaylist(trimmed);
+      await refetch();
+      handlePlaylistClick(playlist);
+    });
+  };
+
+  // Play a whole playlist from the top. Shared by the double-click and the
+  // "Play This Playlist" context-menu item so both behave identically.
+  const handlePlayPlaylist = (list) => {
+    props.onPlayFolder?.(list.id);
+  };
+
+  const handlePlaylistContextMenu = (e, list) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTagMenu(null);
+    setColorPicker(null);
+    setPlaylistMenu({ x: e.clientX, y: e.clientY, list });
+  };
+
+  const handleRenamePlaylist = (list) => {
+    setPlaylistMenu(null);
+    showRenameModal(list.title, async (newName) => {
+      const trimmed = (newName || '').trim();
+      hideRenameModal();
+      if (!trimmed || trimmed === list.title) return;
+      // A playlist rename is the same UPDATE as a folder rename.
+      await renameFolder(list.id, trimmed);
+      await refetch();
+      if (currentListId() === list.id) props.onListChange?.(list.id);
+    });
+  };
+
+  const handleDeletePlaylist = (list) => {
+    setPlaylistMenu(null);
+    showConfirmModal(
+      '<i class="bi bi-trash" style="margin-right: 8px;"></i>Delete Playlist',
+      `Delete the playlist "${list.title}"? The songs themselves stay in your library.`,
+      async () => {
+        await deletePlaylist(list.id);
+        await refetch();
+        if (currentListId() === list.id) {
+          handlePlaylistClick({ id: MAIN_LIBRARY_ID });
+        }
+      }
+    );
+  };
+
+  // Reorder: pull the dragged playlist out of the sidebar order and put it back
+  // next to the target. The Main Library is pinned first and never takes part.
+  const handleReorderPlaylists = async (draggedListId, targetListId, insertBefore) => {
+    if (draggedListId === undefined || draggedListId === targetListId) return;
+    const ids = (lists() || [])
+      .filter((l) => l.id !== MAIN_LIBRARY_ID)
+      .map((l) => l.id);
+
+    const from = ids.indexOf(draggedListId);
+    if (from === -1) return;
+    ids.splice(from, 1);
+
+    const targetIndex = ids.indexOf(targetListId);
+    if (targetIndex === -1) return;
+    ids.splice(insertBefore ? targetIndex : targetIndex + 1, 0, draggedListId);
+
+    await reorderPlaylists(ids);
+    await refetch();
+  };
+
+  // Songs / folders dragged in from the tree are copied, never moved.
+  const handleCopyItemsToPlaylist = async (list, itemIds) => {
+    if (itemIds.length === 0) return;
+    const added = await copyIntoPlaylist(itemIds, list.id, list.title);
+    if (added > 0) bumpLibraryVersion();
+  };
+
+  // OS files dropped on a playlist import into the Main Library (every song must
+  // live there) and are then copied in via the same path an in-app drag takes.
+  const handleDropFilesOnPlaylist = async (list, paths) => {
+    const result = await addSongsToList(list.id, paths);
+    if (result.targetIsPlaylist && result.itemIds.length > 0) {
+      await copyIntoPlaylist(result.itemIds, list.id, list.title);
+    }
+    bumpLibraryVersion();
+    showImportSummary(result);
   };
 
   // Toggle add dropdown
@@ -161,7 +274,7 @@ export function Sidebar(props) {
   onMount(() => {
     const onKey = (e) => {
       if (e.key === 'Escape' && isDropdownOpen()) closeDropdown();
-      if (e.key === 'Escape') { setTagMenu(null); setColorPicker(null); }
+      if (e.key === 'Escape') { setTagMenu(null); setColorPicker(null); setPlaylistMenu(null); }
     };
     const onDocClick = (e) => {
       if (
@@ -173,6 +286,7 @@ export function Sidebar(props) {
       }
       const inMenu = e.target.closest('.tag-context-menu');
       const inPopover = e.target.closest('.tag-color-popover');
+      if (playlistMenu() && !e.target.closest('.playlist-context-menu')) setPlaylistMenu(null);
       if (tagMenu() && !inMenu) setTagMenu(null);
       // Don't close the color popover on the very menu click that opened it.
       if (colorPicker() && !inPopover && !inMenu) setColorPicker(null);
@@ -201,7 +315,8 @@ export function Sidebar(props) {
       !e.target.closest('.song-edit-panel') &&
       !e.target.closest('.tags-section') &&
       !e.target.closest('.tag-context-menu') &&
-      !e.target.closest('.tag-color-popover')
+      !e.target.closest('.tag-color-popover') &&
+      !e.target.closest('.playlist-context-menu')
     ) {
       clearSelection();
     }
@@ -239,6 +354,13 @@ export function Sidebar(props) {
           <div id="addLibraryDropdown" class="dropdown-menu visible">
             <div
               class="dropdown-item"
+              id="newPlaylistMenuItem"
+              onClick={handleNewPlaylist}
+            >
+              New Playlist
+            </div>
+            <div
+              class="dropdown-item"
               id="newFolderMenuItem"
               onClick={handleNewFolder}
             >
@@ -248,18 +370,24 @@ export function Sidebar(props) {
         </Show>
       </div>
 
-      <div class="playlist-list" id="playlistList">
+      <div class="playlist-list" id="playlistList" ref={playlistListRef}>
         <For each={lists() || []}>
           {(list) => (
-            <div
-              class="playlist-item"
-              classList={{ active: currentListId() === list.id }}
-              onClick={() => handlePlaylistClick(list.id)}
-            >
-              {list.title}
-            </div>
+            <SidebarPlaylistRow
+              list={list}
+              depth={0}
+              isTagDragging={() => draggingTagId !== null}
+              getListContainer={() => playlistListRef}
+              onSelect={handlePlaylistClick}
+              onPlay={handlePlayPlaylist}
+              onContextMenu={handlePlaylistContextMenu}
+              onReorder={handleReorderPlaylists}
+              onCopyItems={handleCopyItemsToPlaylist}
+              onDropFiles={handleDropFilesOnPlaylist}
+            />
           )}
         </For>
+        <DropIndicator scope="sidebar" />
       </div>
 
       <Show when={tags().length > 0}>
@@ -288,6 +416,33 @@ export function Sidebar(props) {
       </Show>
 
       <SongEditPanel />
+
+      {/* Playlist right-click context menu. The Main Library can only be played. */}
+      <Show when={playlistMenu()}>
+        <div
+          class="context-menu playlist-context-menu"
+          style={{ left: `${playlistMenu().x}px`, top: `${playlistMenu().y}px` }}
+        >
+          <div
+            class="context-menu-item qa-playlist-play"
+            onClick={() => {
+              const list = playlistMenu().list;
+              setPlaylistMenu(null);
+              handlePlayPlaylist(list);
+            }}
+          >
+            Play This Playlist
+          </div>
+          <Show when={playlistMenu().list.id !== MAIN_LIBRARY_ID}>
+            <div class="context-menu-item qa-playlist-rename" onClick={() => handleRenamePlaylist(playlistMenu().list)}>
+              Rename
+            </div>
+            <div class="context-menu-item qa-playlist-delete" onClick={() => handleDeletePlaylist(playlistMenu().list)}>
+              Delete Playlist
+            </div>
+          </Show>
+        </div>
+      </Show>
 
       {/* Tag right-click context menu */}
       <Show when={tagMenu()}>

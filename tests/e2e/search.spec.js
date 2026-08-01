@@ -1,5 +1,7 @@
 const { test, expect, testAudioDir } = require('./fixtures');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 test.describe('Search', () => {
   test.beforeAll(async ({ window }) => {
@@ -37,7 +39,7 @@ test.describe('Search', () => {
     await window.waitForTimeout(200);
 
     const title = await window.locator('#currentListTitle');
-    await expect(title).toHaveText('Search Results');
+    await expect(title).toHaveText('Search Results in Main Library');
 
     const viewToggle = await window.locator('.search-view-toggle');
     await expect(viewToggle).toBeVisible();
@@ -69,7 +71,7 @@ test.describe('Search', () => {
     await searchInput.press('Enter');
     await window.waitForTimeout(200);
 
-    await expect(window.locator('#currentListTitle')).toHaveText('Search Results');
+    await expect(window.locator('#currentListTitle')).toHaveText('Search Results in Main Library');
 
     await searchInput.press('Escape');
     await window.waitForTimeout(100);
@@ -157,10 +159,80 @@ test.describe('Search', () => {
     await window.waitForTimeout(200);
 
     const title = await window.locator('#currentListTitle');
-    await expect(title).toHaveText('Search Results');
+    await expect(title).toHaveText('Search Results in Main Library');
 
     // Clean up
     await window.locator('.search-clear-btn').click();
     await window.waitForTimeout(50);
+  });
+});
+
+test.describe('Search scoping', () => {
+  test('a search run inside a playlist only matches that playlist', async ({ window }) => {
+    const stamp = Date.now();
+    const playlistName = `Search Scope ${stamp}`;
+    const src = path.join(os.tmpdir(), `ludi-scope-${stamp}.m4a`);
+    fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), src);
+
+    // The song has no ID3 title, so the unique filename becomes the title --
+    // the search term matches exactly this song and nothing else.
+    const term = `ludi-scope-${stamp}`;
+    const imported = await window.evaluate(async (fp) => {
+      const result = await window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 });
+      return result.imported[0];
+    }, src);
+    fs.unlinkSync(src);
+
+    await window.keyboard.press('Escape');
+    await window.click('#addLibraryBtn');
+    await window.click('#newPlaylistMenuItem');
+    await window.fill('#renameInput', playlistName);
+    await window.click('#renameOkBtn');
+    const playlistRow = window.locator('.qa-playlist-item').filter({ hasText: playlistName });
+    await expect(playlistRow).toBeVisible({ timeout: 2000 });
+    const listId = parseInt(await playlistRow.getAttribute('data-list-id'));
+
+    // Put a copy of the song in the playlist (the drag itself is covered in
+    // playlists.spec.js -- this test is about where search looks).
+    const playlistItemId = await window.evaluate(async ({ itemId, targetListId }) => {
+      await window.electronAPI.copyItemsToList({ itemIds: [itemId], targetListId, skipSongIds: [] });
+      const items = await window.electronAPI.getListItems(targetListId);
+      return items[0].id;
+    }, { itemId: imported.itemId, targetListId: listId });
+
+    const searchInput = window.locator('.search-input');
+    const results = window.locator('.qa-search-song');
+
+    // In the Main Library: one hit, the Main Library placement.
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+    await window.waitForTimeout(150);
+    await searchInput.fill(term);
+    await searchInput.press('Enter');
+    await expect(window.locator('#currentListTitle')).toHaveText('Search Results in Main Library', { timeout: 2000 });
+    await expect(results).toHaveCount(1);
+    await expect(results).toHaveAttribute('data-item-id', String(imported.itemId));
+
+    // Switching lists clears the search, so run it again from the playlist.
+    await playlistRow.click();
+    await window.waitForTimeout(150);
+    await searchInput.fill(term);
+    await searchInput.press('Enter');
+    await expect(window.locator('#currentListTitle'))
+      .toHaveText(`Search Results in ${playlistName}`, { timeout: 2000 });
+
+    // One hit, and it is the playlist's placement -- not the Main Library one,
+    // and not both.
+    await expect(results).toHaveCount(1);
+    await expect(results).toHaveAttribute('data-item-id', String(playlistItemId));
+    // The tree is rooted at the playlist, so no "Main Library" wrapper folder.
+    await expect(window.locator('.qa-search-folder')).toHaveCount(0);
+
+    // Clean up: drop the playlist, then the song and its file.
+    await window.locator('.search-clear-btn').click();
+    await playlistRow.click({ button: 'right' });
+    await window.click('.qa-playlist-delete');
+    await window.click('#modalYesBtn');
+    await expect(playlistRow).toHaveCount(0, { timeout: 2000 });
+    await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), imported.itemId);
   });
 });

@@ -197,10 +197,9 @@ export function useKeyboard(options) {
           onPlayFolder?.(folderId);
         }
       } else {
-        const songId = parseInt(element.dataset.songId);
         const item = await getItemById(firstSelectedId);
         if (item) {
-          onPlaySong?.(songId, item.parent_list_id);
+          onPlaySong?.(item.id, item.parent_list_id);
         }
       }
       return;

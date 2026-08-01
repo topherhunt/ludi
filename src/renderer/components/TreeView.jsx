@@ -1,8 +1,17 @@
 import { For, Show, createResource, createMemo, onMount } from 'solid-js';
-import { currentListId, selectedItems, clearSelection } from '../stores/navigation.js';
+import { currentListId, selectedItems, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { libraryVersion } from '../stores/tags.js';
-import { setDragState, clearDragState, isDropIndicatorVisible, dropIndicatorPosition } from '../stores/dragdrop.js';
-import { showAlert } from '../stores/modals.js';
+import {
+  setDragState,
+  clearDragState,
+  hideDropIndicator,
+  startInternalDrag,
+  dragSource,
+  isDropIndicatorVisible,
+  dropIndicatorPosition,
+} from '../stores/dragdrop.js';
+import { copyIntoPlaylist } from '../stores/playlistCopy.js';
+import { showImportSummary } from '../utils/importSummary.js';
 import { TreeItem } from './TreeItem.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { getListItems, getItemById, moveItem, addSongsToList } from '../utils/api.js';
@@ -40,6 +49,18 @@ export function TreeView(props) {
   onMount(() => {
     props.onRefetch?.(refetch);
   });
+
+  // Finish an OS-file import. When the drop target lives under a playlist the
+  // songs were imported into the Main Library instead (every song must live
+  // there), so copy the resulting items into the target via the same path an
+  // in-app drag takes -- duplicates dialog included.
+  const finishFileImport = async (result, targetListId) => {
+    if (result.targetIsPlaylist && result.itemIds.length > 0) {
+      await copyIntoPlaylist(result.itemIds, targetListId, props.listTitle);
+    }
+    await refetch();
+    showImportSummary(result);
+  };
 
   // Drag-drop state
   let draggedItems = [];
@@ -97,7 +118,11 @@ export function TreeView(props) {
       draggedItems = [itemId];
     }
 
-    e.dataTransfer.effectAllowed = 'move';
+    // 'copyMove', not 'move': the same drag can be dropped inside the tree (a
+    // move) or onto a sidebar playlist (a copy). Chromium refuses a drop whose
+    // dropEffect isn't permitted by effectAllowed, so 'move' alone would make
+    // every drop on a playlist silently do nothing.
+    e.dataTransfer.effectAllowed = 'copyMove';
     e.target.style.opacity = '0.5';
 
     // Apply opacity to all selected items being dragged
@@ -111,10 +136,18 @@ export function TreeView(props) {
     }
 
     setDragState({ isDragging: true, draggedItemId: itemId });
+
+    // Publish the payload so other surfaces (the sidebar) can see what's being
+    // dragged. TreeView keeps using its own `draggedItems` for its own logic;
+    // nothing is ever written to dataTransfer.
+    startInternalDrag(draggedItems, 'tree');
   };
 
   // Handle drag over - works for both internal and external drags
   const handleDragOver = async (e, targetItemId) => {
+    // A playlist chip dragged from the sidebar has no meaning inside the tree.
+    if (dragSource() === 'sidebar-playlist') return;
+
     const isExternalFile = e.dataTransfer.types.includes('Files');
 
     e.preventDefault();
@@ -131,7 +164,9 @@ export function TreeView(props) {
     // For internal drags, don't allow dropping on dragged items
     if (!isExternalFile && draggedItems.includes(targetItemId)) {
       if (currentDropState !== null) {
-        clearDragState();
+        // Hide the visuals only -- clearing the whole drag state here would
+        // discard the payload the sidebar needs if the drag continues there.
+        hideDropIndicator();
         externalDropTarget = null;
         currentDropState = null;
         document.querySelectorAll('.tree-item-content.drop-into').forEach((el) => {
@@ -246,7 +281,7 @@ export function TreeView(props) {
     document.querySelectorAll('.tree-item-content.drop-into').forEach((el) => {
       el.classList.remove('drop-into');
     });
-    clearDragState();
+    hideDropIndicator();
     currentDropState = null;
     const shouldInsertAtStart = insertAtFolderStart;
     insertAtFolderStart = false;
@@ -261,37 +296,9 @@ export function TreeView(props) {
       const paths = files.map((f) => window.electronAPI.getPathForFile(f));
 
       if (paths.length > 0 && externalDropTarget) {
-        const result = await addSongsToList(externalDropTarget.listId, paths, externalDropTarget.position);
-        refetch();
-
-        // Build dialog content for skipped/unsupported files
-        const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
-        const unsupported = result?.unsupported || [];
-
-        if (skipped.length > 0 || unsupported.length > 0) {
-          let dialogHtml = '';
-
-          if (unsupported.length > 0) {
-            const unsupportedListHtml = unsupported.map(f => `<li>${f}</li>`).join('');
-            dialogHtml += `
-              <p>Skipped ${unsupported.length} unsupported file(s):</p>
-              <div class="skipped-files-list"><ul>${unsupportedListHtml}</ul></div>
-            `;
-          }
-
-          if (skipped.length > 0) {
-            const skippedListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
-            dialogHtml += `
-              <p>Skipped ${skipped.length} song(s) already in library:</p>
-              <div class="skipped-files-list"><ul>${skippedListHtml}</ul></div>
-            `;
-          }
-
-          showAlert(
-            '<i class="bi bi-info-circle" style="margin-right: 8px;"></i>Import Summary',
-            dialogHtml
-          );
-        }
+        const targetListId = externalDropTarget.listId;
+        const result = await addSongsToList(targetListId, paths, externalDropTarget.position);
+        await finishFileImport(result, targetListId);
       }
       externalDropTarget = null;
       return;
@@ -481,7 +488,7 @@ export function TreeView(props) {
     }
     e.preventDefault();
 
-    clearDragState();
+    hideDropIndicator();
 
     const files = Array.from(e.dataTransfer.files);
     // Pass all file/folder paths to the backend - it handles filtering and folder scanning.
@@ -491,33 +498,7 @@ export function TreeView(props) {
     if (paths.length > 0) {
       const dropTarget = externalDropTarget || { listId: currentListId(), position: undefined };
       const result = await addSongsToList(dropTarget.listId, paths, dropTarget.position);
-      refetch();
-
-      // Build dialog content for skipped/unsupported files
-      const skipped = result?.errors?.filter(e => e.error?.includes('already exists')) || [];
-      const unsupported = result?.unsupported || [];
-
-      if (skipped.length > 0 || unsupported.length > 0) {
-        let dialogHtml = '';
-
-        if (unsupported.length > 0) {
-          const unsupportedListHtml = unsupported.map(f => `<li>${f}</li>`).join('');
-          dialogHtml += `
-            <p>Skipped ${unsupported.length} unsupported file(s):</p>
-            <div class="skipped-files-list"><ul>${unsupportedListHtml}</ul></div>
-          `;
-        }
-
-        if (skipped.length > 0) {
-          const skippedListHtml = skipped.map(e => `<li>${e.file}</li>`).join('');
-          dialogHtml += `
-            <p>Skipped ${skipped.length} song(s) already in library:</p>
-            <div class="skipped-files-list"><ul>${skippedListHtml}</ul></div>
-          `;
-        }
-
-        showAlertModal(dialogHtml);
-      }
+      await finishFileImport(result, dropTarget.listId);
     }
     externalDropTarget = null;
   };
@@ -526,7 +507,9 @@ export function TreeView(props) {
   const handleContainerDragLeave = (e) => {
     // Only clear if actually leaving the container
     if (!containerRef?.contains(e.relatedTarget)) {
-      clearDragState();
+      // Leaving the tree is exactly the "dragging to the sidebar" case, so hide
+      // the visuals but keep the payload alive until dragend.
+      hideDropIndicator();
       externalDropTarget = null;
       currentDropState = null;
       document.querySelectorAll('.tree-item-content.drop-into').forEach((el) => {
@@ -563,6 +546,11 @@ export function TreeView(props) {
           when={!items.loading}
           fallback={<li class="loading">Loading...</li>}
         >
+          <Show when={(items() || []).length === 0 && currentListId() !== MAIN_LIBRARY_ID}>
+            <li class="empty-playlist qa-empty-playlist">
+              Drag songs here to add them to this playlist.
+            </li>
+          </Show>
           <For each={items() || []}>
             {(item) => (
               <TreeItem

@@ -1,25 +1,28 @@
 import { For, Show, createSignal, createMemo } from 'solid-js';
-import { searchResults, searchError, searchViewMode } from '../stores/search.js';
-import { currentPlayingSongId, isPlaying } from '../stores/playback.js';
+import { searchResults, searchError, searchViewMode, searchRootListId } from '../stores/search.js';
+import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { formatTime } from '../utils/format.js';
 import { selectOnly } from '../stores/navigation.js';
 import { TagPillList } from './TagPill.jsx';
 
 /**
- * Given matched songs with ancestor_folders, build a virtual nested tree.
+ * Given matched songs with ancestor_folders, build a virtual nested tree rooted
+ * at `rootListId` (the list the search was run in -- the Main Library or a
+ * playlist).
  * Applies collapsing: folders with exactly 1 matched child are inlined at the parent level.
  * Returns array of nodes: { type:'song'|'folder', ... }
  */
-function buildNestedTree(matchedSongs) {
+function buildNestedTree(matchedSongs, rootListId) {
   if (!matchedSongs || matchedSongs.length === 0) return [];
 
   // folder metadata: list_id -> { title, position, parentListId }
+  // The root itself is never rendered; it only anchors the recursion.
   const folderMeta = new Map();
-  folderMeta.set(0, { title: 'Main Library', position: 0, parentListId: null });
+  folderMeta.set(rootListId, { title: '', position: 0, parentListId: null });
 
   for (const song of matchedSongs) {
-    let prevListId = 0;
+    let prevListId = rootListId;
     for (const ancestor of song.ancestor_folders) {
       if (!folderMeta.has(ancestor.list_id)) {
         folderMeta.set(ancestor.list_id, {
@@ -73,11 +76,11 @@ function buildNestedTree(matchedSongs) {
     return rawChildren;
   }
 
-  return renderFolder(0);
+  return renderFolder(rootListId);
 }
 
 function SearchSongRow(props) {
-  const isCurrent = createMemo(() => props.song.song_id === currentPlayingSongId());
+  const isCurrent = createMemo(() => props.song.item_id === currentPlayingItemId());
 
   const iconClass = createMemo(() => {
     if (isCurrent()) return isPlaying() ? 'bi bi-play-fill' : 'bi bi-pause-fill';
@@ -195,15 +198,17 @@ function SearchTreeNode(props) {
 export function SearchResultsView(props) {
   const nestedTree = createMemo(() => {
     if (searchViewMode() !== 'nested') return [];
-    return buildNestedTree(searchResults() || []);
+    return buildNestedTree(searchResults() || [], searchRootListId());
   });
 
   const handleContainerDblClick = (e) => {
     const songEl = e.target.closest('[data-song-id]');
     if (songEl) {
-      const songId = parseInt(songEl.dataset.songId);
-      const song = (searchResults() || []).find(s => s.song_id === songId);
-      if (song) props.onPlaySong?.(song.song_id, song.parent_list_id);
+      // Rows are identified by placement, not song: a playlist can hold the
+      // same song more than once.
+      const itemId = parseInt(songEl.dataset.itemId);
+      const song = (searchResults() || []).find(s => s.item_id === itemId);
+      if (song) props.onPlaySong?.(song.item_id, song.parent_list_id);
     }
   };
 

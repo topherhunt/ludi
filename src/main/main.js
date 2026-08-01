@@ -364,6 +364,32 @@ ipcMain.handle('db:flattenFolder', (event, listId) => {
   return db.flattenFolder(listId);
 });
 
+// ---- Playlists ----
+// Note: playlist rename goes through db:renameFolder -- it's the same UPDATE.
+ipcMain.handle('db:createPlaylist', (event, title) => {
+  return db.createPlaylist(title);
+});
+
+ipcMain.handle('db:deletePlaylist', (event, listId) => {
+  return db.deletePlaylist(listId);
+});
+
+ipcMain.handle('db:reorderPlaylists', (event, orderedIds) => {
+  return db.reorderPlaylists(orderedIds);
+});
+
+ipcMain.handle('db:removeItemsFromList', (event, itemIds) => {
+  return db.removeItemsFromList(itemIds);
+});
+
+ipcMain.handle('db:previewCopyToList', (event, { itemIds, targetListId }) => {
+  return db.previewCopyToList(itemIds, targetListId);
+});
+
+ipcMain.handle('db:copyItemsToList', (event, { itemIds, targetListId, skipSongIds }) => {
+  return db.copyItemsToList(itemIds, targetListId, skipSongIds);
+});
+
 // ---- Tags ----
 ipcMain.handle('db:getAllTags', () => {
   return db.getAllTags();
@@ -537,8 +563,11 @@ function walkAudioFiles(folderPath) {
 }
 
 /**
- * Import a single audio file and add to a list
- * @returns {{ songId, title, artist, album } | null}
+ * Import a single audio file and add to a list.
+ * `itemId` is the list_items row the song now sits in -- for an already-imported
+ * song that's its existing Main Library placement, which lets a playlist drop
+ * reference it without creating a second library placement.
+ * @returns {{ songId, itemId, title, artist, album } | { skipped, songId, itemId, file, error }}
  */
 async function importSingleFile(filePath, parentListId, position, libraryPath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -590,15 +619,22 @@ async function importSingleFile(filePath, parentListId, position, libraryPath) {
     }
   }
 
-  // For Main Library (and its subfolders), don't allow duplicate songs anywhere
-  if (!isNewSong && db.isSongInLibrary(songId)) {
-    return { skipped: true, file: path.basename(filePath), error: 'Song already exists in library' };
+  // Every song lives in the Main Library exactly once. If it's already there,
+  // hand back the existing placement rather than creating a second one.
+  if (!isNewSong && db.isSongInMainLibrary(songId)) {
+    return {
+      skipped: true,
+      songId,
+      itemId: db.findSongPlacementInMainLibrary(songId),
+      file: path.basename(filePath),
+      error: 'Song already exists in library',
+    };
   }
 
   // Add song to list at the appropriate position
-  db.addSongToList(songId, parentListId, position);
+  const itemId = db.addSongToList(songId, parentListId, position);
 
-  return { songId, title, artist, album };
+  return { songId, itemId, title, artist, album };
 }
 
 /**
@@ -609,12 +645,14 @@ async function importFolderTree(folderTree, parentListId, startPosition, library
   const results = {
     imported: [],
     errors: [],
-    folderId: null
+    folderId: null,
+    folderItemId: null
   };
 
   // Create the folder in the database
   const folderId = db.addFolder(parentListId, startPosition, folderTree.name);
   results.folderId = folderId;
+  results.folderItemId = db.getFolderPlacementItemId(folderId);
 
   let currentPosition = 0;
 
@@ -651,10 +689,22 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
   const settings = db.getSettings();
   const libraryPath = settings.library_path;
 
+  // Every song must land in the Main Library. A drop onto a playlist (or a
+  // folder inside one) therefore imports into the Main Library and hands back
+  // the resulting item ids, so the renderer can copy them into the playlist via
+  // the same path an in-app drag takes -- duplicates dialog included.
+  const targetIsPlaylist = db.getRootListId(parentListId) !== db.MAIN_LIBRARY_ID;
+  const importParentListId = targetIsPlaylist ? db.MAIN_LIBRARY_ID : parentListId;
+  const importPosition = targetIsPlaylist
+    ? db.getListItems(db.MAIN_LIBRARY_ID).length
+    : position;
+
   const results = {
     imported: [],
     unsupported: [],
-    errors: []
+    errors: [],
+    targetIsPlaylist,
+    itemIds: []  // top-level Main Library items this import created or reused
   };
 
   for (let i = 0; i < filePaths.length; i++) {
@@ -675,9 +725,10 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
 
       // Import the folder tree
       try {
-        const folderResults = await importFolderTree(folderTree, parentListId, position + i, libraryPath);
+        const folderResults = await importFolderTree(folderTree, importParentListId, importPosition + i, libraryPath);
         results.imported.push(...folderResults.imported);
         results.errors.push(...folderResults.errors);
+        if (folderResults.folderItemId !== null) results.itemIds.push(folderResults.folderItemId);
       } catch (error) {
         console.error('Error importing folder:', filePath, error);
         results.errors.push({ file: path.basename(filePath), error: error.message });
@@ -690,9 +741,12 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
       }
 
       try {
-        const result = await importSingleFile(filePath, parentListId, position + i, libraryPath);
+        const result = await importSingleFile(filePath, importParentListId, importPosition + i, libraryPath);
+        if (result.itemId) results.itemIds.push(result.itemId);
         if (result.skipped) {
-          results.errors.push({ file: result.file, error: result.error });
+          // Already in the library. That's an error for a library drop, but not
+          // for a playlist drop -- there the song still gets added below.
+          if (!targetIsPlaylist) results.errors.push({ file: result.file, error: result.error });
         } else {
           results.imported.push(result);
         }
@@ -762,10 +816,10 @@ ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
     groups.get(key).push(song);
   }
 
-  // Append each group as a new folder at the end of the Main Library (list 0).
-  let folderPosition = db.getListItems(0).length;
+  // Append each group as a new folder at the end of the Main Library.
+  let folderPosition = db.getListItems(db.MAIN_LIBRARY_ID).length;
   for (const [folderTitle, songs] of groups) {
-    const folderId = db.addFolder(0, folderPosition, folderTitle);
+    const folderId = db.addFolder(db.MAIN_LIBRARY_ID, folderPosition, folderTitle);
     folderPosition++;
 
     let songPosition = 0;

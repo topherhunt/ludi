@@ -20,6 +20,8 @@ const {
   setIsDropIndicatorVisible,
   dropIndicatorPosition,
   setDropIndicatorPosition,
+  dropIndicatorScope,
+  setDropIndicatorScope,
   isInternalDragOperation,
   isDraggingMultiple,
   draggedItemCount,
@@ -35,9 +37,12 @@ const {
   const [dropPosition, setDropPosition] = createSignal('after');
   const [dropTargetListId, setDropTargetListId] = createSignal(null);
 
-  // Drop indicator visibility and position
+  // Drop indicator visibility and position. The indicator is rendered once per
+  // drop surface (the tree, the sidebar) but driven by these shared signals, so
+  // `scope` says which surface the current coordinates belong to.
   const [isDropIndicatorVisible, setIsDropIndicatorVisible] = createSignal(false);
   const [dropIndicatorPosition, setDropIndicatorPosition] = createSignal({ top: 0, left: 0, width: 0 });
+  const [dropIndicatorScope, setDropIndicatorScope] = createSignal('tree');
 
   // Computed
   const isInternalDragOperation = createMemo(() => isInternalDrag());
@@ -63,6 +68,8 @@ const {
     setIsDropIndicatorVisible,
     dropIndicatorPosition,
     setDropIndicatorPosition,
+    dropIndicatorScope,
+    setDropIndicatorScope,
     isInternalDragOperation,
     isDraggingMultiple,
     draggedItemCount,
@@ -99,10 +106,11 @@ function updateDropTarget(itemId, position, listId = null) {
 }
 
 /**
- * Show drop indicator at a specific position
+ * Show drop indicator at a specific position within a given surface
  */
-function showDropIndicator(top, left, width) {
+function showDropIndicator(top, left, width, scope = 'tree') {
   setDropIndicatorPosition({ top, left, width });
+  setDropIndicatorScope(scope);
   setIsDropIndicatorVisible(true);
 }
 
@@ -156,6 +164,8 @@ function setDragState(state) {
     setDraggedItemIds([state.draggedItemId]);
   }
   if (state.showDropIndicator !== undefined) {
+    // Only the tree uses setDragState; the sidebar goes through showDropIndicator.
+    if (state.showDropIndicator) setDropIndicatorScope('tree');
     setIsDropIndicatorVisible(state.showDropIndicator);
   }
   if (state.dropIndicatorTop !== undefined || state.dropIndicatorLeft !== undefined || state.dropIndicatorWidth !== undefined) {
@@ -189,6 +199,7 @@ export {
   // Drop indicator signals
   isDropIndicatorVisible,
   dropIndicatorPosition,
+  dropIndicatorScope,
 
   // Drag functions
   startInternalDrag,

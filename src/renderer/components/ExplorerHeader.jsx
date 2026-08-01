@@ -55,7 +55,7 @@ export function ExplorerHeader(props) {
           when={isSearching()}
           fallback={<h1 id="currentListTitle">{props.title || 'Main Library'}</h1>}
         >
-          <h1 id="currentListTitle">Search Results</h1>
+          <h1 id="currentListTitle">Search Results in {props.title || 'Main Library'}</h1>
           <div class="search-view-toggle">
             <button
               class="search-toggle-btn"

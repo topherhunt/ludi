@@ -133,7 +133,7 @@ test.describe('Tags', () => {
     await chip.click();
     await window.waitForTimeout(200);
 
-    await expect(window.locator('#currentListTitle')).toHaveText('Search Results');
+    await expect(window.locator('#currentListTitle')).toHaveText('Search Results in Main Library');
     await expect(window.locator('.search-input')).toHaveValue('tag=chill');
     await expect(window.locator('.qa-search-song').first()).toBeVisible();
 

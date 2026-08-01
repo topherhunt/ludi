@@ -1,5 +1,10 @@
 import { createSignal, createMemo, createRoot } from 'solid-js';
 
+// The master library: the one mandatory root list that every song must appear
+// in. This means "the master library" -- NOT "the first row of the sidebar" and
+// NOT "the root of the sidebar tree". Mirrors MAIN_LIBRARY_ID in database.js.
+const MAIN_LIBRARY_ID = 0;
+
 // Create store signals inside createRoot to avoid "computations created outside createRoot" warnings
 // These are intentionally global and live for the app lifetime
 const {
@@ -14,8 +19,8 @@ const {
   hasMultipleSelected,
   selectedCount,
 } = createRoot(() => {
-  // Current list being viewed (0 = Main Library)
-  const [currentListId, setCurrentListId] = createSignal(0);
+  // Root list currently being viewed (the Main Library or a playlist)
+  const [currentListId, setCurrentListId] = createSignal(MAIN_LIBRARY_ID);
 
   // Set of selected item IDs
   const [selectedItemIds, setSelectedItemIds] = createSignal(new Set());
@@ -188,6 +193,8 @@ function selectAll(visibleIds) {
 }
 
 export {
+  MAIN_LIBRARY_ID,
+
   // Signals
   currentListId,
   setCurrentListId,

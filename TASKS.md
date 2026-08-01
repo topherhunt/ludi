@@ -1,9 +1,8 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- [ ] (WORKING) Add tagging support
-  - Tags are on songs only (selecting a folder applies/removes tags on all contained songs). Free-form label-style tags with a name + color; drag-to-reorder in the sidebar sets the order used everywhere.
-  - Bottom of the left sidebar: an "Edit {song}/{N} songs" panel with title/track/artist/album fields and a multi-select tag editor (solid border = on all selected songs, dashed = on some; click a pill + Backspace to remove; type to autocomplete or inline-create).
-  - Search supports `tag=name` (presence), `NOT tag=name` / `-tag=name` (absence), plus booleans & parentheses, e.g. `tag=fav AND (tag=instrumental OR tag=low-e)`. Advanced Search has a Tag condition with an is/is-not toggle.
+- [ ] Fix shuffle, currently broken.
+- (TO ENSURE) Search supports `tag=name` (presence), `NOT tag=name` / `-tag=name` (absence), plus booleans & parentheses, e.g. `tag=fav AND (tag=instrumental OR tag=low-e)`. Advanced Search has a Tag condition with an is/is-not toggle.
+- 
 - [ ] Support drag selected files (or files in selected folders) out to a finder folder, or to a G Drive folder in browser (?)
 - [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
 - [ ] The media-key "last track", if you're more than 1 second into the current track, should jump to the start of this track, rather than literally going to the prev track.
@@ -16,7 +15,7 @@
   - When dragging into the playlist (from a file or from list items selected), if within 4em of the top or bottom of the viewport, autoscroll at a slow linear speed up/down.
   - Check if bug still occurs: when you put songs into a folder, then you select everything & delete, songs within the subfolder do NOT have their audiofiles deleted.
   - Fix: if you double-click a song in a folder, it starts playback scoped to that folder. That should not happen, playback should be scoped to the whole playlist unless you specifically double-click the folder itself.
-  - Support double-click on a playlist (incl Main Library) to start playback at the top.
+  - ✅ Support double-click on a playlist (incl Main Library) to start playback at the top.
   - Support dragging a selection of songs out to a Finder folder (copy the files).
   - On import: Warning message if any unsupported filetypes were dragged in, listing them and saying they'll be ignored.
 - Support editing title, album, artist, and tags
@@ -36,8 +35,8 @@
 - Setting: "Delay between songs (in seconds, negative = crossfade)"
 - [ ] Search syntax: support `sort=...` where sort values include: default (natural), random. Have a sort dropdown on the Advanced Search modal so this feature is easily discoverable.
 - [ ] Support saving searches
-- Support playlists
-  - When dragging songs into a playlist from the outside world, also add them to Main Library. Every song added should be in the Main Library.
+- ✅ Support playlists
+  - ✅ When dragging songs into a playlist from the outside world, also add them to Main Library. Every song added should be in the Main Library.
 
 # Old notes
 

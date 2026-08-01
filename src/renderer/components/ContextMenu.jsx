@@ -1,5 +1,5 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { selectedItems } from '../stores/navigation.js';
+import { selectedItems, currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 
 /**
  * Context menu for tree items
@@ -219,7 +219,7 @@ export function ContextMenu(props) {
         </div>
       </Show>
 
-      {/* Delete */}
+      {/* Delete. In a playlist this only removes the placement, so say so. */}
       <div
         class="context-menu-item"
         onClick={() => {
@@ -228,7 +228,7 @@ export function ContextMenu(props) {
           props.onDelete?.(item);
         }}
       >
-        Delete
+        {currentListId() === MAIN_LIBRARY_ID ? 'Delete' : 'Remove from Playlist'}
       </div>
     </div>
   );

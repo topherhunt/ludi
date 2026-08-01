@@ -1,5 +1,5 @@
 import { createSignal, Show } from 'solid-js';
-import { currentListId } from '../stores/navigation.js';
+import { currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal, showAlert } from '../stores/modals.js';
 import { ExplorerHeader } from './ExplorerHeader.jsx';
 import { ColumnHeaders } from './ColumnHeaders.jsx';
@@ -11,6 +11,7 @@ import { useKeyboard } from '../hooks/useKeyboard.js';
 import {
   addFolder,
   deleteItemWithFiles,
+  removeItemsFromList,
   renameFolder,
   getListItems,
   getSong,
@@ -38,10 +39,7 @@ export function Explorer(props) {
   let refetchTree = null;
 
   // Get list title
-  const getListTitle = () => {
-    if (currentListId() === 0) return 'Main Library';
-    return props.listTitle || 'Library';
-  };
+  const getListTitle = () => props.listTitle || 'Library';
 
   // Handle refetch callback from TreeView
   const handleRefetch = (fn) => {
@@ -219,24 +217,42 @@ export function Explorer(props) {
 
   // Delete item(s) with confirmation dialog
   // Used by both context menu and keyboard shortcut for consistent behavior
+  //
+  // In the Main Library this is the master delete: the song leaves every
+  // playlist and its file goes to the Trash. In a playlist it only removes the
+  // placement -- the song stays in the library and the file is untouched.
   const handleDeleteWithConfirm = async (itemIds) => {
     if (itemIds.length === 0) return;
 
-    // Get item descriptions for confirm dialog
-    let message = `Move ${itemIds.length} item${itemIds.length > 1 ? 's' : ''} to the Trash?`;
+    const inPlaylist = currentListId() !== MAIN_LIBRARY_ID;
 
+    // Get item descriptions for confirm dialog
+    let name = null;
     if (itemIds.length === 1) {
       const item = await window.electronAPI?.getItem?.(itemIds[0]);
       if (item) {
-        const name = item.list_id !== null ? item.list_title : item.song_title;
-        const truncated = name.length > 50 ? name.substring(0, 50) + '...' : name;
-        message = `Move "${truncated}" to the Trash?`;
+        const raw = item.list_id !== null ? item.list_title : item.song_title;
+        name = raw.length > 50 ? raw.substring(0, 50) + '...' : raw;
       }
     }
 
-    showConfirmModal('<i class="bi bi-trash" style="margin-right: 8px;"></i>Confirm Delete', message, async () => {
-      for (const id of itemIds) {
-        await deleteItemWithFiles(id);
+    const plural = `${itemIds.length} item${itemIds.length > 1 ? 's' : ''}`;
+    const subject = name ? `"${name}"` : plural;
+
+    const title = inPlaylist
+      ? '<i class="bi bi-dash-circle" style="margin-right: 8px;"></i>Remove from Playlist'
+      : '<i class="bi bi-trash" style="margin-right: 8px;"></i>Confirm Delete';
+    const message = inPlaylist
+      ? `Remove ${subject} from "${getListTitle()}"? The songs stay in your library.`
+      : `Move ${subject} to the Trash? This is permanent, and also removes the songs from any playlists they're in.`;
+
+    showConfirmModal(title, message, async () => {
+      if (inPlaylist) {
+        await removeItemsFromList(itemIds);
+      } else {
+        for (const id of itemIds) {
+          await deleteItemWithFiles(id);
+        }
       }
       clearSelection();
       refetchTree?.();
@@ -323,6 +339,7 @@ export function Explorer(props) {
       <Show when={isSearching()} fallback={
         <TreeView
           onRefetch={handleRefetch}
+          listTitle={getListTitle()}
           onPlayFolder={props.onPlayFolder}
           onPlaySong={props.onPlaySong}
           onContextMenu={handleContextMenu}

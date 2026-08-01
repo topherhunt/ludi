@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { Howl } from 'howler';
-import { setIsPlaying, setCurrentPlayingSongId } from '../stores/playback.js';
+import { setIsPlaying, setCurrentPlayingSongId, setCurrentPlayingItemId } from '../stores/playback.js';
 import { getSong } from '../utils/api.js';
 import { showAlert } from '../stores/modals.js';
 
@@ -331,6 +331,7 @@ export function createAudioPlayer() {
     setDuration(0);
     setIsPlaying(false);
     setCurrentPlayingSongId(null);
+    setCurrentPlayingItemId(null);
   }
 
   /**

@@ -7,6 +7,8 @@ const {
   setIsPlaying,
   currentPlayingSongId,
   setCurrentPlayingSongId,
+  currentPlayingItemId,
+  setCurrentPlayingItemId,
   playlist,
   setPlaylist,
   currentTrackIndex,
@@ -27,6 +29,11 @@ const {
   // Playback state
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [currentPlayingSongId, setCurrentPlayingSongId] = createSignal(null);
+
+  // Which *row* is playing. A playlist may hold the same song more than once,
+  // so the song id alone can't say which one -- rows are identified by their
+  // list_items id.
+  const [currentPlayingItemId, setCurrentPlayingItemId] = createSignal(null);
 
   // Playlist state
   const [playlist, setPlaylist] = createSignal([]);
@@ -75,6 +82,8 @@ const {
     setIsPlaying,
     currentPlayingSongId,
     setCurrentPlayingSongId,
+    currentPlayingItemId,
+    setCurrentPlayingItemId,
     playlist,
     setPlaylist,
     currentTrackIndex,
@@ -204,6 +213,7 @@ function previousTrack() {
 function clearPlayback() {
   setIsPlaying(false);
   setCurrentPlayingSongId(null);
+  setCurrentPlayingItemId(null);
   setPlaylist([]);
   setCurrentTrackIndex(-1);
   setCurrentPlaylistId(null);
@@ -230,6 +240,8 @@ export {
   setIsPlaying,
   currentPlayingSongId,
   setCurrentPlayingSongId,
+  currentPlayingItemId,
+  setCurrentPlayingItemId,
   playlist,
   setPlaylist,
   currentTrackIndex,
