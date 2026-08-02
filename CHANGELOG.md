@@ -14,9 +14,13 @@ Added:
 - **Drag songs out to Finder.** Hold Option while dragging a selection to copy the underlying audio files to the Desktop or a Finder folder.
 - **Selectable, draggable search results** -- search results now behave like the main tree instead of being read-only.
 - The sidebar shows which playlist is currently playing.
+- The song edit panel shows the total playtime of a multi-song selection.
+- Times an hour or longer are shown as `1:04:09` instead of `64:09`, in the player and in the duration column.
 
 Fixed:
 
+- **Playback no longer dies partway through an unattended playlist.** The queue only advanced when a track ended cleanly, so anything that stopped a song without ending it -- a Bluetooth speaker dropping out, the output device changing, a stalled read -- left the player silent until the app was restarted. A watchdog now notices a track that has stopped making progress, resumes it where it died, and skips it if it keeps failing.
+- Ludi holds a power-save block while playing, so an idle Mac can't suspend the app mid-playlist, and its timers are no longer throttled when the window is hidden behind others.
 - Tagging a song or dragging one into a playlist no longer blinks the list and throws the scroll position back to the top. Refreshes now patch the rows that actually changed instead of rebuilding the whole view.
 - Dragging songs onto sidebar playlists no longer silently stops working after a tag chip is dragged and dropped somewhere that isn't another chip. That abandoned drag left a flag set that suppressed every playlist drop until the app was restarted.
 - Shuffle now actually shuffles, and "previous" restarts the current track first, matching every other music player.

@@ -64,6 +64,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyToClipboard: (text) => ipcRenderer.invoke('clipboard:writeText', text),
   fileExists: (filePath) => ipcRenderer.invoke('fs:fileExists', filePath),
 
+  // Keep the app from being suspended while a song is playing.
+  setPlaybackActive: (active) => ipcRenderer.invoke('power:setPlaybackActive', active),
+  isPlaybackPreventingSuspension: () => ipcRenderer.invoke('power:isPlaybackActive'),
+
   // Media key events
   onMediaKey: (callback) => {
     ipcRenderer.on('media-key', (event, action) => callback(action));

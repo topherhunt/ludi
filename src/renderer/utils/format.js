@@ -1,16 +1,21 @@
 /**
- * Format seconds into MM:SS format
+ * Format seconds as M:SS, or H:MM:SS once it runs to an hour or more.
  * @param {number} seconds - Duration in seconds
- * @returns {string} Formatted time string (e.g., "3:45")
+ * @returns {string} Formatted time string (e.g., "3:45", "1:04:09")
  */
 export function formatTime(seconds) {
   if (seconds === null || seconds === undefined || !isFinite(seconds)) {
     return '0:00';
   }
 
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const padded = secs.toString().padStart(2, '0');
+
+  if (hours === 0) return `${mins}:${padded}`;
+  return `${hours}:${mins.toString().padStart(2, '0')}:${padded}`;
 }
 
 /**

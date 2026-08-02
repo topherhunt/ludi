@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show, createRoot } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, Show, createRoot } from 'solid-js';
 import { Sidebar } from './components/Sidebar.jsx';
 import { Explorer } from './components/Explorer.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
@@ -9,6 +9,7 @@ import {
   confirmModalState,
   renameModalState,
   showRenameModal,
+  showAlert,
   hideAlertModal,
   hideConfirmModal,
   hideRenameModal,
@@ -109,8 +110,19 @@ export function App() {
   onMount(() => {
     player.onEnd(handleTrackEnd);
     player.onError((err) => console.error('Audio error:', err));
-    player.onPlay(() => updateMediaSession('playing'));
+    player.onStall(handlePlaybackStall);
+    player.onPlay(() => {
+      notePlaybackStarted();
+      updateMediaSession('playing');
+    });
     player.onPause(() => updateMediaSession('paused'));
+  });
+
+  // Hold a power-save block while playing so an idle Mac doesn't suspend the
+  // app out from under an unattended playlist. The screen is still free to
+  // sleep -- 'prevent-app-suspension' only keeps the system (and us) running.
+  createEffect(() => {
+    window.electronAPI?.setPlaybackActive?.(isPlaying());
   });
 
   // Listen for column settings changes from Settings window
@@ -159,6 +171,57 @@ export function App() {
       navigator.mediaSession.setActionHandler('nexttrack', () => handleNext());
     }
   });
+
+  // Recovery for a track that failed or stopped making progress -- a Bluetooth
+  // speaker dropping out, the output device changing, a stream that stops
+  // delivering. None of those fire 'ended', so nothing advanced the queue and
+  // the whole playlist went quiet until the app was restarted.
+  //
+  // Retry the track once from where it died (a fresh element and a fresh
+  // request is what recovers a dead output device), then give up on it and move
+  // on. If several tracks in a row never play at all, stop and say so rather
+  // than tearing silently through the queue.
+  const MAX_RETRIES_PER_TRACK = 1;
+  const MAX_CONSECUTIVE_DEAD_TRACKS = 5;
+  let awaitingRetry = false;
+  let stallRetries = 0;
+  let consecutiveDeadTracks = 0;
+
+  // A track that starts playing clears its retry budget -- but only when it was
+  // started by the queue or the user, not when it is the retry itself. Counting
+  // the retry's own successful start would let one broken track retry forever.
+  const notePlaybackStarted = () => {
+    consecutiveDeadTracks = 0;
+    if (awaitingRetry) awaitingRetry = false;
+    else stallRetries = 0;
+  };
+
+  const handlePlaybackStall = ({ songId, position, reason }) => {
+    const song = currentSongFromPlaylist();
+    if (!song || song.id !== songId) return; // a stale report for a track we already left
+
+    if (stallRetries < MAX_RETRIES_PER_TRACK) {
+      stallRetries++;
+      awaitingRetry = true;
+      console.error(`Playback recovery: retrying "${song.title}" from ${Math.floor(position)}s (${reason})`);
+      player.playSong(song.id, { startAt: position });
+      return;
+    }
+
+    consecutiveDeadTracks++;
+    if (consecutiveDeadTracks >= MAX_CONSECUTIVE_DEAD_TRACKS) {
+      console.error(`Playback recovery: ${consecutiveDeadTracks} tracks failed in a row, stopping`);
+      player.stop();
+      showAlert(
+        '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>Playback Stopped',
+        `<p>Several songs in a row failed to play (${reason}).</p><p>Check that your audio output device is still connected.</p>`
+      );
+      return;
+    }
+
+    console.error(`Playback recovery: giving up on "${song.title}", skipping to the next track`);
+    handleTrackEnd();
+  };
 
   // Handle track end - play next, loop, or stop
   const handleTrackEnd = () => {

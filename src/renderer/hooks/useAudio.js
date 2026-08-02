@@ -7,6 +7,20 @@ import { showAlert } from '../stores/modals.js';
 // Monotonic counter used to make each audio load a unique URL (see fileUrl below).
 let loadCounter = 0;
 
+// How long playback may make no progress before we call the track stalled.
+//
+// The queue only advances on a clean 'ended' event, so anything that stops a
+// track without ending it stops the whole playlist: a Bluetooth speaker
+// dropping out, the output device changing, or a stream that never delivers
+// another byte all leave the underlying <audio> element paused or waiting
+// forever, firing neither 'ended' nor 'error'. Nothing was watching for that,
+// which is how an unattended playlist went silent a few songs in.
+const STALL_TIMEOUT_MS = 10000;
+
+// Tests shorten the window so a simulated stall doesn't take ten seconds.
+const stallTimeoutMs = () =>
+  (typeof window !== 'undefined' && window.__ludiStallTimeoutMs) || STALL_TIMEOUT_MS;
+
 /**
  * Audio player hook using Howler.js
  * Provides a reactive interface to audio playback
@@ -30,6 +44,59 @@ export function createAudioPlayer() {
   let onPlayCallback = null;
   let onPauseCallback = null;
   let onErrorCallback = null;
+  let onStallCallback = null;
+
+  // Watchdog state. `wantsToPlay` is our *intent*: a deliberate pause must not
+  // look like a stall, and a track that is still loading must.
+  let watchdogTimer = null;
+  let watchdogSongId = null;
+  let lastPosition = -1;
+  let lastProgressAt = 0;
+  let wantsToPlay = false;
+
+  // Position to resume at once the next load starts playing, used when
+  // recovering a track that died partway through.
+  let pendingSeek = 0;
+
+  function stopWatchdog() {
+    if (watchdogTimer) {
+      clearInterval(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }
+
+  function startWatchdog(songId) {
+    stopWatchdog();
+    watchdogSongId = songId;
+    lastPosition = -1;
+    lastProgressAt = Date.now();
+    watchdogTimer = setInterval(checkProgress, 250);
+  }
+
+  function checkProgress() {
+    if (!sound || !wantsToPlay) {
+      lastProgressAt = Date.now();
+      return;
+    }
+    const position = sound.seek() || 0;
+    if (position !== lastPosition) {
+      lastPosition = position;
+      lastProgressAt = Date.now();
+      return;
+    }
+    if (Date.now() - lastProgressAt < stallTimeoutMs()) return;
+    reportFailure('stalled', watchdogSongId, position);
+  }
+
+  // Hand a dead track to whoever is driving the queue. Loudly: silently
+  // swallowing these is what turned a momentary glitch into a dead player.
+  function reportFailure(reason, songId, position) {
+    stopWatchdog();
+    console.error(
+      `Playback failure (${reason}) on song ${songId} at ${Math.floor(position)}s`
+    );
+    onStallCallback?.({ songId, position, reason });
+  }
 
   /**
    * Start the time update interval
@@ -64,11 +131,14 @@ export function createAudioPlayer() {
   /**
    * Load and play a song by ID
    * @param {number} songId
+   * @param {{ startAt?: number }} [options] - startAt resumes a track that died partway through
    * @returns {Promise<boolean>} Success status
    */
-  async function playSong(songId) {
+  async function playSong(songId, { startAt = 0 } = {}) {
     setIsLoading(true);
     setError(null);
+    wantsToPlay = true;
+    pendingSeek = startAt;
 
     try {
       // Get song data from database
@@ -112,6 +182,11 @@ export function createAudioPlayer() {
         onplay: () => {
           setIsPlaying(true);
           setIsLoading(false);
+          if (pendingSeek > 0) {
+            sound.seek(pendingSeek);
+            setCurrentTime(pendingSeek);
+            pendingSeek = 0;
+          }
           const dur = sound.duration();
           if (isFinite(dur) && dur > 0) {
             setDuration(dur);
@@ -131,6 +206,8 @@ export function createAudioPlayer() {
         },
         onend: () => {
           setIsPlaying(false);
+          wantsToPlay = false; // the next playSong sets it again
+          stopWatchdog();
           stopTimeUpdates();
           setCurrentTime(0);
           onEndCallback?.();
@@ -161,7 +238,13 @@ export function createAudioPlayer() {
               `<p>Could not find audio file:</p><p style="word-break: break-all; font-family: monospace; font-size: 12px;">${fullPath}</p>`
             );
             onErrorCallback?.(err);
+            return;
           }
+          // The file is right there, so this was a transient streaming failure --
+          // an aborted Range request, or the output device going away mid-song.
+          // These used to be swallowed entirely, which left the player dead until
+          // the app was restarted. Hand it to the queue's recovery instead.
+          reportFailure(`load error ${err}`, songId, lastPosition > 0 ? lastPosition : 0);
         },
         onplayerror: (id, err) => {
           if (sound !== thisSound) return; // stale error from an already-replaced Howl
@@ -169,6 +252,7 @@ export function createAudioPlayer() {
           setError(`Failed to play audio: ${err}`);
           setIsPlaying(false);
           onErrorCallback?.(err);
+          reportFailure(`play error ${err}`, songId, lastPosition > 0 ? lastPosition : 0);
         },
       }));
 
@@ -180,7 +264,9 @@ export function createAudioPlayer() {
         setDuration(song.duration_seconds);
       }
 
-      // Start playback
+      // Start playback. The watchdog starts here, not at onplay: a load that
+      // never finishes is exactly one of the failures it exists to catch.
+      startWatchdog(songId);
       sound.play();
       return true;
 
@@ -197,6 +283,9 @@ export function createAudioPlayer() {
    */
   function play() {
     if (sound) {
+      wantsToPlay = true;
+      lastProgressAt = Date.now();
+      if (!watchdogTimer) startWatchdog(watchdogSongId);
       sound.play();
     }
   }
@@ -206,6 +295,8 @@ export function createAudioPlayer() {
    */
   function pause() {
     if (sound) {
+      wantsToPlay = false;
+      stopWatchdog(); // a deliberate pause is not a stall
       sound.pause();
     }
   }
@@ -216,9 +307,9 @@ export function createAudioPlayer() {
   function togglePlayPause() {
     if (sound) {
       if (sound.playing()) {
-        sound.pause();
+        pause();
       } else {
-        sound.play();
+        play();
       }
     }
   }
@@ -227,6 +318,8 @@ export function createAudioPlayer() {
    * Stop playback and reset
    */
   function stop() {
+    wantsToPlay = false;
+    stopWatchdog();
     if (sound) {
       sound.stop();
     }
@@ -241,6 +334,7 @@ export function createAudioPlayer() {
     if (sound) {
       sound.seek(time);
       setCurrentTime(time);
+      lastProgressAt = Date.now(); // a seek is progress, not a stall
     }
   }
 
@@ -322,6 +416,8 @@ export function createAudioPlayer() {
    * Unload and cleanup
    */
   function unload() {
+    wantsToPlay = false;
+    stopWatchdog();
     if (sound) {
       sound.unload();
       sound = null;
@@ -384,6 +480,22 @@ export function createAudioPlayer() {
     onErrorCallback = callback;
   }
 
+  /**
+   * Set callback for a track that failed or stopped making progress.
+   * Called with { songId, position, reason }.
+   * @param {Function} callback
+   */
+  function onStall(callback) {
+    onStallCallback = callback;
+  }
+
+  // Test hook: the underlying <audio> element, so tests can reproduce the
+  // failures this recovery exists for (a device that drops out mid-song fires
+  // 'error', or simply pauses the element behind Howler's back).
+  if (typeof window !== 'undefined') {
+    window.__ludiAudioNode = () => sound?._sounds?.[0]?._node ?? null;
+  }
+
   // Cleanup on unmount
   onCleanup(() => {
     unload();
@@ -424,6 +536,7 @@ export function createAudioPlayer() {
     onPlay,
     onPause,
     onError,
+    onStall,
   };
 }
 

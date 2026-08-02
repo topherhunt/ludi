@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
@@ -39,6 +39,10 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       spellcheck: false,
+      // Ludi plays for hours with its window behind everything else or the
+      // display asleep. Chromium throttles timers in an occluded window, which
+      // would blunt the playback watchdog exactly when it is needed most.
+      backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -944,3 +948,22 @@ ipcMain.handle('fs:fileExists', (event, filePath) => {
     return false;
   }
 });
+
+// While a song is playing, keep macOS from suspending the app under an
+// unattended playlist. 'prevent-app-suspension' still lets the display sleep --
+// it only keeps the system, and us, running.
+let powerBlockerId = null;
+
+ipcMain.handle('power:setPlaybackActive', (event, active) => {
+  if (active && powerBlockerId === null) {
+    powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!active && powerBlockerId !== null) {
+    powerSaveBlocker.stop(powerBlockerId);
+    powerBlockerId = null;
+  }
+  return powerBlockerId !== null;
+});
+
+ipcMain.handle('power:isPlaybackActive', () => (
+  powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)
+));

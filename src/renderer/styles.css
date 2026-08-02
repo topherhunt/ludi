@@ -1345,6 +1345,12 @@ body.resizing-sidebar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.song-edit-subheading {
+  font-size: 11px;
+  color: #8a8a8a;
+  margin-top: -6px;
+  margin-bottom: 10px;
+}
 .song-edit-field {
   display: flex;
   align-items: center;

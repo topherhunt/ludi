@@ -29,9 +29,15 @@ describe('Format Utilities', () => {
       expect(formatTime(754)).toBe('12:34');
     });
 
-    it('should format times over an hour', () => {
-      expect(formatTime(3600)).toBe('60:00');
-      expect(formatTime(3661)).toBe('61:01');
+    it('should stay in minutes right up to the hour', () => {
+      expect(formatTime(3599)).toBe('59:59');
+    });
+
+    it('should switch to H:MM:SS at an hour', () => {
+      expect(formatTime(3600)).toBe('1:00:00');
+      expect(formatTime(3661)).toBe('1:01:01');
+      expect(formatTime(3849)).toBe('1:04:09');
+      expect(formatTime(36000)).toBe('10:00:00');
     });
 
     it('should handle decimal seconds by flooring', () => {

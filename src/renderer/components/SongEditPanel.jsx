@@ -3,6 +3,7 @@ import { selectedItems } from '../stores/navigation.js';
 import { libraryVersion, bumpLibraryVersion } from '../stores/tags.js';
 import { isSearching, searchQuery, runSearch } from '../stores/search.js';
 import { getAllListItems, updateSong } from '../utils/api.js';
+import { formatTime } from '../utils/format.js';
 import { TagEditor } from './TagEditor.jsx';
 
 /**
@@ -42,6 +43,7 @@ function resolveSelectedSongs(allItems, selectedIds) {
         artist: it.artist || '',
         album: it.album || '',
         track_number: it.track_number,
+        duration_seconds: it.duration_seconds,
         tags: it.tags || [],
       });
     }
@@ -67,6 +69,12 @@ export function SongEditPanel() {
     if (single()) return `Edit ${songList()[0].title}`;
     return `Edit ${count()} songs`;
   });
+
+  // How long the selection would take to play. A song imported without duration
+  // metadata contributes nothing rather than breaking the sum.
+  const totalPlaytime = createMemo(() =>
+    songList().reduce((total, s) => total + (s.duration_seconds || 0), 0)
+  );
 
   // Shared value across the selection, or null when the songs disagree (mixed).
   const commonValue = (field) => {
@@ -106,6 +114,11 @@ export function SongEditPanel() {
       <div class="song-edit-panel qa-song-edit-panel">
         <div class="song-edit-divider" />
         <div class="song-edit-heading qa-song-edit-heading">{heading()}</div>
+        <Show when={!single()}>
+          <div class="song-edit-subheading qa-song-edit-playtime">
+            {formatTime(totalPlaytime())} total
+          </div>
+        </Show>
 
         <Show when={single()}>
           <label class="song-edit-field">
