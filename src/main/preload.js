@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeSettings: () => ipcRenderer.invoke('settings:close'),
   notifyColumnSettingsChanged: (settings) => ipcRenderer.invoke('settings:columnsChanged', settings),
   showInFinder: (filePath) => ipcRenderer.invoke('shell:showInFinder', filePath),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   copyToClipboard: (text) => ipcRenderer.invoke('clipboard:writeText', text),
   fileExists: (filePath) => ipcRenderer.invoke('fs:fileExists', filePath),
 
@@ -81,5 +82,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Library changed (e.g. songs ingested from the Settings window) - refresh the tree
   onLibraryChanged: (callback) => {
     ipcRenderer.on('library-changed', () => callback());
+  },
+
+  // "About Ludi" in the app menu
+  onShowAbout: (callback) => {
+    ipcRenderer.on('menu:about', () => callback());
   }
 });

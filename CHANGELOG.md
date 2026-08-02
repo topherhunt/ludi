@@ -8,24 +8,28 @@ Notable changes at each version checkpoint. Dates are the release build dates.
 
 Added:
 
-- **Playlists.** Reference-only song lists in the sidebar. Dragging a song into a playlist copies the reference rather than moving the file, and search can be scoped to a single playlist.
-- **Song tagging.** Tag chips in the sidebar and colored pills in their own column. Tag a song, a selection, or a whole folder; rename, recolor, reorder, and delete tags; click a chip to search for it. Advanced Search gained a Tag condition.
-- **A song edit panel** for editing title, artist, and album.
+- **Playlists.** Reference-only song lists in the sidebar. Dragging a song or folder into a playlist copies the reference rather than moving the file, so the same song can sit in the library and any number of playlists at once. Playlists are created from the sidebar's + menu, reordered by dragging, and played from the top on double-click. Deleting inside a playlist removes the reference; deleting in the Main Library is the permanent one, and it also pulls the song out of every playlist that referenced it.
+- **Song tagging.** Free-form, color-coded tags. Tag chips live in the sidebar and colored pills in their own column; tag a song, a selection, or a whole folder (which applies to every song inside, recursively). Rename, recolor, reorder, and delete tags, or click a chip to search for it.
+- **Tag and boolean search.** `tag=name` matches a tag exactly, and a new `NOT` operator (or `-` shorthand) supports absence queries like `tag=fav AND NOT tag=live`. Advanced Search gained a Tag condition with an is / is-not toggle.
+- **A song edit panel** below the sidebar, for editing title, track number, artist, and album across a whole selection at once. It shows the total playtime of a multi-song selection, so selecting a folder answers "how long is this".
 - **Drag songs out to Finder.** Hold Option while dragging a selection to copy the underlying audio files to the Desktop or a Finder folder.
-- **Selectable, draggable search results** -- search results now behave like the main tree instead of being read-only.
-- The sidebar shows which playlist is currently playing.
-- The song edit panel shows the total playtime of a multi-song selection.
+- **Selectable, draggable search results** -- search results now behave like the main tree instead of being read-only, and carry a whole selection into a playlist.
+- **Search is scoped to the list you were viewing** when you searched, and the header says so ("Search Results in {list}").
+- **An About dialog** (Ludi -> About Ludi) showing the version and the git commit the build came from, plus a link to the README.
+- The sidebar shows which playlist is currently playing, including when the queue started from a folder nested inside it.
 - Times an hour or longer are shown as `1:04:09` instead of `64:09`, in the player and in the duration column.
 
 Fixed:
 
-- **Playback no longer dies partway through an unattended playlist.** The queue only advanced when a track ended cleanly, so anything that stopped a song without ending it -- a Bluetooth speaker dropping out, the output device changing, a stalled read -- left the player silent until the app was restarted. A watchdog now notices a track that has stopped making progress, resumes it where it died, and skips it if it keeps failing.
+- **Playback no longer dies partway through an unattended playlist.** The queue only advanced when a track ended cleanly, so anything that stopped a song without ending it -- a Bluetooth speaker dropping out, the output device changing, a stalled read -- left the player silent until the app was restarted. A watchdog now notices a track that has stopped making progress, resumes it where it died, and skips it if it keeps failing. If five tracks fail in a row it stops and tells you, rather than tearing silently through the rest of the queue.
 - Ludi holds a power-save block while playing, so an idle Mac can't suspend the app mid-playlist, and its timers are no longer throttled when the window is hidden behind others.
+- **Shuffle now actually shuffles.** It had been building a shuffled order that no play path ever used. Toggling it mid-song also keeps the current song playing instead of jumping the queue to an unrelated track.
+- "Previous" restarts the current track when you're more than a second in, and only steps back a track from the very start -- matching every other music player.
 - Tagging a song or dragging one into a playlist no longer blinks the list and throws the scroll position back to the top. Refreshes now patch the rows that actually changed instead of rebuilding the whole view.
 - Dragging songs onto sidebar playlists no longer silently stops working after a tag chip is dragged and dropped somewhere that isn't another chip. That abandoned drag left a flag set that suppressed every playlist drop until the app was restarted.
-- Shuffle now actually shuffles, and "previous" restarts the current track first, matching every other music player.
-- Drag autoscroll no longer races away when dragging near the edge of the list.
-- Every dialog has a real title instead of a generic one.
+- Arrow keys on the seek bar move a fixed 5 seconds instead of 1% of the song, which was minutes at a time in a long recording.
+- Drag autoscroll no longer races away when dragging near the edge of the list -- speed now ramps with how far into the edge band the cursor is.
+- Every dialog has a real title instead of a generic "Rename", and the tag color popover keeps itself on-screen near the bottom edge.
 
 Development:
 

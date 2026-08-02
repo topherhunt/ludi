@@ -140,6 +140,14 @@ function createMenu() {
       label: 'Ludi',
       submenu: [
         {
+          id: 'about',
+          label: 'About Ludi',
+          click: () => {
+            mainWindow.webContents.send('menu:about');
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'Settings...',
           accelerator: 'CmdOrCtrl+,',
           click: () => {
@@ -897,6 +905,13 @@ ipcMain.handle('settings:columnsChanged', (event, settings) => {
   if (mainWindow) {
     mainWindow.webContents.send('column-settings-changed', settings);
   }
+});
+
+// Open a URL in the user's browser. Renderer links must route through here --
+// following an href in the window itself would navigate the app away.
+ipcMain.handle('shell:openExternal', (event, url) => {
+  if (!url.startsWith('https://')) throw new Error(`Refusing to open non-https URL: ${url}`);
+  return shell.openExternal(url);
 });
 
 ipcMain.handle('shell:showInFinder', (event, filePath) => {

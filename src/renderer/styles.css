@@ -887,6 +887,40 @@ body.resizing-sidebar {
   max-width: 400px;
 }
 
+.about-dialog {
+  min-width: 380px;
+  max-width: 440px;
+}
+
+.about-content {
+  text-align: center;
+}
+
+.about-tagline {
+  color: #d4d4d4;
+}
+
+.about-build {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a8a8a;
+}
+
+.about-credit {
+  margin-top: 16px;
+}
+
+.about-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #4daafc;
+  text-decoration: none;
+}
+
+.about-link:hover {
+  text-decoration: underline;
+}
+
 .rename-content {
   line-height: 1.2;
 }

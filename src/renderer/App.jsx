@@ -4,6 +4,7 @@ import { Explorer } from './components/Explorer.jsx';
 import { PlayerControls } from './components/PlayerControls.jsx';
 import { AlertModal, ConfirmModal, RenameModal } from './components/Modal.jsx';
 import { DuplicateSongsModal } from './components/DuplicateSongsModal.jsx';
+import { AboutModal } from './components/AboutModal.jsx';
 import {
   alertModalState,
   confirmModalState,
@@ -50,6 +51,8 @@ export function App() {
 
   // List title for explorer header
   const [listTitle, setListTitle] = createSignal('Main Library');
+
+  const [isAboutOpen, setIsAboutOpen] = createSignal(false);
 
   // Resizable sidebar width (persisted across restarts via localStorage)
   const SIDEBAR_MIN = 150;
@@ -138,6 +141,11 @@ export function App() {
     window.electronAPI?.onLibraryChanged?.(() => {
       explorerRefetch?.();
     });
+  });
+
+  // "About Ludi" in the app menu
+  onMount(() => {
+    window.electronAPI?.onShowAbout?.(() => setIsAboutOpen(true));
   });
 
   // Load the defined tags into the global store at startup
@@ -523,6 +531,9 @@ export function App() {
 
       {/* Duplicate-songs dialog for adds into a playlist */}
       <DuplicateSongsModal />
+
+      {/* About dialog, opened from the app menu */}
+      <AboutModal open={isAboutOpen()} onClose={() => setIsAboutOpen(false)} />
 
       {/* Rename Modal */}
       <Show when={renameModalState().isOpen}>
