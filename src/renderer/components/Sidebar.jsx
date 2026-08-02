@@ -151,17 +151,26 @@ export function Sidebar(props) {
   };
 
   // Drag-and-drop reorder of tag chips.
+  //
+  // A tag drag in progress suppresses every playlist row's drop handling, so the
+  // flag MUST be cleared however the drag ends -- a cancelled drag that left it
+  // set made dropping songs onto playlists silently stop working until restart.
   const onChipDragStart = (e, tag) => {
     draggingTagId = tag.id;
     e.dataTransfer.effectAllowed = 'move';
   };
+  const onChipDragEnd = () => {
+    draggingTagId = null;
+  };
   const onChipDrop = async (e, targetTag) => {
     e.preventDefault();
-    if (draggingTagId === null || draggingTagId === targetTag.id) return;
-    const ids = tags().map(t => t.id);
-    const from = ids.indexOf(draggingTagId);
     const dragged = draggingTagId;
+    // Reordering re-renders the chips, and a removed source element never fires
+    // dragend, so this drop is the last chance to clear the flag.
     draggingTagId = null;
+    if (dragged === null || dragged === targetTag.id) return;
+    const ids = tags().map(t => t.id);
+    const from = ids.indexOf(dragged);
     if (from === -1) return;
     ids.splice(from, 1);
     const insertAt = ids.indexOf(targetTag.id);
@@ -414,6 +423,7 @@ export function Sidebar(props) {
                 <span
                   draggable={true}
                   onDragStart={(e) => onChipDragStart(e, tag)}
+                  onDragEnd={onChipDragEnd}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => onChipDrop(e, tag)}
                 >

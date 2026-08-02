@@ -1,4 +1,6 @@
-import { Show, createSignal, createMemo, createResource, For } from 'solid-js';
+import { Show, createSignal, createMemo, createResource, createEffect, on, For } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
+import { libraryVersion } from '../stores/tags.js';
 import {
   selectedItems,
   lastSelectedItemId,
@@ -17,7 +19,7 @@ import {
   gridTemplateColumns,
 } from '../stores/columns.js';
 import { formatTime, pluralize } from '../utils/format.js';
-import { folderContainsSong, getItemById, countSongsInList } from '../utils/api.js';
+import { folderContainsSong, getItemById, countSongsInList, getListItems, updateFolderExpanded } from '../utils/api.js';
 import { TagPillList } from './TagPill.jsx';
 
 /**
@@ -25,12 +27,33 @@ import { TagPillList } from './TagPill.jsx';
  */
 export function TreeItem(props) {
   // Local state for folder expansion
-  const [isExpanded, setIsExpanded] = createSignal(props.item.list_is_expanded || false);
-  const [children, setChildren] = createSignal([]);
+  const [isExpanded, setIsExpanded] = createSignal(!!props.item.list_is_expanded);
+  const [children, setChildren] = createStore([]);
   const [childrenLoaded, setChildrenLoaded] = createSignal(false);
 
   // Determine if this is a folder
   const isFolder = () => props.item.list_id !== null;
+
+  // Children reload in place (reconcile) rather than being rebuilt, so a refresh
+  // never disturbs the rows the user is looking at.
+  const loadChildren = async () => {
+    setChildren(reconcile(await getListItems(props.item.list_id) || [], { key: 'id' }));
+    setChildrenLoaded(true);
+  };
+
+  // Follow the row's stored expansion state: this is how Collapse All / Expand
+  // All (which write list_is_expanded and refresh) reach an already-mounted
+  // folder. Runs on mount too, which is what opens a folder left expanded.
+  createEffect(on(() => isFolder() && !!props.item.list_is_expanded, (expanded) => {
+    setIsExpanded(expanded);
+    if (expanded && !childrenLoaded()) loadChildren();
+  }));
+
+  // A library refresh (tag edit, import, move, delete) has to reach open folders
+  // as well as the top level.
+  createEffect(on(libraryVersion, () => {
+    if (childrenLoaded()) loadChildren();
+  }, { defer: true }));
 
   // Check if this row is the one currently playing. Keyed on the placement, not
   // the song: a playlist may hold the same song twice and only the row that was
@@ -40,9 +63,10 @@ export function TreeItem(props) {
     return props.item.id === currentPlayingItemId();
   });
 
-  // Check if this folder contains the currently playing song
+  // Check if this folder contains the currently playing song. Also keyed on
+  // libraryVersion: songs can move in or out of the folder under it.
   const [folderHasPlayingSong] = createResource(
-    () => isFolder() ? [props.item.list_id, currentPlayingSongId()] : null,
+    () => isFolder() ? [props.item.list_id, currentPlayingSongId(), libraryVersion()] : null,
     async ([listId, songId]) => {
       if (!songId) return false;
       return await folderContainsSong(listId, songId);
@@ -52,8 +76,8 @@ export function TreeItem(props) {
   // Recursive song count for folders -- drives the count label and the
   // "empty folder" dimming (a folder with no songs anywhere inside it).
   const [songCount] = createResource(
-    () => isFolder() ? props.item.list_id : null,
-    async (listId) => countSongsInList(listId)
+    () => isFolder() ? [props.item.list_id, libraryVersion()] : null,
+    async ([listId]) => countSongsInList(listId)
   );
   const isEmptyFolder = () => isFolder() && songCount() === 0;
 
@@ -94,16 +118,11 @@ export function TreeItem(props) {
 
     // Load children if expanding and not loaded
     if (newExpanded && !childrenLoaded()) {
-      const items = await window.electronAPI?.getListItems(props.item.list_id) || [];
-      setChildren(items);
-      setChildrenLoaded(true);
+      await loadChildren();
     }
 
     // Save expanded state to database
-    await window.electronAPI?.updateFolderExpanded({
-      listId: props.item.list_id,
-      isExpanded: newExpanded,
-    });
+    await updateFolderExpanded(props.item.list_id, newExpanded);
   };
 
   // Handle click on item for selection
@@ -164,14 +183,6 @@ export function TreeItem(props) {
   const handleDragEnd = (e) => {
     props.onDragEnd?.(e);
   };
-
-  // Load children on mount if expanded
-  if (isFolder() && props.item.list_is_expanded) {
-    window.electronAPI?.getListItems(props.item.list_id).then((items) => {
-      setChildren(items || []);
-      setChildrenLoaded(true);
-    });
-  }
 
   const depth = props.depth || 0;
 
@@ -267,7 +278,7 @@ export function TreeItem(props) {
           data-list-id={props.item.list_id}
           data-depth={depth + 1}
         >
-          <For each={children()}>
+          <For each={children}>
             {(child) => (
               <TreeItem
                 item={child}

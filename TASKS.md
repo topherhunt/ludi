@@ -1,9 +1,12 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-- When viewing search results, you should be able to select songs / items like you normally can. Currently selecting doesn't work when viewing search results. This is important so you can drag search-results songs into another playlist in the sidebar, edit song fields & tags, etc. (Note that you CANNOT drag/reorder search results within the search results list, that's an incoherent/meaningless operation.)
+- Applying a tag to a song or dragging a song to a playlist refreshes the current list view, causing a blink and causing scroll to jump up. Both of those things are highly undesirable.
+- Revisit the README features list. It seems pretty underwhelming when I look through it now, and it feels like it doesn't really do the app justice. 
 - Fix bug: forward/back arrow keys (on keyboard) should seek in current song by only 5s regardless of the length of the song. (For very long songs, currently it's skipping 7 mins at a time.)
-- When dragging into the playlist (from a file or from list items selected), if within 4em of the top or bottom of the viewport, autoscroll at a slow steady speed up/down. Speed accelerates the closer to the top/bottom you are. Currently you Need to drag onto a very narrow band right near the top or bottom border in order to get auto-scroll in the list and the speed is hard to control. 
+  - This should be fixed, but please confirm.
+
 - Support dragging a selection of songs/items out to desktop or a Finder folder. Doing so copies each included-in-selection audiofile into that target folder.
+  - Claude said that it fix or implemented this, but possibly I have to hold down the option key, but when I tried it it wasn't working, but I figured maybe that was just because it's in the Dev Electron app and I need to wait until I actually install the app on my computer into my applications folder before I can actually test it properly. But I should circle back to this at some point.
 
 - [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
 - [ ] Consider: Instead of collapse/expand carets like what we've been doing in the Main Library UI so far, what if clicking on a folder just zoomed into that folder, and you see a breadcrumb at top showing where you've zoomed into? More Google Drive style?

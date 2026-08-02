@@ -3,8 +3,9 @@ import * as api from '../utils/api.js';
 import { randomAvailableColor } from '../utils/tagColors.js';
 
 // Global tag state. `tags` is the app-wide list of defined tags (ordered by
-// position); `libraryVersion` is a bump-counter that song-list resources depend
-// on so tag/metadata mutations trigger a refresh.
+// position); `libraryVersion` is a bump-counter that song-list views depend on,
+// and is the single "the library changed, reload" signal: tag and metadata
+// edits, playlist copies, imports, moves and deletes all bump it.
 const {
   tags,
   setTags,

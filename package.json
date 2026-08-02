@@ -1,7 +1,7 @@
 {
   "name": "ludi-music",
   "productName": "Ludi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fast, intuitive, lightweight MacOS music library & player",
   "main": "src/main/main.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "dev": "node scripts/dev.js",
     "vite": "vite",
     "vite:build": "vite build",
-    "release": "vite build && electron-builder",
+    "release": "vite build && electron-builder --publish never",
     "test": "playwright test",
     "test:unit": "vitest",
     "postinstall": "electron-builder install-app-deps"
@@ -34,9 +34,12 @@
       "src/main/**/*",
       "package.json"
     ],
+    "afterSign": "./scripts/verify-signature.js",
+    "forceCodeSigning": true,
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.music"
+      "category": "public.app-category.music",
+      "identity": "-"
     }
   },
   "devDependencies": {

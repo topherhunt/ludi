@@ -1,6 +1,7 @@
-import { For, Show, createResource, createMemo, onMount, onCleanup } from 'solid-js';
+import { For, Show, createSignal, createEffect, on, onMount, onCleanup } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { currentListId, selectedItems, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
-import { libraryVersion } from '../stores/tags.js';
+import { libraryVersion, bumpLibraryVersion } from '../stores/tags.js';
 import {
   setDragState,
   clearDragState,
@@ -24,27 +25,26 @@ export function TreeView(props) {
   let explorerTreeRef;
   let containerRef;
 
-  // Fetch items for current list
-  // Depend on libraryVersion too, so tag/metadata edits (from the edit panel)
-  // refresh the tree reactively.
-  const [items, { refetch: rawRefetch }] = createResource(
-    () => [currentListId(), libraryVersion()],
-    async ([listId]) => {
-      return await getListItems(listId);
-    }
-  );
+  // The rows of the list being viewed. Reloads land via `reconcile`, which
+  // patches the rows that actually changed and leaves the rest of the DOM alone:
+  // rebuilding the list instead (what a plain resource did) blanked it for a
+  // frame, so the view blinked, the scroll position jumped back to the top, and
+  // anything mid-drag lost its dragend.
+  const [items, setItems] = createStore([]);
+  const [loaded, setLoaded] = createSignal(false);
 
-  // Wrap refetch to preserve scroll position
-  const refetch = async () => {
-    const scrollTop = containerRef?.scrollTop ?? 0;
-    await rawRefetch();
-    // Restore scroll position after DOM updates
-    requestAnimationFrame(() => {
-      if (containerRef) {
-        containerRef.scrollTop = scrollTop;
-      }
-    });
+  const load = async () => {
+    setItems(reconcile(await getListItems(currentListId()), { key: 'id' }));
+    setLoaded(true);
   };
+
+  // Reload when the list changes or anything bumps the library version -- tag
+  // edits, playlist copies, and every refetch() below.
+  createEffect(on([currentListId, libraryVersion], load));
+
+  // Refreshing the tree from the outside goes through the same version bump, so
+  // open folders reload their contents along with the top level.
+  const refetch = () => bumpLibraryVersion();
 
   // Expose refetch to parent for refreshing
   onMount(() => {
@@ -59,7 +59,7 @@ export function TreeView(props) {
     if (result.targetIsPlaylist && result.itemIds.length > 0) {
       await copyIntoPlaylist(result.itemIds, targetListId, props.listTitle);
     }
-    await refetch();
+    refetch();
     showImportSummary(result);
   };
 
@@ -521,8 +521,7 @@ export function TreeView(props) {
 
     // Find the last visible item to position indicator after it
     const allItems = explorerTreeRef?.querySelectorAll('.tree-item-content');
-    const currentItems = await items();
-    const itemCount = currentItems?.length || 0;
+    const itemCount = items.length;
 
     if (allItems && allItems.length > 0) {
       const lastItem = allItems[allItems.length - 1];
@@ -614,15 +613,15 @@ export function TreeView(props) {
         data-list-id={currentListId()}
       >
         <Show
-          when={!items.loading}
+          when={loaded()}
           fallback={<li class="loading">Loading...</li>}
         >
-          <Show when={(items() || []).length === 0 && currentListId() !== MAIN_LIBRARY_ID}>
+          <Show when={items.length === 0 && currentListId() !== MAIN_LIBRARY_ID}>
             <li class="empty-playlist qa-empty-playlist">
               Drag songs here to add them to this playlist.
             </li>
           </Show>
-          <For each={items() || []}>
+          <For each={items}>
             {(item) => (
               <TreeItem
                 item={item}
