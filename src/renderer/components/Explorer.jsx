@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, Switch, Match } from 'solid-js';
 import { currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal, showAlert } from '../stores/modals.js';
 import { ExplorerHeader } from './ExplorerHeader.jsx';
@@ -14,11 +14,20 @@ import {
   removeItemsFromList,
   renameFolder,
   getListItems,
+  getItem,
   getSong,
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
 import { isSearching, runSearch } from '../stores/search.js';
+import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { SearchResultsView } from './SearchResultsView.jsx';
+import { SimilarSongsView } from './SimilarSongsView.jsx';
+import { ClusterSongsView } from './ClusterSongsView.jsx';
+import { isShowingCluster } from '../stores/clusters.js';
+import { MusicMapView } from './MusicMapView.jsx';
+import { mapOpen } from '../stores/musicMap.js';
+import { FacetBrowser } from './FacetBrowser.jsx';
+import { facetsOpen } from '../stores/facets.js';
 import { AdvancedSearchModal } from './AdvancedSearchModal.jsx';
 
 // Every "create a folder here" dialog shares one heading, whether it is opened
@@ -156,6 +165,27 @@ export function Explorer(props) {
   const handleCopyPath = async (item) => {
     const song = await getSong(item.song_id);
     if (song) await window.electronAPI?.copyToClipboard?.(song.file_path);
+  };
+
+  // Show songs that sound like the right-clicked one.
+  //
+  // Right-clicking inside a multi-selection searches on the whole selection;
+  // right-clicking outside it searches on just that song. Same rule the rest of
+  // the tree's context actions follow, so the menu label and the result agree.
+  const handleFindSimilar = async (item) => {
+    const selected = selectedItems();
+    const itemIds = selected.has(item.id) && selected.size > 1
+      ? Array.from(selected)
+      : [item.id];
+
+    const seeds = [];
+    for (const id of itemIds) {
+      const row = await getItem(id);
+      if (row && row.song_id !== null) seeds.push({ songId: row.song_id, title: row.song_title });
+    }
+    if (seeds.length === 0) return;
+
+    await showSimilarTo(seeds);
   };
 
   // Rename a folder
@@ -339,9 +369,14 @@ export function Explorer(props) {
         onAdvancedSearch={() => setAdvancedSearchOpen(true)}
       />
 
-      <ColumnHeaders />
+      {/* The map and the facet browser aren't lists of songs -- column headings
+          over them would be labelling nothing. */}
+      <Show when={!mapOpen() && !facetsOpen()}>
+        <ColumnHeaders />
+      </Show>
 
-      <Show when={isSearching()} fallback={
+      {/* Six things can fill the explorer, and exactly one of them does. */}
+      <Switch fallback={
         <TreeView
           onRefetch={handleRefetch}
           listTitle={getListTitle()}
@@ -350,10 +385,22 @@ export function Explorer(props) {
           onContextMenu={handleContextMenu}
         />
       }>
-        <SearchResultsView
-          onPlaySong={props.onPlaySong}
-        />
-      </Show>
+        <Match when={mapOpen()}>
+          <MusicMapView onPlaySong={props.onPlaySong} />
+        </Match>
+        <Match when={facetsOpen()}>
+          <FacetBrowser />
+        </Match>
+        <Match when={isShowingSimilar()}>
+          <SimilarSongsView onPlaySong={props.onPlaySong} />
+        </Match>
+        <Match when={isShowingCluster()}>
+          <ClusterSongsView onPlaySong={props.onPlaySong} />
+        </Match>
+        <Match when={isSearching()}>
+          <SearchResultsView onPlaySong={props.onPlaySong} />
+        </Match>
+      </Switch>
 
       {/* Context Menu */}
       <Show when={contextMenu()}>
@@ -372,6 +419,7 @@ export function Explorer(props) {
           onFlatten={handleFlatten}
           onRename={handleRename}
           onBatchRename={handleBatchRename}
+          onFindSimilar={handleFindSimilar}
           onShowInFinder={handleShowInFinder}
           onCopyPath={handleCopyPath}
           onDelete={handleDelete}

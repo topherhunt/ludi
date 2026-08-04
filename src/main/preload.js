@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   previewCopyToList: (data) => ipcRenderer.invoke('db:previewCopyToList', data),
   copyItemsToList: (data) => ipcRenderer.invoke('db:copyItemsToList', data),
 
+  // Saved searches
+  getSavedSearches: () => ipcRenderer.invoke('db:getSavedSearches'),
+  createSavedSearch: (data) => ipcRenderer.invoke('db:createSavedSearch', data),
+  renameSavedSearch: (data) => ipcRenderer.invoke('db:renameSavedSearch', data),
+  deleteSavedSearch: (id) => ipcRenderer.invoke('db:deleteSavedSearch', id),
+
   // Tag operations
   getAllTags: () => ipcRenderer.invoke('db:getAllTags'),
   createTag: (data) => ipcRenderer.invoke('db:createTag', data),
@@ -68,6 +74,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Keep the app from being suspended while a song is playing.
   setPlaybackActive: (active) => ipcRenderer.invoke('power:setPlaybackActive', active),
   isPlaybackPreventingSuspension: () => ipcRenderer.invoke('power:isPlaybackActive'),
+
+  // Audio analysis
+  startAnalysis: () => ipcRenderer.invoke('analysis:start'),
+  stopAnalysis: () => ipcRenderer.invoke('analysis:stop'),
+  getAnalysisProgress: () => ipcRenderer.invoke('analysis:getProgress'),
+  getFailedAnalyses: () => ipcRenderer.invoke('analysis:getFailed'),
+  retryFailedAnalyses: () => ipcRenderer.invoke('analysis:retryFailed'),
+  recalculateAutoTags: () => ipcRenderer.invoke('analysis:recalculateTags'),
+  clearAutoTags: () => ipcRenderer.invoke('analysis:clearAutoTags'),
+  getSongAnalysis: (songId) => ipcRenderer.invoke('analysis:getSongAnalysis', songId),
+
+  // Similarity
+  findSimilarSongs: (seedSongIds, options) => ipcRenderer.invoke('similarity:find', seedSongIds, options),
+
+  // Clusters
+  recalculateClusters: () => ipcRenderer.invoke('clusters:recalculate'),
+  getClusters: () => ipcRenderer.invoke('clusters:list'),
+  getClusterSongs: (clusterId) => ipcRenderer.invoke('clusters:songs', clusterId),
+  renameCluster: (data) => ipcRenderer.invoke('clusters:rename', data),
+  saveClusterAsPlaylist: (data) => ipcRenderer.invoke('clusters:saveAsPlaylist', data),
+
+  // Music map
+  recalculateMap: () => ipcRenderer.invoke('map:recalculate'),
+  getMapPoints: () => ipcRenderer.invoke('map:points'),
+  saveMapSelectionAsPlaylist: (data) => ipcRenderer.invoke('map:saveAsPlaylist', data),
+
+  onAnalysisProgress: (callback) => {
+    ipcRenderer.on('analysis:progress', (event, progress) => callback(progress));
+  },
+  onAnalysisComplete: (callback) => {
+    ipcRenderer.on('analysis:complete', (event, summary) => callback(summary));
+  },
+  onAnalysisError: (callback) => {
+    ipcRenderer.on('analysis:error', (event, error) => callback(error));
+  },
 
   // Media key events
   onMediaKey: (callback) => {

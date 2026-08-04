@@ -187,6 +187,100 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_song_tags_tag_id ON song_tags(tag_id);
   `);
 
+  // A named search query pinned to the sidebar.
+  //
+  // Stored as the query string rather than as a resolved list of songs: the
+  // point of saving "tag=jazz tag=live" is that a song acquiring both tags next
+  // month joins it on its own. That also makes a saved search survive a tag
+  // being recalculated, which a frozen song list would not.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS saved_searches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      query TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      inserted_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  // The auto-generated groups. `id` is the same number as
+  // `song_analysis.cluster_id`, so a cluster's membership lives with the
+  // analysis and only its name lives here -- which is what makes renaming one
+  // survive a re-clustering no worse than a saved search survives a retag.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clusters (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      inserted_at TEXT NOT NULL
+    )
+  `);
+
+  // Audio-analysis results, one row per analyzed song.
+  //
+  // `embedding` is 200 float32s (800 bytes) -- the model's fingerprint of the
+  // track, and what every similarity feature runs on. `activations` is the raw
+  // 50 float32s of genre/mood scores; it's kept so that re-deriving auto-tags
+  // (which depends on the whole library's score distribution) never requires
+  // re-analyzing audio. `axes` holds the classification-head scalars as JSON.
+  //
+  // `map_x`/`map_y` cache the UMAP projection and `cluster_id` the k-means
+  // assignment; both are derived from `embedding` and get recomputed in bulk.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS song_analysis (
+      song_id INTEGER PRIMARY KEY,
+      model_version TEXT NOT NULL,
+      embedding BLOB NOT NULL,
+      activations BLOB NOT NULL,
+      axes TEXT NOT NULL,
+      map_x REAL,
+      map_y REAL,
+      cluster_id INTEGER,
+      analyzed_at TEXT NOT NULL,
+      FOREIGN KEY (song_id) REFERENCES songs(id)
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_song_analysis_cluster ON song_analysis(cluster_id);
+  `);
+
+  // Work list for the background analyzer. Persisted rather than held in memory
+  // so a pass that takes hours survives quitting the app partway through.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS analysis_queue (
+      song_id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      queued_at TEXT NOT NULL,
+      FOREIGN KEY (song_id) REFERENCES songs(id)
+    )
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_analysis_queue_state ON analysis_queue(state);
+  `);
+
+  // Migration - distinguish machine-applied tags from hand-applied ones.
+  //
+  // `source` lives on the association, not the tag: the same tag ("mellow") can
+  // be machine-applied to one song and hand-applied to another, and only the
+  // machine-applied rows may be rewritten by a re-analysis. `confidence` is the
+  // model's score, kept for sorting and for explaining why a tag is there.
+  //
+  // `tags.is_auto` marks a tag *definition* the analyzer created, which is what
+  // draws the gear badge on the pill.
+  const songTagColumns = db.prepare('PRAGMA table_info(song_tags)').all();
+  if (!songTagColumns.some(col => col.name === 'source')) {
+    db.exec(`ALTER TABLE song_tags ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'`);
+  }
+  if (!songTagColumns.some(col => col.name === 'confidence')) {
+    db.exec(`ALTER TABLE song_tags ADD COLUMN confidence REAL`);
+  }
+  const tagColumns = db.prepare('PRAGMA table_info(tags)').all();
+  if (!tagColumns.some(col => col.name === 'is_auto')) {
+    db.exec(`ALTER TABLE tags ADD COLUMN is_auto INTEGER NOT NULL DEFAULT 0`);
+  }
+
   // Migrations - Add is_expanded column if it doesn't exist
   const columns = db.prepare("PRAGMA table_info(lists)").all();
   const hasExpandedColumn = columns.some(col => col.name === 'is_expanded');
@@ -231,9 +325,11 @@ function getListItems(listId) {
       s.album,
       s.duration_seconds,
       s.track_number,
-      (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color, 'position', t.position))
+      (SELECT json_group_array(json_object(
+                'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
+                'is_auto', t.is_auto, 'source', st.source))
          FROM song_tags st JOIN tags t ON t.id = st.tag_id
-        WHERE st.song_id = s.id) as tags
+        WHERE st.song_id = s.id AND st.source != 'suppressed') as tags
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
@@ -253,14 +349,56 @@ function getAllListItems() {
       s.album,
       s.duration_seconds,
       s.track_number,
-      (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color, 'position', t.position))
+      (SELECT json_group_array(json_object(
+                'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
+                'is_auto', t.is_auto, 'source', st.source))
          FROM song_tags st JOIN tags t ON t.id = st.tag_id
-        WHERE st.song_id = s.id) as tags
+        WHERE st.song_id = s.id AND st.source != 'suppressed') as tags
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
     ORDER BY li.parent_list_id, li.position
   `).all());
+}
+
+/**
+ * Song rows shaped like search results, for lists built from song ids rather
+ * than from a placement (similarity results, clusters, map selections).
+ *
+ * Each song is paired with its Main Library placement, because that is the one
+ * placement every song in the library is guaranteed to have -- it's what
+ * selection, playback and drag-out all key off. Songs with no Main Library
+ * placement are skipped rather than returned half-usable.
+ */
+function getSongsWithPlacements(songIds) {
+  const rows = [];
+  const stmt = db.prepare(`
+    SELECT
+      li.id as item_id,
+      li.parent_list_id,
+      li.position,
+      s.id as song_id,
+      s.title,
+      s.artist,
+      s.album,
+      s.duration_seconds,
+      s.track_number,
+      (SELECT json_group_array(json_object(
+                'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
+                'is_auto', t.is_auto, 'source', st.source))
+         FROM song_tags st JOIN tags t ON t.id = st.tag_id
+        WHERE st.song_id = s.id AND st.source != 'suppressed') as tags
+    FROM list_items li
+    JOIN songs s ON li.song_id = s.id
+    WHERE li.id = ?
+  `);
+
+  for (const songId of songIds) {
+    const itemId = findSongPlacementInMainLibrary(songId);
+    if (itemId === null) continue;
+    rows.push(stmt.get(itemId));
+  }
+  return parseTagsColumn(rows);
 }
 
 function getItem(itemId) {
@@ -575,12 +713,46 @@ function deleteItemWithFiles(itemId) {
 
       // Remove tag associations first (FK; no DB-layer cascade by convention)
       db.prepare('DELETE FROM song_tags WHERE song_id = ?').run(songId);
+      // Same for the analysis rows. The embedding is expensive to produce, but
+      // it describes a file that no longer exists -- keeping it would leave a
+      // ghost in every similarity search and on the music map.
+      db.prepare('DELETE FROM song_analysis WHERE song_id = ?').run(songId);
+      db.prepare('DELETE FROM analysis_queue WHERE song_id = ?').run(songId);
       db.prepare('DELETE FROM songs WHERE id = ?').run(songId);
+      analysisRevision++;
       filesToDelete.push(filePaths[i]);
     }
 
     return filesToDelete;
   })();
+}
+
+// ---- Saved searches ------------------------------------------------------
+
+function getSavedSearches() {
+  return db.prepare('SELECT * FROM saved_searches ORDER BY position').all();
+}
+
+/** Save a query under a name, at the end of the sidebar list. */
+function createSavedSearch(name, query) {
+  const now = new Date().toISOString();
+  const nextPos = db.prepare(
+    'SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM saved_searches'
+  ).get().pos;
+  const result = db.prepare(`
+    INSERT INTO saved_searches (name, query, position, inserted_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(name, query, nextPos, now, now);
+  return db.prepare('SELECT * FROM saved_searches WHERE id = ?').get(result.lastInsertRowid);
+}
+
+function renameSavedSearch(id, newName) {
+  const now = new Date().toISOString();
+  db.prepare('UPDATE saved_searches SET name = ?, updated_at = ? WHERE id = ?').run(newName, now, id);
+}
+
+function deleteSavedSearch(id) {
+  db.prepare('DELETE FROM saved_searches WHERE id = ?').run(id);
 }
 
 // ---- Tags ----------------------------------------------------------------
@@ -629,18 +801,36 @@ function reorderTags(orderedIds) {
   })();
 }
 
+// Applying a tag by hand always wins: an association the analyzer created (or
+// one you previously suppressed) is promoted to 'manual', which takes it
+// permanently out of the analyzer's reach.
 function addTagToSongs(tagId, songIds) {
   const now = new Date().toISOString();
   return db.transaction(() => {
-    const stmt = db.prepare('INSERT OR IGNORE INTO song_tags (song_id, tag_id, inserted_at) VALUES (?, ?, ?)');
+    const stmt = db.prepare(`
+      INSERT INTO song_tags (song_id, tag_id, inserted_at, source)
+      VALUES (?, ?, ?, 'manual')
+      ON CONFLICT(song_id, tag_id) DO UPDATE SET source = 'manual', confidence = NULL
+    `);
     for (const songId of songIds) stmt.run(songId, tagId, now);
   })();
 }
 
+// Removing a tag the analyzer applied leaves a 'suppressed' tombstone instead of
+// deleting the row, so the next calibration pass doesn't put it straight back.
+// Hand-applied associations are simply deleted -- there's nothing to suppress.
 function removeTagFromSongs(tagId, songIds) {
   return db.transaction(() => {
-    const stmt = db.prepare('DELETE FROM song_tags WHERE tag_id = ? AND song_id = ?');
-    for (const songId of songIds) stmt.run(tagId, songId);
+    const suppress = db.prepare(
+      `UPDATE song_tags SET source = 'suppressed' WHERE tag_id = ? AND song_id = ? AND source = 'auto'`
+    );
+    const remove = db.prepare(
+      `DELETE FROM song_tags WHERE tag_id = ? AND song_id = ? AND source = 'manual'`
+    );
+    for (const songId of songIds) {
+      suppress.run(tagId, songId);
+      remove.run(tagId, songId);
+    }
   })();
 }
 
@@ -985,12 +1175,334 @@ function copyItemsToList(itemIds, targetListId, skipSongIds = []) {
   })();
 }
 
+// ---- Audio analysis ------------------------------------------------------
+//
+// Every song gets one song_analysis row holding the model's fingerprint of it.
+// analysis_queue is the durable work list feeding that: a full-library pass takes
+// hours, so it has to survive the app being quit halfway through.
+
+/**
+ * Bumped whenever an embedding is written or removed.
+ *
+ * similarity.js holds the whole library's embeddings in one in-memory matrix and
+ * has no way to notice the table changing under it. Rather than making every
+ * caller remember to invalidate that cache, they compare this number: if it
+ * moved, the matrix is stale. A count of rows wouldn't do, since re-analyzing a
+ * song leaves the count unchanged while changing where it sits in the space.
+ */
+let analysisRevision = 0;
+
+function getAnalysisRevision() {
+  return analysisRevision;
+}
+
+/**
+ * Songs that have no analysis, or whose analysis came from a different model
+ * version. Returned oldest-first so a big pass works through the library in
+ * import order rather than jumping around.
+ */
+function getSongsNeedingAnalysis(modelVersion) {
+  return db.prepare(`
+    SELECT s.id
+    FROM songs s
+    LEFT JOIN song_analysis a ON a.song_id = s.id
+    WHERE a.song_id IS NULL OR a.model_version != ?
+    ORDER BY s.id
+  `).all(modelVersion).map(row => row.id);
+}
+
+/**
+ * Add songs to the work list. Already-queued songs are left alone so re-running
+ * this doesn't reset attempt counts or resurrect a failure's error message.
+ */
+function enqueueForAnalysis(songIds) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO analysis_queue (song_id, state, attempts, queued_at)
+      VALUES (?, 'pending', 0, ?)
+    `);
+    let added = 0;
+    for (const songId of songIds) added += stmt.run(songId, now).changes;
+    return added;
+  })();
+}
+
+/**
+ * Claim up to `limit` pending songs, marking them running and returning absolute
+ * file paths. Songs whose file has gone missing are still returned -- the
+ * analyzer reports the read failure, which surfaces a real error rather than
+ * silently skipping.
+ */
+function claimAnalysisTasks(limit) {
+  const settings = getSettings();
+  return db.transaction(() => {
+    const rows = db.prepare(`
+      SELECT q.song_id, s.file_path, s.title
+      FROM analysis_queue q
+      JOIN songs s ON s.id = q.song_id
+      WHERE q.state = 'pending'
+      ORDER BY q.song_id
+      LIMIT ?
+    `).all(limit);
+
+    const claim = db.prepare(
+      `UPDATE analysis_queue SET state = 'running', attempts = attempts + 1 WHERE song_id = ?`
+    );
+    for (const row of rows) claim.run(row.song_id);
+
+    return rows.map(row => ({
+      songId: row.song_id,
+      title: row.title,
+      filePath: path.join(settings.library_path, row.file_path),
+    }));
+  })();
+}
+
+/**
+ * Store a finished analysis and drop the song from the queue. Re-analysis of an
+ * already-analyzed song replaces the old row, so the embedding a song is matched
+ * on is always the one the current model produced.
+ */
+function saveAnalysis(songId, { modelVersion, embedding, activations, axes }) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    db.prepare(`
+      INSERT INTO song_analysis (song_id, model_version, embedding, activations, axes, analyzed_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(song_id) DO UPDATE SET
+        model_version = excluded.model_version,
+        embedding = excluded.embedding,
+        activations = excluded.activations,
+        axes = excluded.axes,
+        analyzed_at = excluded.analyzed_at,
+        map_x = NULL,
+        map_y = NULL,
+        cluster_id = NULL
+    `).run(songId, modelVersion, embedding, activations, JSON.stringify(axes), now);
+    db.prepare('DELETE FROM analysis_queue WHERE song_id = ?').run(songId);
+    analysisRevision++;
+  })();
+}
+
+/**
+ * Record a failure. After MAX_ATTEMPTS the song stays in the queue as 'failed'
+ * so it's visible and retryable, but stops being handed out -- a file the codec
+ * can't read would otherwise spin forever.
+ */
+const MAX_ANALYSIS_ATTEMPTS = 3;
+
+function failAnalysis(songId, error) {
+  const row = db.prepare('SELECT attempts FROM analysis_queue WHERE song_id = ?').get(songId);
+  if (!row) return;
+  const state = row.attempts >= MAX_ANALYSIS_ATTEMPTS ? 'failed' : 'pending';
+  db.prepare('UPDATE analysis_queue SET state = ?, error = ? WHERE song_id = ?')
+    .run(state, String(error), songId);
+}
+
+/**
+ * Reset songs left mid-flight by a crash or quit. Called at startup: a 'running'
+ * row with nothing running is a lie, and would never be handed out again.
+ */
+function requeueStaleAnalysisTasks() {
+  return db.prepare(`UPDATE analysis_queue SET state = 'pending' WHERE state = 'running'`).run().changes;
+}
+
+/** Move every failed song back to pending, for a user-triggered retry. */
+function retryFailedAnalysis() {
+  return db.prepare(
+    `UPDATE analysis_queue SET state = 'pending', attempts = 0, error = NULL WHERE state = 'failed'`
+  ).run().changes;
+}
+
+function getAnalysisStats() {
+  const total = db.prepare('SELECT COUNT(*) AS n FROM songs').get().n;
+  const analyzed = db.prepare('SELECT COUNT(*) AS n FROM song_analysis').get().n;
+  const queue = db.prepare('SELECT state, COUNT(*) AS n FROM analysis_queue GROUP BY state').all();
+  const byState = Object.fromEntries(queue.map(row => [row.state, row.n]));
+  return {
+    total,
+    analyzed,
+    pending: (byState.pending || 0) + (byState.running || 0),
+    failed: byState.failed || 0,
+  };
+}
+
+/** The failed songs, with titles, for the "N songs couldn't be analyzed" list. */
+function getFailedAnalyses() {
+  return db.prepare(`
+    SELECT q.song_id, q.error, s.title, s.artist
+    FROM analysis_queue q JOIN songs s ON s.id = q.song_id
+    WHERE q.state = 'failed'
+    ORDER BY s.artist, s.title
+  `).all();
+}
+
+/**
+ * Every embedding in the library, as raw blobs. The caller decodes them into one
+ * big Float32Array (see similarity.js) -- at 800 bytes per song even a 100k-track
+ * library is 76 MB, which brute-force cosine search scans in ~15 ms.
+ */
+function getAllEmbeddings() {
+  return db.prepare('SELECT song_id, embedding FROM song_analysis ORDER BY song_id').all();
+}
+
+function getAnalysis(songId) {
+  const row = db.prepare('SELECT * FROM song_analysis WHERE song_id = ?').get(songId);
+  if (row) row.axes = JSON.parse(row.axes);
+  return row;
+}
+
+/** All stored axis vectors, for percentile calibration and the facet browser. */
+function getAllAxes() {
+  return db.prepare('SELECT song_id, axes FROM song_analysis').all()
+    .map(row => ({ song_id: row.song_id, axes: JSON.parse(row.axes) }));
+}
+
+/** All stored activation blobs, for percentile calibration of the MSD labels. */
+function getAllActivations() {
+  return db.prepare('SELECT song_id, activations FROM song_analysis').all();
+}
+
+/** Write back the 2D map projection computed in bulk from the embeddings. */
+function saveMapCoordinates(coords) {
+  return db.transaction(() => {
+    const stmt = db.prepare('UPDATE song_analysis SET map_x = ?, map_y = ? WHERE song_id = ?');
+    for (const { songId, x, y } of coords) stmt.run(x, y, songId);
+  })();
+}
+
+/** Write back k-means cluster assignments computed in bulk. */
+function saveClusterAssignments(assignments) {
+  return db.transaction(() => {
+    const stmt = db.prepare('UPDATE song_analysis SET cluster_id = ? WHERE song_id = ?');
+    for (const { songId, clusterId } of assignments) stmt.run(clusterId, songId);
+  })();
+}
+
+/** song_id -> {x, y, cluster} for every song that has a cached projection. */
+function getMapPoints() {
+  return db.prepare(`
+    SELECT a.song_id, a.map_x, a.map_y, a.cluster_id, s.title, s.artist, s.album
+    FROM song_analysis a JOIN songs s ON s.id = a.song_id
+    WHERE a.map_x IS NOT NULL
+  `).all();
+}
+
+// ---- Clusters ------------------------------------------------------------
+
+/** song_id -> the names of the tags on it, for naming clusters after them. */
+function getSongTagNames() {
+  const rows = db.prepare(`
+    SELECT st.song_id, t.name
+    FROM song_tags st JOIN tags t ON t.id = st.tag_id
+    WHERE st.source IN ('manual', 'auto')
+  `).all();
+  const bySongId = new Map();
+  for (const { song_id, name } of rows) {
+    if (!bySongId.has(song_id)) bySongId.set(song_id, []);
+    bySongId.get(song_id).push(name);
+  }
+  return bySongId;
+}
+
+/** Replace the whole set of cluster names. Ids are the array positions. */
+function replaceClusters(names) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    db.prepare('DELETE FROM clusters').run();
+    const stmt = db.prepare('INSERT INTO clusters (id, name, inserted_at) VALUES (?, ?, ?)');
+    names.forEach((name, id) => stmt.run(id, name, now));
+  })();
+}
+
+/**
+ * Every cluster with its current membership count, biggest first. The count is
+ * computed rather than stored so deleting songs can't leave it lying.
+ */
+function getClusters() {
+  return db.prepare(`
+    SELECT c.id, c.name, COUNT(a.song_id) AS size
+    FROM clusters c
+    LEFT JOIN song_analysis a ON a.cluster_id = c.id
+    GROUP BY c.id, c.name
+    ORDER BY size DESC, c.id
+  `).all();
+}
+
+function renameCluster(clusterId, newName) {
+  db.prepare('UPDATE clusters SET name = ? WHERE id = ?').run(newName, clusterId);
+}
+
+/** The song ids in one cluster, in library order. */
+function getClusterSongIds(clusterId) {
+  return db.prepare('SELECT song_id FROM song_analysis WHERE cluster_id = ? ORDER BY song_id').all(clusterId)
+    .map(row => row.song_id);
+}
+
+// ---- Auto tags -----------------------------------------------------------
+//
+// `song_tags.source` is the pivot the whole auto/manual distinction turns on:
+//
+//   'manual'     -- you put it there. The analyzer never touches it.
+//   'auto'       -- the analyzer put it there, and may replace it next pass.
+//   'suppressed' -- the analyzer put it there and you took it off. The row stays
+//                   as a tombstone so re-running the analyzer doesn't bring it
+//                   back; without it, every recalibration would undo your edits.
+//
+// Everything that reads a song's tags filters to ('manual', 'auto').
+
+/** Find or create the tag definition an auto-tag writes into. */
+function getOrCreateAutoTag(name, color) {
+  const existing = db.prepare('SELECT * FROM tags WHERE name = ?').get(name);
+  if (existing) return existing;
+  const tag = createTag(name, color);
+  db.prepare('UPDATE tags SET is_auto = 1 WHERE id = ?').run(tag.id);
+  return db.prepare('SELECT * FROM tags WHERE id = ?').get(tag.id);
+}
+
+/**
+ * Replace the machine-applied tags for the whole library in one transaction.
+ *
+ * `assignments` is [{ songId, tagId, confidence }]. Rows you applied or removed
+ * by hand survive untouched: the delete only takes source='auto', and the insert
+ * is OR IGNORE so it can't overwrite a 'manual' or 'suppressed' row.
+ */
+function replaceAutoTags(assignments) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    db.prepare(`DELETE FROM song_tags WHERE source = 'auto'`).run();
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO song_tags (song_id, tag_id, inserted_at, source, confidence)
+      VALUES (?, ?, ?, 'auto', ?)
+    `);
+    let applied = 0;
+    for (const { songId, tagId, confidence } of assignments) {
+      applied += stmt.run(songId, tagId, now, confidence).changes;
+    }
+    return applied;
+  })();
+}
+
+/** Remove every auto tag and every auto-created tag definition that's now unused. */
+function clearAutoTags() {
+  return db.transaction(() => {
+    db.prepare(`DELETE FROM song_tags WHERE source IN ('auto', 'suppressed')`).run();
+    db.prepare(`
+      DELETE FROM tags
+      WHERE is_auto = 1 AND id NOT IN (SELECT tag_id FROM song_tags)
+    `).run();
+  })();
+}
+
 module.exports = {
   MAIN_LIBRARY_ID,
+  MAX_ANALYSIS_ATTEMPTS,
   initialize,
   getLists,
   getListItems,
   getAllListItems,
+  getSongsWithPlacements,
   getItem,
   getSong,
   getSongByPath,
@@ -1017,6 +1529,10 @@ module.exports = {
   updateFolderExpanded,
   sortFolderContents,
   flattenFolder,
+  getSavedSearches,
+  createSavedSearch,
+  renameSavedSearch,
+  deleteSavedSearch,
   getAllTags,
   createTag,
   renameTag,
@@ -1029,4 +1545,30 @@ module.exports = {
   getSettings,
   updateSetting,
   getDbPath,
+  // Audio analysis
+  getSongsNeedingAnalysis,
+  enqueueForAnalysis,
+  claimAnalysisTasks,
+  saveAnalysis,
+  failAnalysis,
+  requeueStaleAnalysisTasks,
+  retryFailedAnalysis,
+  getAnalysisStats,
+  getFailedAnalyses,
+  getAllEmbeddings,
+  getAnalysisRevision,
+  getAnalysis,
+  getAllAxes,
+  getAllActivations,
+  saveMapCoordinates,
+  saveClusterAssignments,
+  getMapPoints,
+  getSongTagNames,
+  replaceClusters,
+  getClusters,
+  renameCluster,
+  getClusterSongIds,
+  getOrCreateAutoTag,
+  replaceAutoTags,
+  clearAutoTags,
 };

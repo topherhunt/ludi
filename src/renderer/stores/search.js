@@ -2,6 +2,11 @@ import { createSignal, createMemo, createRoot } from 'solid-js';
 import { getAllListItems } from '../utils/api.js';
 import { currentListId } from './navigation.js';
 import { parseQuery, evaluateSong, isInvalidQuery } from '../utils/searchParser.js';
+import { clearSimilar } from './similar.js';
+import { clearCluster } from './clusters.js';
+import { closeMap } from './musicMap.js';
+import { closeFacets } from './facets.js';
+import { buildRootResolver } from '../utils/listTree.js';
 
 const {
   searchQuery,
@@ -53,6 +58,16 @@ async function runSearch(queryString) {
     return;
   }
 
+  // A search, a similarity ranking, a group, the map and the facet browser are
+  // five different answers to "what should the explorer show", so starting one
+  // puts the others away. Only runSearch clears them, never clearSearch --
+  // showSimilarTo, showCluster, openMap and openFacets call clearSearch, and
+  // clearing in both directions would wipe each other out.
+  clearSimilar();
+  clearCluster();
+  closeMap();
+  closeFacets();
+
   const rootListId = currentListId();
   setSearchQuery(trimmed);
   setSearchRootListId(rootListId);
@@ -76,19 +91,7 @@ async function runSearch(queryString) {
   }
 
   // Which root list (Main Library or playlist) an item ultimately sits under.
-  const rootCache = new Map();
-  function rootOf(listId) {
-    if (rootCache.has(listId)) return rootCache.get(listId);
-    const chain = [];
-    let id = listId;
-    while (id !== null && listIdToFolderItem.has(id)) {
-      chain.push(id);
-      id = listIdToFolderItem.get(id).parent_list_id;
-    }
-    for (const seen of chain) rootCache.set(seen, id);
-    rootCache.set(listId, id);
-    return id;
-  }
+  const rootOf = buildRootResolver(allItems);
 
   function getAncestorFolders(item) {
     const ancestors = [];

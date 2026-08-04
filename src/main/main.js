@@ -4,6 +4,12 @@ const fs = require('fs');
 const db = require('./database');
 const { parseFile } = require('music-metadata');
 const { audioContentType } = require('./audio-mime');
+const analysis = require('./analysis');
+const similarity = require('./similarity');
+const clusters = require('./clusters');
+const musicMap = require('./music-map');
+const { recalculateAutoTags } = require('./analysis/auto-tagger');
+const { BUNDLE_SCHEME_PRIVILEGES, registerBundleProtocol } = require('./bundle-protocol');
 
 let mainWindow;
 let settingsWindow;
@@ -22,8 +28,27 @@ if (isDev) {
 // Register custom protocol for serving local audio files
 // Used in both dev and prod for consistent behavior and proper Range request support (needed for seeking)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'ludi-audio', privileges: { standard: true, stream: true, bypassCSP: true } }
+  // supportFetchAPI/corsEnabled are for the analyzer window, which reads library
+  // files with fetch() rather than an <audio> element. Without them Chromium
+  // rejects the request before it ever reaches our handler ("Failed to fetch");
+  // with them it enforces CORS, which the handler answers -- see CORS_HEADERS.
+  {
+    scheme: 'ludi-audio',
+    privileges: { standard: true, stream: true, bypassCSP: true, supportFetchAPI: true, corsEnabled: true },
+  },
+  BUNDLE_SCHEME_PRIVILEGES,
 ]);
+
+// The <audio> element doesn't care about CORS (media elements skip the check
+// unless they carry a crossorigin attribute), but the analyzer window reads the
+// same files with fetch(), which does. Its origin is http://localhost:PORT in dev
+// and file:// in prod -- neither matches ludi-audio://, so without these headers
+// every analysis fetch fails opaquely. Allowing * is safe: the scheme only ever
+// resolves paths on this machine, and only our own windows can request it.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+};
 
 function createWindow() {
   const isTest = process.env.NODE_ENV === 'test';
@@ -244,7 +269,7 @@ app.whenReady().then(() => {
         fileSize = (await fs.promises.stat(filePath)).size;
       } catch (err) {
         console.error('ludi-audio: file not found:', filePath, err.message);
-        return new Response(null, { status: 404 });
+        return new Response(null, { status: 404, headers: CORS_HEADERS });
       }
 
       // Range request (seeking, and the initial open-ended bytes=0-): 206 partial.
@@ -255,7 +280,10 @@ app.whenReady().then(() => {
         const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
         // Guard a range starting past EOF (e.g. stored duration slightly long).
         if (start >= fileSize) {
-          return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${fileSize}` } });
+          return new Response(null, {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${fileSize}`, ...CORS_HEADERS },
+          });
         }
         const clampedEnd = Math.min(end, fileSize - 1);
         return new Response(toWeb(fs.createReadStream(filePath, { start, end: clampedEnd })), {
@@ -265,6 +293,7 @@ app.whenReady().then(() => {
             'Content-Length': String(clampedEnd - start + 1),
             'Content-Range': `bytes ${start}-${clampedEnd}/${fileSize}`,
             'Accept-Ranges': 'bytes',
+            ...CORS_HEADERS,
           },
         });
       }
@@ -272,9 +301,17 @@ app.whenReady().then(() => {
       // No Range header: stream the whole file.
       return new Response(toWeb(fs.createReadStream(filePath)), {
         status: 200,
-        headers: { 'Content-Type': contentType, 'Content-Length': String(fileSize), 'Accept-Ranges': 'bytes' },
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': String(fileSize),
+          'Accept-Ranges': 'bytes',
+          ...CORS_HEADERS,
+        },
       });
     });
+
+    // Lets the analyzer window fetch models and wasm in packaged builds.
+    registerBundleProtocol();
 
     // Initialize database
     db.initialize();
@@ -283,6 +320,10 @@ app.whenReady().then(() => {
     createMenu();
 
     createWindow();
+
+    // After createWindow so a pass resumed from a previous session has a window
+    // to report progress to.
+    analysis.initAnalysis({ isDev, devPort });
 
     app.on('activate', () => {
       // Re-show the hidden window (or recreate it if it was actually destroyed).
@@ -406,6 +447,23 @@ ipcMain.handle('db:previewCopyToList', (event, { itemIds, targetListId }) => {
 
 ipcMain.handle('db:copyItemsToList', (event, { itemIds, targetListId, skipSongIds }) => {
   return db.copyItemsToList(itemIds, targetListId, skipSongIds);
+});
+
+// ---- Saved searches ----
+ipcMain.handle('db:getSavedSearches', () => {
+  return db.getSavedSearches();
+});
+
+ipcMain.handle('db:createSavedSearch', (event, { name, query }) => {
+  return db.createSavedSearch(name, query);
+});
+
+ipcMain.handle('db:renameSavedSearch', (event, { id, newName }) => {
+  return db.renameSavedSearch(id, newName);
+});
+
+ipcMain.handle('db:deleteSavedSearch', (event, id) => {
+  return db.deleteSavedSearch(id);
 });
 
 // ---- Tags ----
@@ -775,6 +833,7 @@ ipcMain.handle('files:import', async (event, { filePaths, parentListId, position
     }
   }
 
+  analysis.analyzeNewSongs(results.imported.map(song => song.songId));
   return results;
 });
 
@@ -850,6 +909,7 @@ ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
         db.addSongToList(songId, folderId, songPosition);
         songPosition++;
         results.imported.push({
+          songId,
           title: song.title,
           artist: song.artist,
           album: song.album,
@@ -868,6 +928,7 @@ ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
     mainWindow.webContents.send('library-changed');
   }
 
+  analysis.analyzeNewSongs(results.imported.map(song => song.songId));
   return results;
 });
 
@@ -976,9 +1037,59 @@ ipcMain.handle('power:setPlaybackActive', (event, active) => {
     powerSaveBlocker.stop(powerBlockerId);
     powerBlockerId = null;
   }
+  // The same signal tells the analyzer to back off to one worker, so a
+  // background analysis pass never makes playback stutter.
+  analysis.setPlaybackActive(active);
   return powerBlockerId !== null;
 });
 
 ipcMain.handle('power:isPlaybackActive', () => (
   powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)
+));
+
+// ---- Audio analysis ------------------------------------------------------
+
+ipcMain.handle('analysis:start', () => analysis.analyzeLibrary());
+ipcMain.handle('analysis:stop', () => analysis.stopAnalysis());
+ipcMain.handle('analysis:getProgress', () => analysis.getAnalysisProgress());
+ipcMain.handle('analysis:getFailed', () => db.getFailedAnalyses());
+
+ipcMain.handle('analysis:retryFailed', () => {
+  db.retryFailedAnalysis();
+  return analysis.resumeAnalysis();
+});
+
+ipcMain.handle('analysis:recalculateTags', () => recalculateAutoTags());
+
+ipcMain.handle('analysis:clearAutoTags', () => {
+  db.clearAutoTags();
+  return true;
+});
+
+ipcMain.handle('analysis:getSongAnalysis', (event, songId) => db.getAnalysis(songId));
+
+// ---- Similarity ----------------------------------------------------------
+
+ipcMain.handle('similarity:find', (event, seedSongIds, options) => (
+  similarity.findSimilar(seedSongIds, options)
+));
+
+// ---- Clusters ------------------------------------------------------------
+
+ipcMain.handle('clusters:recalculate', () => clusters.recalculateClusters());
+ipcMain.handle('clusters:list', () => db.getClusters());
+ipcMain.handle('clusters:songs', (event, clusterId) => clusters.getClusterSongs(clusterId));
+ipcMain.handle('clusters:rename', (event, { clusterId, newName }) => db.renameCluster(clusterId, newName));
+
+ipcMain.handle('clusters:saveAsPlaylist', (event, { clusterId, title }) => (
+  clusters.saveClusterAsPlaylist(clusterId, title)
+));
+
+// ---- Music map -----------------------------------------------------------
+
+ipcMain.handle('map:recalculate', () => musicMap.recalculateMap());
+ipcMain.handle('map:points', () => musicMap.getMapPoints());
+
+ipcMain.handle('map:saveAsPlaylist', (event, { songIds, title }) => (
+  musicMap.saveSelectionAsPlaylist(songIds, title)
 ));

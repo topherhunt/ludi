@@ -1,4 +1,4 @@
-import { createSignal, createResource, onMount, onCleanup, Show } from 'solid-js';
+import { createSignal, createResource, onMount, onCleanup, Show, For } from 'solid-js';
 import { AlertModal } from './Modal.jsx';
 import { ScanResultsModal } from './ScanResultsModal.jsx';
 import { showAlert, alertModalState, hideAlertModal } from '../stores/modals.js';
@@ -65,6 +65,11 @@ export function Settings() {
   const [scanModalOpen, setScanModalOpen] = createSignal(false);
   const [scannedFiles, setScannedFiles] = createSignal([]);
 
+  // Audio analysis state. Main pushes progress on every finished song, so this
+  // is a live figure rather than something we poll for.
+  const [analysis, setAnalysis] = createSignal({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false });
+  const [failures, setFailures] = createSignal([]);
+
   // Load settings on mount
   onMount(async () => {
     // Load app settings
@@ -79,6 +84,21 @@ export function Settings() {
     setColArtist(columnSettings.visibility.artist);
     setColAlbum(columnSettings.visibility.album);
     setColTags(columnSettings.visibility.tags);
+
+    setAnalysis(await window.electronAPI.getAnalysisProgress());
+    window.electronAPI.onAnalysisProgress(setAnalysis);
+    window.electronAPI.onAnalysisComplete(({ tags }) => {
+      const summary = tags.skipped
+        ? `<p>Analysis finished, but tags weren't generated: ${tags.skipped}.</p>`
+        : `<p>Analyzed your library and applied <strong>${tags.assignments}</strong> tags across <strong>${tags.tags}</strong> categories.</p>`;
+      showAlert('<i class="bi bi-soundwave" style="margin-right: 8px;"></i>Analysis Complete', summary);
+    });
+    window.electronAPI.onAnalysisError(({ message }) => {
+      showAlert(
+        '<i class="bi bi-exclamation-triangle" style="margin-right: 8px;"></i>Analysis Failed',
+        `<p>The analyzer could not start.</p><pre class="skipped-files-list">${message}</pre>`
+      );
+    });
   });
 
   // Handle browse button
@@ -144,6 +164,27 @@ export function Settings() {
       html,
       'scan-results-dialog'
     );
+  };
+
+  // Start / stop the audio analysis pass
+  const handleAnalyze = async () => {
+    setAnalysis(await window.electronAPI.startAnalysis());
+  };
+
+  const handleStopAnalysis = async () => {
+    setAnalysis(await window.electronAPI.stopAnalysis());
+  };
+
+  const handleRetryFailed = async () => {
+    setFailures([]);
+    setAnalysis(await window.electronAPI.retryFailedAnalyses());
+  };
+
+  // Which songs failed, and why. Fetched on demand rather than pushed with the
+  // progress counts, since it is only ever a click away from being irrelevant.
+  const handleShowFailures = async () => {
+    if (failures().length > 0) { setFailures([]); return; }
+    setFailures(await window.electronAPI.getFailedAnalyses());
   };
 
   // Cancel the scan results modal without importing
@@ -255,6 +296,77 @@ export function Settings() {
           >
             {scanning() ? 'Scanning...' : 'Scan for new music files in library folder'}
           </button>
+        </div>
+
+        <div class="setting-item">
+          <label class="setting-label">Audio analysis</label>
+          <div class="setting-description">
+            Listen to every song and work out what it sounds like, so Ludi can find similar
+            songs and tag your library automatically. This runs in the background and can take
+            a few hours for a large library -- you can keep using Ludi, and quitting partway
+            through picks up where it left off.
+          </div>
+
+          <div class="analysis-status qa-analysis-status">
+            <Show
+              when={analysis().running}
+              fallback={
+                <span>
+                  {analysis().analyzed} of {analysis().total} songs analyzed
+                  <Show when={analysis().failed > 0}>
+                    {' '}&middot;{' '}
+                    <button class="analysis-failed qa-show-failures" onClick={handleShowFailures}>
+                      {analysis().failed} failed
+                    </button>
+                  </Show>
+                </span>
+              }
+            >
+              <span>
+                Analyzing... {analysis().analyzed} of {analysis().total} done,
+                {' '}{analysis().pending} to go
+              </span>
+            </Show>
+          </div>
+
+          <Show when={failures().length > 0}>
+            <div class="skipped-files-list qa-failure-list">
+              <ul>
+                <For each={failures()}>
+                  {(failure) => (
+                    <li class="qa-failure-row" data-song-id={failure.song_id}>
+                      <strong>{failure.title}</strong>
+                      {failure.artist ? ` -- ${failure.artist}` : ''}: {failure.error}
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </div>
+          </Show>
+
+          <div class="button-row">
+            <Show
+              when={analysis().running}
+              fallback={
+                <button
+                  class="browse-btn qa-analyze-library"
+                  onClick={handleAnalyze}
+                  disabled={analysis().total === 0}
+                >
+                  {analysis().analyzed === 0 ? 'Analyze my library' : 'Analyze new songs'}
+                </button>
+              }
+            >
+              <button class="browse-btn qa-stop-analysis" onClick={handleStopAnalysis}>
+                Stop analyzing
+              </button>
+            </Show>
+            <Show when={analysis().failed > 0 && !analysis().running}>
+              <button class="browse-btn qa-retry-analysis" onClick={handleRetryFailed}>
+                Retry {analysis().failed} failed
+              </button>
+            </Show>
+          </div>
         </div>
 
         <div class="setting-item">

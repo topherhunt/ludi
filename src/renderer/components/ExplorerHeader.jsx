@@ -1,9 +1,27 @@
 import { Show, onCleanup, createEffect } from 'solid-js';
 import { searchQuery, isSearching, searchViewMode, setSearchViewMode, runSearch, clearSearch } from '../stores/search.js';
+import { isShowingSimilar, similarSeeds, similarTotal, clearSimilar } from '../stores/similar.js';
+import { saveSearch } from '../stores/savedSearches.js';
+import { isShowingCluster, activeCluster, clusterSongs, clearCluster } from '../stores/clusters.js';
+import { mapOpen, mapPoints, closeMap } from '../stores/musicMap.js';
+import { facetsOpen, facetMatches, closeFacets } from '../stores/facets.js';
+import { bumpLibraryVersion } from '../stores/tags.js';
+import { saveClusterAsPlaylist } from '../utils/api.js';
+import { showRenameModal, showAlert } from '../stores/modals.js';
 
 export function ExplorerHeader(props) {
   let searchInputRef;
   let debounceTimer = null;
+
+  // Naming the seed only works for one song. Past that the honest heading is the
+  // count, since the results come from the middle of the selection rather than
+  // from any one of them.
+  const similarHeading = () => {
+    const seeds = similarSeeds();
+    const suffix = similarTotal() > 0 ? ` (${similarTotal()})` : '';
+    if (seeds.length === 1) return `Songs like "${seeds[0]}"${suffix}`;
+    return `Songs like ${seeds.length} selected songs${suffix}`;
+  };
 
   const updateWidth = (val) => {
     if (!searchInputRef) return;
@@ -40,6 +58,34 @@ export function ExplorerHeader(props) {
     if (searchInputRef) { searchInputRef.value = ''; updateWidth(''); searchInputRef.focus(); }
   };
 
+  // Freeze the group being viewed into a real playlist, named after the group by
+  // default. The library version bump is what puts it in the sidebar.
+  const handleSaveClusterAsPlaylist = () => {
+    const cluster = activeCluster();
+    showRenameModal(cluster.name, async (title) => {
+      const trimmed = (title || '').trim();
+      if (!trimmed) return;
+      await saveClusterAsPlaylist(cluster.id, trimmed);
+      bumpLibraryVersion();
+      showAlert(
+        '<i class="bi bi-music-note-list" style="margin-right: 8px;"></i>Playlist Created',
+        `"${trimmed}" now holds ${clusterSongs().length} songs.`
+      );
+    }, 'Save Group As Playlist');
+  };
+
+  // Pin the current query to the sidebar under a name of your choosing. The
+  // query itself is the suggested name, since a facet combination like
+  // "tag=jazz tag=live" already reads as a title.
+  const handleSaveSearch = () => {
+    const query = searchQuery();
+    showRenameModal(query, async (name) => {
+      const trimmed = (name || '').trim();
+      if (!trimmed) return;
+      await saveSearch(trimmed, query);
+    }, 'Save Search');
+  };
+
   // Sync the input whenever the store's query changes (e.g. after Advanced Search submits)
   createEffect(() => {
     const q = searchQuery();
@@ -51,9 +97,66 @@ export function ExplorerHeader(props) {
   return (
     <div class="explorer-header">
       <div class="explorer-header-left">
+        <Show when={isShowingSimilar()}>
+          <h1 id="currentListTitle" class="qa-similar-title">{similarHeading()}</h1>
+          <button
+            class="search-clear-btn qa-exit-similar"
+            onClick={() => clearSimilar()}
+            title="Back to the library"
+          >
+            <i class="bi bi-x-lg" />
+          </button>
+        </Show>
+
+        <Show when={isShowingCluster()}>
+          <h1 id="currentListTitle" class="qa-cluster-title">
+            {activeCluster().name} ({clusterSongs().length})
+          </h1>
+          <button
+            class="search-save-btn qa-cluster-save-playlist"
+            onClick={handleSaveClusterAsPlaylist}
+            title="Save this group as a playlist"
+          >
+            <i class="bi bi-music-note-list" />
+          </button>
+          <button
+            class="search-clear-btn qa-exit-cluster"
+            onClick={() => clearCluster()}
+            title="Back to the library"
+          >
+            <i class="bi bi-x-lg" />
+          </button>
+        </Show>
+
+        <Show when={mapOpen()}>
+          <h1 id="currentListTitle" class="qa-map-title">Music Map ({mapPoints().length})</h1>
+          <button
+            class="search-clear-btn qa-exit-map"
+            onClick={() => closeMap()}
+            title="Back to the library"
+          >
+            <i class="bi bi-x-lg" />
+          </button>
+        </Show>
+
+        <Show when={facetsOpen()}>
+          <h1 id="currentListTitle" class="qa-facets-title">Facets ({facetMatches().length})</h1>
+          <button
+            class="search-clear-btn qa-exit-facets"
+            onClick={() => closeFacets()}
+            title="Back to the library"
+          >
+            <i class="bi bi-x-lg" />
+          </button>
+        </Show>
+
         <Show
           when={isSearching()}
-          fallback={<h1 id="currentListTitle">{props.title || 'Main Library'}</h1>}
+          fallback={
+            <Show when={!isShowingSimilar() && !isShowingCluster() && !mapOpen() && !facetsOpen()}>
+              <h1 id="currentListTitle">{props.title || 'Main Library'}</h1>
+            </Show>
+          }
         >
           <h1 id="currentListTitle">Search Results in {props.title || 'Main Library'}</h1>
           <div class="search-view-toggle">
@@ -95,6 +198,15 @@ export function ExplorerHeader(props) {
             </button>
           </Show>
         </div>
+        <Show when={isSearching()}>
+          <button
+            class="search-save-btn qa-save-search"
+            onClick={handleSaveSearch}
+            title="Save this search to the sidebar"
+          >
+            <i class="bi bi-bookmark-plus" />
+          </button>
+        </Show>
         <button
           class="search-advanced-btn"
           classList={{ active: props.advancedSearchOpen }}

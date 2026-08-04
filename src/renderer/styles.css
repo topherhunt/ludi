@@ -1038,7 +1038,8 @@ body.resizing-sidebar {
   color: #d4d4d4;
 }
 
-.search-advanced-btn {
+.search-advanced-btn,
+.search-save-btn {
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -1051,7 +1052,8 @@ body.resizing-sidebar {
   -webkit-app-region: no-drag;
 }
 
-.search-advanced-btn:hover {
+.search-advanced-btn:hover,
+.search-save-btn:hover {
   background: #2d2d30;
   color: #d4d4d4;
   border-color: #3e3e42;
@@ -1117,6 +1119,45 @@ body.resizing-sidebar {
   text-align: center;
   max-width: 300px;
   line-height: 1.4;
+}
+
+/* ===== Similar songs ===== */
+
+/* Match strength, ahead of the title. Tabular figures and a fixed width so the
+   percentages line up into a column you can scan down. */
+.similarity-badge {
+  flex-shrink: 0;
+  width: 38px;
+  margin-right: 6px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #7ea6c4;
+}
+
+.similar-show-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 24px;
+}
+
+.similar-show-more-btn {
+  padding: 6px 18px;
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.similar-show-more-btn:hover:not(:disabled) {
+  background: #3e3e42;
+}
+
+.similar-show-more-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ===== Advanced Search Modal ===== */
@@ -1303,6 +1344,32 @@ body.resizing-sidebar {
   user-select: none;
 }
 .tag-pill-dashed { border-style: dashed; }
+
+/* How many of the songs on screen carry this tag. Dimmer than the name so the
+   chip still reads as its label first and a number second. */
+.tag-pill-count {
+  margin-left: 5px;
+  opacity: 0.6;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Machine-made tag: a gear sitting on the pill's top-left border. Positioned
+   rather than inline so it costs no horizontal room and reads as a stamp on the
+   pill instead of part of the name. The dark ring hides the border behind it. */
+.tag-pill-auto { position: relative; }
+.tag-auto-marker {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  font-size: 8px;
+  line-height: 1;
+  padding: 1px;
+  border-radius: 50%;
+  background-color: #252526;
+  color: var(--tag-color, #888);
+}
+
 .tag-pill-selected {
   background-color: #094771;
   border-color: #1e88e5;
@@ -1342,7 +1409,9 @@ body.resizing-sidebar {
 }
 
 /* Sidebar Tags section */
-.tags-section {
+.tags-section,
+.saved-searches-section,
+.clusters-section {
   border-top: 1px solid #3e3e42;
   padding: 10px 12px;
   flex-shrink: 0;
@@ -1360,6 +1429,249 @@ body.resizing-sidebar {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Saved searches: rows that read like playlists, because that's what they act
+   like -- a named thing in the sidebar you click to fill the explorer. The
+   magnifier is what says "this one is a question, not a list". */
+.saved-search-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.saved-search-item:hover {
+  background-color: #2a2d2e;
+}
+.saved-search-item.active {
+  background-color: #094771;
+  color: #fff;
+}
+.saved-search-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #858585;
+}
+.saved-search-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Groups. Rows are saved-search rows; only the heading (which carries the
+   regroup button) and the trailing count are their own. */
+.clusters-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.clusters-empty {
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+  padding: 2px 6px;
+}
+.cluster-size {
+  margin-left: auto;
+  padding-left: 6px;
+  opacity: 0.6;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Music map =====
+   The canvas fills everything the status strip doesn't, and never scrolls:
+   panning is the scrolling. */
+.map-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.map-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.map-canvas {
+  display: block;
+  cursor: grab;
+}
+.map-canvas:active {
+  cursor: grabbing;
+}
+.map-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+}
+.map-tooltip-artist {
+  color: #858585;
+  font-size: 11px;
+}
+.map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #555;
+  font-size: 14px;
+}
+.map-empty i {
+  font-size: 36px;
+}
+.map-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-top: 1px solid #3e3e42;
+  font-size: 12px;
+  color: #858585;
+  flex-shrink: 0;
+}
+.map-missing {
+  color: #cca700;
+}
+.map-selection {
+  color: #ddd;
+}
+.map-status-btn {
+  background: none;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.map-status-btn:hover {
+  background-color: #2a2d2e;
+}
+.map-hint {
+  margin-left: auto;
+  color: #555;
+}
+
+/* ===== Facet browser =====
+   A breadcrumb, a count, and a scrolling list of "what else is on these
+   songs" rows. */
+.facets-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.facet-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 6px;
+}
+.facet-crumb {
+  cursor: pointer;
+  font-size: 12px;
+  color: #858585;
+}
+.facet-crumb:hover {
+  color: #d4d4d4;
+}
+.facet-crumb-sep {
+  color: #555;
+  font-size: 10px;
+}
+.facet-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 12px;
+  color: #858585;
+}
+.facet-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.facet-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.facet-row:hover {
+  background-color: #2a2d2e;
+}
+.facet-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background-color: #2a2d2e;
+  overflow: hidden;
+}
+.facet-bar-fill {
+  height: 100%;
+  background-color: #4a7ab8;
+}
+.facet-count {
+  min-width: 40px;
+  text-align: right;
+  font-size: 12px;
+  color: #858585;
+}
+.facet-lift {
+  min-width: 40px;
+  font-size: 11px;
+  color: #4a9e5c;
+}
+.facet-empty {
+  padding: 16px 12px;
+  color: #555;
+  font-size: 13px;
+}
+
+/* ===== Analysis progress strip (bottom of sidebar) ===== */
+.analysis-progress {
+  border-top: 1px solid #3e3e42;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.analysis-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #858585;
+  margin-bottom: 6px;
+}
+.analysis-progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background-color: #3e3e42;
+  overflow: hidden;
+}
+.analysis-progress-fill {
+  height: 100%;
+  background-color: #4a9e5c;
+  transition: width 0.3s ease;
 }
 
 /* Song edit panel (bottom of sidebar) */

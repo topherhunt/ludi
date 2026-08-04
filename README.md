@@ -8,8 +8,14 @@ Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nest
 
 - **Folder-tree library.** Nest folders as deep as you like, drag and drop to reorder or reparent, sort a folder alphabetically, or flatten it. Right-click a folder to play the whole thing.
 - **Playlists.** Reference-only song lists in the sidebar -- adding a song to a playlist copies the reference, never the file, and never moves it out of your library.
-- **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; click a chip to search for it.
-- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, and tags. Search can be scoped to a playlist.
+- **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; the chips are scoped to whatever you're looking at and carry a count, and clicking them stacks up as filters.
+- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, and tags. Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
+- **Audio analysis.** Ludi listens to every song locally (no uploads, no API keys) with a MusiCNN model running on ONNX Runtime, and stores a 200-number fingerprint of how each track sounds. It runs in the background, backs off while you're playing music, and picks up where it left off if you quit. Everything below is built on it:
+  - **Similar songs.** Right-click any song for the tracks that sound most like it.
+  - **Auto-tags.** Genre and mood tags applied from the model's own scores, calibrated against your library rather than absolute thresholds. Machine-applied tags carry a gear badge so they're never confused with your own, and re-running the analysis only ever rewrites those.
+  - **Auto-playlists.** Ludi clusters the library into groups, names each one after what makes it distinctive, and lets you save any of them as a real playlist.
+  - **Music map.** Your whole library as a zoomable, pannable 2D landscape where similar music sits together. Hover for a title, double-click to play, or shift-drag a lasso around a region and save it as a playlist.
+  - **Facet browser.** Every tag in the current view with how many songs carry it. Click one to drill in, and the list becomes "what else these songs tend to be", with the combinations that are unusually concentrated marked. Hand any drill-down to the search box to save it.
 - **Import by drag and drop.** Drag audio files in from Finder and Ludi copies them into your library folder, reads their title/artist/album/duration tags, and files them where you dropped them.
 - **Drag files back out.** Hold Option while dragging a selection to copy the underlying audio files out to the Desktop or a Finder folder.
 - **Library scan.** Point Ludi at files already sitting in your library folder and it ingests them in place, grouped by artist and album.
@@ -38,6 +44,10 @@ xattr -dr com.apple.quarantine /Applications/Ludi.app
 Ludi keeps your music in `~/Music/Ludi Library` and its database in `~/.ludi/`.
 
 See [CHANGELOG.md](CHANGELOG.md) for what's changed in each version.
+
+## License
+
+[AGPL-3.0-or-later](LICENSE). Ludi was MIT until it grew audio analysis: essentia.js, which computes the mel-spectrograms the model runs on, is AGPL-3.0, and linking it makes the combined work AGPL too.
 
 ## Development
 
@@ -72,6 +82,8 @@ The integration tests use Playwright to launch the app, verify the UI is display
 - SQLite for the music library DB
 - Howler.js for audio playback
 - music-metadata for extracting title/artist/album tags from audiofiles
+- essentia.js (mel-spectrograms) + ONNX Runtime Web (MusiCNN inference) for audio analysis, both running as WASM in a hidden renderer window
+- umap-js for projecting the analysis embeddings down to the 2D music map
 - Thorough integration tests using Playwright for Electron
 
 ### Releasing
@@ -122,10 +134,62 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - title (text not null)
   - artist
   - album
+  - track_number
   - file_path (text not null, unique constraint)
   - duration_seconds (int not null)
   - inserted_at
   - updated_at
+
+- `tags`
+  - id
+  - name (text not null, unique COLLATE NOCASE)
+  - color (text not null)
+  - position (int not null -- the manual drag-to-reorder order used wherever tags are listed)
+  - is_auto (int not null, default 0 -- a tag *definition* the analyzer created; draws the gear badge)
+  - inserted_at
+  - updated_at
+
+- `song_tags`
+  *Song<->tag associations (many-to-many). PK (song_id, tag_id).*
+  - song_id (FK not null)
+  - tag_id (FK not null, indexed)
+  - source (text not null, default 'manual' -- 'auto' rows are the only ones a re-analysis may rewrite; the same tag can be machine-applied to one song and hand-applied to another, which is why this lives on the association)
+  - confidence (real -- the model's score, kept for sorting and for explaining why a tag is there)
+  - inserted_at
+
+- `saved_searches`
+  *A named query pinned to the sidebar. Stored as the query string, not a resolved song list, so a song that acquires the right tags next month joins it on its own.*
+  - id
+  - name (text not null)
+  - query (text not null)
+  - position (int not null)
+  - inserted_at
+  - updated_at
+
+- `song_analysis`
+  *One row per analyzed song.*
+  - song_id (PK, FK)
+  - model_version (text not null)
+  - embedding (blob not null -- 200 float32s, the model's fingerprint of the track; every similarity feature runs on this)
+  - activations (blob not null -- the raw 50 genre/mood float32s, kept so re-deriving auto-tags never requires re-analyzing audio)
+  - axes (text not null -- classification-head scalars as JSON)
+  - map_x, map_y (real -- cached UMAP projection, recomputed in bulk)
+  - cluster_id (int, indexed -- cached k-means assignment)
+  - analyzed_at
+
+- `analysis_queue`
+  *Work list for the background analyzer, persisted so a pass that takes hours survives quitting the app.*
+  - song_id (PK, FK)
+  - state (text not null -- 'pending' | 'running' | 'failed')
+  - error (text)
+  - attempts (int not null, default 0 -- after 3 the song stays as 'failed', visible and retryable, but stops being handed out)
+  - queued_at
+
+- `clusters`
+  *Names for the auto-generated groups. `id` is the same number as `song_analysis.cluster_id`, so membership lives with the analysis and only the name lives here -- which is what lets a rename survive a re-clustering.*
+  - id
+  - name (text not null)
+  - inserted_at
 
 Notes on implementation:
 
@@ -143,6 +207,9 @@ Notes on implementation:
 - ✅ Searching & filtering
 - ✅ Song tagging
 - ✅ Playlists
+- ✅ Local audio analysis (MusiCNN embeddings, mood/genre scores)
+- ✅ Similar songs, auto-tags, auto-playlists, the music map, and the facet browser
+- ✅ Saved searches
 
 ## Wishlist (later steps)
 
@@ -155,7 +222,6 @@ Notes on implementation:
 
 Other:
 
-- Saved searches in the sidebar, alongside playlists.
 - Detect/Prevent the app from being opened twice at the same time, to avoid conflicting writes to the sqlite DB.
 - Volume equalizer - when enabled, per-song volume is adjusted so all songs have the same max volume.
 - Right-click on a folder -> Scans -> "List duplicates of the same song" (in that list/folder). Opens a new window listing all duplicates found (for each, the song + the folder path). Click on any item to jump to it in the main window.

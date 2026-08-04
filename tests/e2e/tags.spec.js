@@ -91,8 +91,11 @@ test.describe('Tags', () => {
     await window.waitForTimeout(200);
 
     await expect(window.locator('.qa-tag-editor-pills .tag-pill', { hasText: 'both' })).toHaveCount(0);
-    // The tag definition still exists in the sidebar (removal != delete)...
-    await expect(window.locator('.qa-tags-section .tag-pill', { hasText: 'both' })).toBeVisible();
+    // The tag definition still exists (removal != delete). Not checked via the
+    // sidebar: those chips are scoped to the songs on screen, so a tag nothing
+    // carries any more is legitimately no longer among them.
+    const defined = await window.evaluate(() => window.electronAPI.getAllTags());
+    expect(defined.map((tag) => tag.name)).toContain('both');
     // ...and Backspace must NOT have fallen through to deleting the selected songs.
     await expect(window.locator(SONG_ROW)).toHaveCount(songCountBefore);
   });
@@ -199,8 +202,7 @@ test.describe('Tags', () => {
     // Right-click in the bottom-right corner: the popover would otherwise open
     // below the fold with nothing to scroll it back into view.
     await window.evaluate(({ x, y }) => {
-      const el = [...document.querySelectorAll('.qa-tags-section .tag-pill')]
-        .find((p) => p.textContent === 'edgetag');
+      const el = document.querySelector('.qa-tags-section [data-tag-name="edgetag"]');
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
     }, { x: viewport.w - 20, y: viewport.h - 20 });
     // The menu itself opens at the cursor and is mostly off-screen here, so the

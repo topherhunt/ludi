@@ -35,6 +35,10 @@ function getAPI() {
     removeItemsFromList: async () => {},
     previewCopyToList: async () => ({ totalSongs: 0, duplicates: [] }),
     copyItemsToList: async () => 0,
+    getSavedSearches: async () => [],
+    createSavedSearch: async ({ name, query }) => ({ id: 0, name, query, position: 0 }),
+    renameSavedSearch: async () => {},
+    deleteSavedSearch: async () => {},
     getAllTags: async () => [],
     createTag: async ({ name, color }) => ({ id: 0, name, color, position: 0 }),
     renameTag: async () => {},
@@ -50,6 +54,26 @@ function getAPI() {
     selectDirectory: async () => null,
     closeSettings: async () => {},
     notifyColumnSettingsChanged: async () => {},
+    startAnalysis: async () => ({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false }),
+    stopAnalysis: async () => ({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false }),
+    getAnalysisProgress: async () => ({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false }),
+    getFailedAnalyses: async () => [],
+    retryFailedAnalyses: async () => ({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false }),
+    recalculateAutoTags: async () => ({ songs: 0, tags: 0, assignments: 0 }),
+    clearAutoTags: async () => true,
+    getSongAnalysis: async () => null,
+    findSimilarSongs: async () => ({ results: [], total: 0, seedsAnalyzed: 0, duplicatesHidden: 0 }),
+    recalculateClusters: async () => ({ clusters: [], songs: 0, score: -1 }),
+    getClusters: async () => [],
+    getClusterSongs: async () => [],
+    renameCluster: async () => {},
+    saveClusterAsPlaylist: async ({ title }) => ({ id: 0, title, is_subfolder: 0, sidebar_position: 0 }),
+    recalculateMap: async () => ({ points: 0, songs: 0 }),
+    getMapPoints: async () => ({ points: [], analyzed: 0 }),
+    saveMapSelectionAsPlaylist: async ({ title }) => ({ id: 0, title, is_subfolder: 0, sidebar_position: 0 }),
+    onAnalysisProgress: () => {},
+    onAnalysisComplete: () => {},
+    onAnalysisError: () => {},
     onMediaKey: () => {},
     onColumnSettingsChanged: () => {},
   };
@@ -247,6 +271,28 @@ export async function copyItemsToList(itemIds, targetListId, skipSongIds = []) {
   return getAPI().copyItemsToList({ itemIds, targetListId, skipSongIds });
 }
 
+// Saved searches
+
+/** Get all saved searches, ordered by position. */
+export async function getSavedSearches() {
+  return getAPI().getSavedSearches();
+}
+
+/** Save a query under a name. Returns the created row. */
+export async function createSavedSearch(name, query) {
+  return getAPI().createSavedSearch({ name, query });
+}
+
+/** Rename a saved search (the query it runs is unchanged). */
+export async function renameSavedSearch(id, newName) {
+  return getAPI().renameSavedSearch({ id, newName });
+}
+
+/** Delete a saved search. The songs it matched are untouched. */
+export async function deleteSavedSearch(id) {
+  return getAPI().deleteSavedSearch(id);
+}
+
 // Tag operations
 
 /** Get all defined tags, ordered by position. */
@@ -352,7 +398,165 @@ export async function notifyColumnSettingsChanged(settings) {
   return getAPI().notifyColumnSettingsChanged(settings);
 }
 
+// Audio analysis
+
+/**
+ * Queue every song the current model hasn't analyzed and start working through it.
+ * @returns {Promise<{ total: number, analyzed: number, pending: number, failed: number, running: boolean }>}
+ */
+export async function startAnalysis() {
+  return getAPI().startAnalysis();
+}
+
+/**
+ * Stop the analysis pass. The queue is preserved and can be resumed.
+ * @returns {Promise<object>}
+ */
+export async function stopAnalysis() {
+  return getAPI().stopAnalysis();
+}
+
+/**
+ * How much of the library has been analyzed.
+ * @returns {Promise<{ total: number, analyzed: number, pending: number, failed: number, running: boolean }>}
+ */
+export async function getAnalysisProgress() {
+  return getAPI().getAnalysisProgress();
+}
+
+/**
+ * Songs that failed analysis after every retry, with their error messages.
+ * @returns {Promise<Array<{ song_id: number, title: string, artist: string, error: string }>>}
+ */
+export async function getFailedAnalyses() {
+  return getAPI().getFailedAnalyses();
+}
+
+/**
+ * Put failed songs back on the queue and restart the pass.
+ * @returns {Promise<object>}
+ */
+export async function retryFailedAnalyses() {
+  return getAPI().retryFailedAnalyses();
+}
+
+/**
+ * Recompute machine-applied tags from the stored analyses, without re-analyzing
+ * any audio.
+ * @returns {Promise<{ songs: number, tags: number, assignments: number, skipped?: string }>}
+ */
+export async function recalculateAutoTags() {
+  return getAPI().recalculateAutoTags();
+}
+
+/**
+ * Remove every machine-applied tag, including the tombstones for ones removed by hand.
+ * @returns {Promise<boolean>}
+ */
+export async function clearAutoTags() {
+  return getAPI().clearAutoTags();
+}
+
+/**
+ * The stored analysis for one song (embedding, activations, axes).
+ * @param {number} songId
+ * @returns {Promise<object|null>}
+ */
+export async function getSongAnalysis(songId) {
+  return getAPI().getSongAnalysis(songId);
+}
+
+/**
+ * Songs that sound like the given ones, best match first.
+ * @param {number[]} seedSongIds
+ * @param {{ limit?: number, offset?: number }} [options]
+ * @returns {Promise<{ results: Array, total: number, seedsAnalyzed: number, duplicatesHidden: number }>}
+ */
+export async function findSimilarSongs(seedSongIds, options) {
+  return getAPI().findSimilarSongs(seedSongIds, options);
+}
+
+// Clusters
+
+/**
+ * Regroup the whole library. Slow enough to be a deliberate action, so it is
+ * only ever called from a button.
+ * @returns {Promise<{ clusters: Array<{id, name, size}>, songs: number, score: number }>}
+ */
+export async function recalculateClusters() {
+  return getAPI().recalculateClusters();
+}
+
+/** Every cluster with its current size, biggest first. */
+export async function getClusters() {
+  return getAPI().getClusters();
+}
+
+/** The songs in one cluster, as explorer rows. */
+export async function getClusterSongs(clusterId) {
+  return getAPI().getClusterSongs(clusterId);
+}
+
+/** Rename a cluster. Its membership is unchanged. */
+export async function renameCluster(clusterId, newName) {
+  return getAPI().renameCluster({ clusterId, newName });
+}
+
+/** Freeze a cluster into a real playlist. Returns the created list row. */
+export async function saveClusterAsPlaylist(clusterId, title) {
+  return getAPI().saveClusterAsPlaylist({ clusterId, title });
+}
+
+// Music map
+
+/**
+ * Re-project the whole library onto the map. The slowest thing the app does, so
+ * it is only ever called from a button.
+ * @returns {Promise<{ points: number, songs: number }>}
+ */
+export async function recalculateMap() {
+  return getAPI().recalculateMap();
+}
+
+/**
+ * Every mapped song, plus how many songs have been analyzed -- the difference is
+ * what the map is missing.
+ * @returns {Promise<{ points: Array<object>, analyzed: number }>}
+ */
+export async function getMapPoints() {
+  return getAPI().getMapPoints();
+}
+
+/** Freeze a lasso'd region into a real playlist. Returns the created list row. */
+export async function saveMapSelectionAsPlaylist(songIds, title) {
+  return getAPI().saveMapSelectionAsPlaylist({ songIds, title });
+}
+
 // Event listeners
+
+/**
+ * Register a callback for analysis progress updates
+ * @param {Function} callback
+ */
+export function onAnalysisProgress(callback) {
+  getAPI().onAnalysisProgress(callback);
+}
+
+/**
+ * Register a callback for when an analysis pass finishes
+ * @param {Function} callback
+ */
+export function onAnalysisComplete(callback) {
+  getAPI().onAnalysisComplete(callback);
+}
+
+/**
+ * Register a callback for a fatal analyzer failure
+ * @param {Function} callback
+ */
+export function onAnalysisError(callback) {
+  getAPI().onAnalysisError(callback);
+}
 
 /**
  * Register a callback for media key events

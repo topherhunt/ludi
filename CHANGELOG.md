@@ -2,6 +2,21 @@
 
 Notable changes at each version checkpoint. Dates are the release build dates.
 
+## Unreleased
+
+**Ludi now listens to your music.** A local audio-analysis pass (essentia.js for mel-spectrograms, a MusiCNN model on ONNX Runtime, both as WASM in a hidden window) fingerprints every song into 200 numbers plus genre, mood, and energy scores. Nothing leaves your machine and there are no API keys. It runs in the background from Settings -> Audio analysis, drops to a single worker while you're playing music, and its queue is persisted so quitting mid-pass loses nothing. Everything below is built on that:
+
+- **Similar songs.** Right-click a song (or a selection) for the tracks that sound most like it.
+- **Auto-tags.** Genre and mood tags applied from the model's scores, with thresholds calibrated against your own library's distribution rather than absolute cutoffs -- so "mellow" means mellow *for you*. Machine-applied tags carry a gear badge, and re-running the analysis only ever rewrites those; your hand-applied tags are never touched.
+- **Auto-playlists.** Ludi clusters the library into groups, picks the number of groups by silhouette score, names each after the tags that are most over-represented in it, and lets you save any cluster as a real playlist.
+- **Music map.** The whole library as a zoomable, pannable 2D landscape (UMAP over the embeddings) where similar music sits together, colored by cluster. Hover for a title, double-click to play, or shift-drag a lasso around a region and save what it caught as a playlist.
+- **Facet browser.** Every tag in the current view with how many songs carry it. Click one to drill in and the list becomes "what else these songs tend to be", with unusually concentrated combinations marked by how much more common they are here than in the library at large. Hand any drill-down to the search box to refine or save it.
+- **Saved searches.** Pin a query to the sidebar. It's saved as the query, not as a frozen list, so songs join and leave it on their own as tags change.
+- **Sidebar tag chips are now scoped and counted.** They show only the tags present in what you're looking at, with a count each, and clicking them stacks up as filters instead of replacing each other.
+- **Analysis progress** shows in the main window's sidebar while a pass runs, and Settings lists which songs failed and why.
+
+Ludi is now **AGPL-3.0-or-later** rather than MIT: essentia.js is AGPL, and linking it makes the combined work AGPL too.
+
 ## 0.2.0 -- 2026-08-02
 
 **Fixed: macOS reported the app as "damaged and can't be opened".** The 0.1.0 `.dmg` was unusable for anyone who downloaded it. electron-builder found no Developer ID certificate, silently skipped signing, and left the stock Electron binary's signature attached to a bundle it went on to rewrite -- so macOS saw a signature that no longer described the app and reported it as tampered-with, offering no way to override. Ludi is now ad-hoc signed, and the build fails outright if the signature doesn't seal the bundle. First launch still needs a one-time Control-click -> Open, since an ad-hoc signature isn't Apple-notarized.

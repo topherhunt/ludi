@@ -12,8 +12,24 @@ import {
   renameFolder,
   addSongsToList,
 } from '../utils/api.js';
-import { tags, refreshTags, bumpLibraryVersion, findTagByName } from '../stores/tags.js';
+import { tags, refreshTags, bumpLibraryVersion, libraryVersion, findTagByName } from '../stores/tags.js';
+import { scopedTags, isTagFiltered } from '../stores/tagFacets.js';
+import { savedSearches, renameSavedSearch, deleteSavedSearch } from '../stores/savedSearches.js';
+import {
+  clusters,
+  activeCluster,
+  clustering,
+  isShowingCluster,
+  regenerateClusters,
+  showCluster,
+  renameCluster,
+  clearCluster,
+} from '../stores/clusters.js';
+import { mapOpen, openMap, closeMap } from '../stores/musicMap.js';
+import { facetsOpen, openFacets, closeFacets } from '../stores/facets.js';
 import { runSearch, isSearching, searchQuery, clearSearch } from '../stores/search.js';
+import { clearSimilar } from '../stores/similar.js';
+import { addTagTerm, removeTagTerm } from '../utils/tagFilter.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, showAlert } from '../stores/modals.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
@@ -22,6 +38,7 @@ import { TagPill } from './TagPill.jsx';
 import { SidebarPlaylistRow } from './SidebarPlaylistRow.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { SongEditPanel } from './SongEditPanel.jsx';
+import { AnalysisProgress } from './AnalysisProgress.jsx';
 
 /**
  * Sidebar component with playlist list
@@ -33,12 +50,18 @@ export function Sidebar(props) {
   const [tagMenu, setTagMenu] = createSignal(null);       // { x, y, tag } | null
   const [colorPicker, setColorPicker] = createSignal(null); // { x, y, tag } | null
   const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
+  const [savedSearchMenu, setSavedSearchMenu] = createSignal(null); // { x, y, saved } | null
+  const [clusterMenu, setClusterMenu] = createSignal(null); // { x, y, cluster } | null
   let draggingTagId = null;
   let playlistListRef;
   let colorPopoverRef;
 
-  // Fetch lists from database
-  const [lists, { refetch }] = createResource(getLists);
+  // Fetch lists from database. Keyed on the library version so a playlist made
+  // somewhere else -- saving a group, for instance -- appears here too.
+  const [lists, { refetch }] = createResource(
+    () => ({ version: libraryVersion() }),
+    getLists
+  );
 
   // Refresh views after a tag definition changes (rename/recolor/delete/reorder).
   const refreshAfterTagChange = async () => {
@@ -47,14 +70,9 @@ export function Sidebar(props) {
     if (isSearching()) runSearch(searchQuery());
   };
 
-  // The exact query string a tag chip searches for.
-  const tagQuery = (tag) => {
-    const quoted = tag.name.includes(' ') ? `"${tag.name}"` : tag.name;
-    return `tag=${quoted}`;
-  };
-
-  // A tag is "active" when it is the sole applied filter.
-  const isTagActive = (tag) => isSearching() && searchQuery().trim() === tagQuery(tag);
+  // A tag is "active" when the current query filters for it -- whether it got
+  // there by a chip click or by being typed into the search box.
+  const isTagActive = (tag) => isTagFiltered(tag);
 
   // Animate a copy of the clicked chip flying up into the search input, so the
   // filter application is visually obvious (à la Safari's download fly).
@@ -85,10 +103,20 @@ export function Sidebar(props) {
     anim.oncancel = () => clone.remove();
   };
 
-  // Left-click a tag chip -> replace the current view with a search for that tag.
+  // Left-click a tag chip -> narrow by that tag, or widen again if it's already
+  // a filter. Chips accumulate, so clicking "jazz" then "live" asks for both.
   const handleTagClick = (tag, e) => {
+    const query = isSearching() ? searchQuery() : '';
+
+    if (isTagActive(tag)) {
+      const remaining = removeTagTerm(query, tag.name);
+      if (remaining) runSearch(remaining);
+      else clearSearch();
+      return;
+    }
+
     flyTagToSearch(tag, e?.currentTarget);
-    runSearch(tagQuery(tag));
+    runSearch(addTagTerm(query, tag.name));
   };
 
   const handleTagContextMenu = (e, tag) => {
@@ -179,12 +207,108 @@ export function Sidebar(props) {
     await refreshTags();
   };
 
+  // ---- Saved searches ----
+
+  // A saved search is its query text, so clicking one does exactly what typing
+  // that query would: it searches the list you're looking at. Same query, same
+  // scoping rules as the tag chips it was probably built from.
+  const handleSavedSearchClick = (saved) => {
+    runSearch(saved.query);
+  };
+
+  const isSavedSearchActive = (saved) => isSearching() && searchQuery() === saved.query;
+
+  const handleSavedSearchContextMenu = (e, saved) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTagMenu(null);
+    setColorPicker(null);
+    setPlaylistMenu(null);
+    setSavedSearchMenu({ x: e.clientX, y: e.clientY, saved });
+  };
+
+  const handleRenameSavedSearch = (saved) => {
+    setSavedSearchMenu(null);
+    showRenameModal(saved.name, async (newName) => {
+      const trimmed = (newName || '').trim();
+      if (!trimmed || trimmed === saved.name) return;
+      await renameSavedSearch(saved.id, trimmed);
+    }, 'Rename Saved Search');
+  };
+
+  const handleDeleteSavedSearch = (saved) => {
+    setSavedSearchMenu(null);
+    showConfirmModal(
+      '<i class="bi bi-trash" style="margin-right: 8px;"></i>Delete Saved Search',
+      `Delete the saved search "${saved.name}"? The songs it matched are untouched.`,
+      async () => {
+        await deleteSavedSearch(saved.id);
+      }
+    );
+  };
+
+  // ---- Groups (clusters) ----
+
+  const handleRegenerateClusters = async () => {
+    const summary = await regenerateClusters();
+    if (summary.clusters.length === 0) {
+      showAlert(
+        '<i class="bi bi-diagram-2" style="margin-right: 8px;"></i>Not Enough To Group',
+        `Only ${summary.songs} songs have been analyzed. Run the audio analysis from Settings first -- grouping needs a library to find patterns in.`
+      );
+      return;
+    }
+    showAlert(
+      '<i class="bi bi-diagram-2" style="margin-right: 8px;"></i>Library Grouped',
+      `${summary.songs} songs sorted into ${summary.clusters.length} groups.`
+    );
+  };
+
+  const handleClusterClick = (cluster) => {
+    clearSelection();
+    showCluster(cluster);
+  };
+
+  const handleOpenMap = () => {
+    clearSelection();
+    openMap();
+  };
+
+  const handleOpenFacets = () => {
+    clearSelection();
+    openFacets();
+  };
+
+  const handleClusterContextMenu = (e, cluster) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTagMenu(null);
+    setColorPicker(null);
+    setPlaylistMenu(null);
+    setSavedSearchMenu(null);
+    setClusterMenu({ x: e.clientX, y: e.clientY, cluster });
+  };
+
+  const handleRenameCluster = (cluster) => {
+    setClusterMenu(null);
+    showRenameModal(cluster.name, async (newName) => {
+      const trimmed = (newName || '').trim();
+      if (!trimmed || trimmed === cluster.name) return;
+      await renameCluster(cluster.id, trimmed);
+    }, 'Rename Group');
+  };
+
   // ---- Playlists ----
 
   // Handle clicking on a playlist item. Switching lists drops any active search:
-  // results are scoped to one list, so keeping them would show stale hits.
+  // results are scoped to one list, so keeping them would show stale hits. Same
+  // for a similarity ranking -- you asked for a playlist, show the playlist.
   const handlePlaylistClick = (list) => {
     clearSearch();
+    clearSimilar();
+    clearCluster();
+    closeMap();
+    closeFacets();
     setCurrentListId(list.id);
     clearSelection();
     props.onListChange?.(list.id);
@@ -298,7 +422,10 @@ export function Sidebar(props) {
   onMount(() => {
     const onKey = (e) => {
       if (e.key === 'Escape' && isDropdownOpen()) closeDropdown();
-      if (e.key === 'Escape') { setTagMenu(null); setColorPicker(null); setPlaylistMenu(null); }
+      if (e.key === 'Escape') {
+        setTagMenu(null); setColorPicker(null); setPlaylistMenu(null);
+        setSavedSearchMenu(null); setClusterMenu(null);
+      }
     };
     const onDocClick = (e) => {
       if (
@@ -311,6 +438,8 @@ export function Sidebar(props) {
       const inMenu = e.target.closest('.tag-context-menu');
       const inPopover = e.target.closest('.tag-color-popover');
       if (playlistMenu() && !e.target.closest('.playlist-context-menu')) setPlaylistMenu(null);
+      if (savedSearchMenu() && !e.target.closest('.saved-search-context-menu')) setSavedSearchMenu(null);
+      if (clusterMenu() && !e.target.closest('.cluster-context-menu')) setClusterMenu(null);
       if (tagMenu() && !inMenu) setTagMenu(null);
       // Don't close the color popover on the very menu click that opened it.
       if (colorPicker() && !inPopover && !inMenu) setColorPicker(null);
@@ -338,6 +467,10 @@ export function Sidebar(props) {
       !e.target.closest('.sidebar-header') &&
       !e.target.closest('.song-edit-panel') &&
       !e.target.closest('.tags-section') &&
+      !e.target.closest('.saved-searches-section') &&
+      !e.target.closest('.saved-search-context-menu') &&
+      !e.target.closest('.clusters-section') &&
+      !e.target.closest('.cluster-context-menu') &&
       !e.target.closest('.tag-context-menu') &&
       !e.target.closest('.tag-color-popover') &&
       !e.target.closest('.playlist-context-menu')
@@ -414,11 +547,91 @@ export function Sidebar(props) {
         <DropIndicator scope="sidebar" />
       </div>
 
-      <Show when={tags().length > 0}>
+      {/* Groups the analysis found, and the map of the same space. Always shown,
+          so the buttons that make them are somewhere you can find them before
+          there is anything to show. */}
+      <div class="clusters-section qa-clusters-section">
+        <div
+          class="saved-search-item qa-open-map"
+          classList={{ active: mapOpen() }}
+          onClick={handleOpenMap}
+        >
+          <i class="bi bi-map saved-search-icon" />
+          <span class="saved-search-name">Music Map</span>
+        </div>
+
+        <div
+          class="saved-search-item qa-open-facets"
+          classList={{ active: facetsOpen() }}
+          onClick={handleOpenFacets}
+        >
+          <i class="bi bi-signpost-split saved-search-icon" />
+          <span class="saved-search-name">Facets</span>
+        </div>
+
+        <div class="tags-heading clusters-heading">
+          <span>Groups</span>
+          <button
+            class="add-btn qa-recluster"
+            data-tooltip={clusters().length > 0 ? 'Regroup library' : 'Group songs that sound alike'}
+            disabled={clustering()}
+            onClick={handleRegenerateClusters}
+          >
+            <i class="bi bi-diagram-2" />
+          </button>
+        </div>
+        <Show
+          when={clusters().length > 0}
+          fallback={
+            <div class="clusters-empty qa-clusters-empty">
+              {clustering() ? 'Grouping...' : 'Not grouped yet.'}
+            </div>
+          }
+        >
+          <For each={clusters()}>
+            {(cluster) => (
+              <div
+                class="saved-search-item qa-cluster-item"
+                classList={{ active: isShowingCluster() && activeCluster().id === cluster.id }}
+                data-cluster-id={cluster.id}
+                onClick={() => handleClusterClick(cluster)}
+                onContextMenu={(e) => handleClusterContextMenu(e, cluster)}
+              >
+                <i class="bi bi-diagram-2 saved-search-icon" />
+                <span class="saved-search-name">{cluster.name}</span>
+                <span class="cluster-size qa-cluster-size">{cluster.size}</span>
+              </div>
+            )}
+          </For>
+        </Show>
+      </div>
+
+      <Show when={savedSearches().length > 0}>
+        <div class="saved-searches-section qa-saved-searches">
+          <div class="tags-heading">Saved Searches</div>
+          <For each={savedSearches()}>
+            {(saved) => (
+              <div
+                class="saved-search-item qa-saved-search"
+                classList={{ active: isSavedSearchActive(saved) }}
+                data-saved-search-id={saved.id}
+                title={saved.query}
+                onClick={() => handleSavedSearchClick(saved)}
+                onContextMenu={(e) => handleSavedSearchContextMenu(e, saved)}
+              >
+                <i class="bi bi-search saved-search-icon" />
+                <span class="saved-search-name">{saved.name}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={scopedTags().length > 0}>
         <div class="tags-section qa-tags-section">
           <div class="tags-heading">Tags</div>
           <div class="tags-list">
-            <For each={tags()}>
+            <For each={scopedTags()}>
               {(tag) => (
                 <span
                   draggable={true}
@@ -429,6 +642,7 @@ export function Sidebar(props) {
                 >
                   <TagPill
                     tag={tag}
+                    count={tag.count}
                     active={isTagActive(tag)}
                     onClick={(e) => handleTagClick(tag, e)}
                     onContextMenu={(e) => handleTagContextMenu(e, tag)}
@@ -441,6 +655,8 @@ export function Sidebar(props) {
       </Show>
 
       <SongEditPanel />
+
+      <AnalysisProgress />
 
       {/* Playlist right-click context menu. The Main Library can only be played. */}
       <Show when={playlistMenu()}>
@@ -466,6 +682,33 @@ export function Sidebar(props) {
               <i class="bi bi-trash context-menu-icon"></i>Delete
             </div>
           </Show>
+        </div>
+      </Show>
+
+      {/* Group right-click context menu */}
+      <Show when={clusterMenu()}>
+        <div
+          class="context-menu cluster-context-menu"
+          style={{ left: `${clusterMenu().x}px`, top: `${clusterMenu().y}px` }}
+        >
+          <div class="context-menu-item qa-cluster-rename" onClick={() => handleRenameCluster(clusterMenu().cluster)}>
+            <i class="bi bi-pencil context-menu-icon"></i>Rename
+          </div>
+        </div>
+      </Show>
+
+      {/* Saved search right-click context menu */}
+      <Show when={savedSearchMenu()}>
+        <div
+          class="context-menu saved-search-context-menu"
+          style={{ left: `${savedSearchMenu().x}px`, top: `${savedSearchMenu().y}px` }}
+        >
+          <div class="context-menu-item qa-saved-search-rename" onClick={() => handleRenameSavedSearch(savedSearchMenu().saved)}>
+            <i class="bi bi-pencil context-menu-icon"></i>Rename
+          </div>
+          <div class="context-menu-item qa-saved-search-delete" onClick={() => handleDeleteSavedSearch(savedSearchMenu().saved)}>
+            <i class="bi bi-trash context-menu-icon"></i>Delete
+          </div>
         </div>
       </Show>
 

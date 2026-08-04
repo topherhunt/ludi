@@ -22,6 +22,8 @@ import {
 } from './stores/navigation.js';
 import { applySettingsFromIPC } from './stores/columns.js';
 import { refreshTags } from './stores/tags.js';
+import { refreshSavedSearches } from './stores/savedSearches.js';
+import { refreshClusters } from './stores/clusters.js';
 import {
   playlist,
   setCurrentPlaylist,
@@ -148,9 +150,11 @@ export function App() {
     window.electronAPI?.onShowAbout?.(() => setIsAboutOpen(true));
   });
 
-  // Load the defined tags into the global store at startup
+  // Load the defined tags, the saved searches and the groups at startup
   onMount(() => {
     refreshTags();
+    refreshSavedSearches();
+    refreshClusters();
   });
 
   // Listen for media key events (play/pause, next, previous)

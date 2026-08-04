@@ -96,7 +96,14 @@ function buildNestedTree(matchedSongs, rootListId) {
   return renderFolder(rootListId);
 }
 
-function SearchSongRow(props) {
+/**
+ * One song row in a query-shaped list (search hits, similarity results).
+ *
+ * Exported because every such list wants the same selection, drag and
+ * now-playing behaviour; only the reason the song is in the list differs. Pass
+ * `similarity` (0..1) to show a match-strength badge ahead of the title.
+ */
+export function SearchSongRow(props) {
   const isCurrent = createMemo(() => props.song.item_id === currentPlayingItemId());
   const isSelected = createMemo(() => selectedItems().has(props.song.item_id));
 
@@ -157,6 +164,9 @@ function SearchSongRow(props) {
           <span class={iconContainerClass()}>
             <i class={iconClass()} />
           </span>
+          <Show when={props.similarity !== undefined}>
+            <span class="similarity-badge qa-similarity">{Math.round(props.similarity * 100)}%</span>
+          </Show>
           <span class="tree-item-label">{props.song.title}</span>
         </span>
 

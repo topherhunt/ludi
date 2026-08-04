@@ -31,6 +31,10 @@ export function ContextMenu(props) {
   // Count selected folders via their rendered rows (selection is set before right-click).
   const selectedFolderCount = () =>
     document.querySelectorAll('.tree-item-content.selected[data-is-folder="true"]').length;
+  // Mirrors Explorer's handleFindSimilar: a click inside a multi-selection acts
+  // on the selection, a click outside it acts on the one row.
+  const isSeedingFromSelection = () =>
+    isMultiSelect() && selectedItems().has(props.item?.id);
 
   return (
     <div
@@ -194,6 +198,21 @@ export function ContextMenu(props) {
 
       {/* Song-only actions */}
       <Show when={!isFolder()}>
+        <div class="context-menu-separator" />
+
+        {/* Seeded from the whole selection when the click landed inside it --
+            the label says which, so there's no guessing what you'll get. */}
+        <div
+          class="context-menu-item qa-find-similar"
+          onClick={() => {
+            const item = props.item;
+            props.onClose?.();
+            props.onFindSimilar?.(item);
+          }}
+        >
+          {isSeedingFromSelection() ? `Find songs like these ${selectedItems().size}` : 'Find similar songs'}
+        </div>
+
         <div class="context-menu-separator" />
 
         <div
