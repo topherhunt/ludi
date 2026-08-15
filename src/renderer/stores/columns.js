@@ -5,6 +5,7 @@ const STORAGE_KEY = 'ludi-column-settings';
 const DEFAULT_VISIBILITY = {
   track: true,
   duration: true,
+  rating: true,
   artist: true,
   album: true,
   tags: true,
@@ -14,6 +15,7 @@ const DEFAULT_WIDTHS = {
   title: 300,
   track: 40,
   duration: 60,
+  rating: 90,
   artist: 150,
   album: 150,
   tags: 100,
@@ -79,6 +81,7 @@ const {
 
     if (vis.track) cols.push(`${widths.track || 40}px`);
     if (vis.duration) cols.push(`${widths.duration || 60}px`);
+    if (vis.rating) cols.push(`${widths.rating || 90}px`);
     if (vis.artist) cols.push(`${widths.artist || 150}px`);
     if (vis.album) cols.push(`${widths.album || 150}px`);
     // Tags is the last column: let it stretch to fill the remaining width (with a
@@ -100,7 +103,7 @@ const {
 
 /**
  * Check if a column is visible
- * @param {string} column - Column name (track, duration, artist, album, tags)
+ * @param {string} column - Column name (track, duration, rating, artist, album, tags)
  * @returns {boolean}
  */
 function isColumnVisible(column) {

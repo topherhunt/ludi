@@ -9,7 +9,8 @@ Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nest
 - **Folder-tree library.** Nest folders as deep as you like, drag and drop to reorder or reparent, sort a folder alphabetically, or flatten it. Right-click a folder to play the whole thing.
 - **Playlists.** Reference-only song lists in the sidebar -- adding a song to a playlist copies the reference, never the file, and never moves it out of your library.
 - **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; the chips are scoped to whatever you're looking at and carry a count, and clicking them stacks up as filters.
-- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, and tags. Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
+- **Star ratings.** A 1-5 star column in the song list. Click a star to rate, click the same star again to clear it, or press `1`-`5` (and `0` to clear) to rate everything you have selected. Ratings are searchable -- `rating>=4`, `rating=none` -- and available as a condition in the advanced-search composer. Settings can import the ratings out of an existing Swinsian library, showing you what it would match before writing anything.
+- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, rating, and tags. Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
 - **Audio analysis.** Ludi listens to every song locally (no uploads, no API keys) with a MusiCNN model running on ONNX Runtime, and stores a 200-number fingerprint of how each track sounds. It runs in the background, backs off while you're playing music, and picks up where it left off if you quit. Everything below is built on it:
   - **Similar songs.** Right-click any song for the tracks that sound most like it.
   - **Auto-tags.** Genre and mood tags applied from the model's own scores, calibrated against your library rather than absolute thresholds. Machine-applied tags carry a gear badge so they're never confused with your own, and re-running the analysis only ever rewrites those.
@@ -20,7 +21,7 @@ Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nest
 - **Drag files back out.** Hold Option while dragging a selection to copy the underlying audio files out to the Desktop or a Finder folder.
 - **Library scan.** Point Ludi at files already sitting in your library folder and it ingests them in place, grouped by artist and album.
 - **Media keys.** The play/pause and next/previous keys on your keyboard work, along with hotkeys for navigation and playback.
-- **Configurable columns** for track number, duration, artist, album, and tags.
+- **Configurable columns** for track number, duration, rating, artist, album, and tags.
 - **Shuffle and loop that take effect immediately** on the next song, rather than waiting until you manually pick a different track.
 
 Deleting a song moves its audio file to the macOS Trash rather than destroying it.
@@ -135,6 +136,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - artist
   - album
   - track_number
+  - rating (int, nullable 1-5 -- null means "never rated", which is a different fact from a deliberate 1 star, so ratings never default to 0)
   - file_path (text not null, unique constraint)
   - duration_seconds (int not null)
   - inserted_at

@@ -1,5 +1,6 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
+- Currently the Loop icon toggles between 3 states: off, on, and repeat-1. If you are NOT on repeat-1, I want you to have to click the toggle button twice within a 5-second span in order to activate it. So clicking the loop button once (after a 5+s cooloff) will never cause you to enter Repeat 1 mode. Otherwise it's too confusing.
 - Fix bug: if I deleted or renamed a song file on disk, then I try to delete it in the Main Library, I can't delete it. JS error: `Error loading audio: 4 Path: ludi-audio:///Users/topher/Music/Ludi Library/Unknown/Unknown/1 hour handpan music - Malte Marten.mp3?_=93`
 - Revisit the README features list. It seems pretty underwhelming when I look through it now, and it feels like it doesn't really do the app justice.
 - Fix bug: forward/back arrow keys (on keyboard) should seek in current song by only 5s regardless of the length of the song. (For very long songs, currently it's skipping 7 mins at a time.)

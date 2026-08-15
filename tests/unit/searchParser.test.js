@@ -171,3 +171,52 @@ describe('evaluateSong -- edge cases', () => {
     expect(evaluateSong(parseQuery('album="Kind of Green"'), makeSong())).toBe(false);
   });
 });
+
+describe('evaluateSong -- rating', () => {
+  const rated = (rating) => makeSong({ rating });
+
+  it('parses and matches an exact rating', () => {
+    expect(parseQuery('rating=4')).toMatchObject({ type: 'COND', field: 'rating', op: '=', value: '4' });
+    expect(evaluateSong(parseQuery('rating=4'), rated(4))).toBe(true);
+    expect(evaluateSong(parseQuery('rating=4'), rated(3))).toBe(false);
+  });
+
+  it('supports threshold operators', () => {
+    expect(parseQuery('rating>=4')).toMatchObject({ field: 'rating', op: '>=', value: '4' });
+    expect(evaluateSong(parseQuery('rating>=4'), rated(5))).toBe(true);
+    expect(evaluateSong(parseQuery('rating>=4'), rated(3))).toBe(false);
+    expect(evaluateSong(parseQuery('rating<=2'), rated(1))).toBe(true);
+    expect(evaluateSong(parseQuery('rating<=2'), rated(3))).toBe(false);
+    expect(evaluateSong(parseQuery('rating>3'), rated(4))).toBe(true);
+    expect(evaluateSong(parseQuery('rating>3'), rated(3))).toBe(false);
+    expect(evaluateSong(parseQuery('rating<3'), rated(2))).toBe(true);
+  });
+
+  it('rating=none finds the unrated, rating=any finds the rated', () => {
+    expect(evaluateSong(parseQuery('rating=none'), rated(null))).toBe(true);
+    expect(evaluateSong(parseQuery('rating=none'), rated(1))).toBe(false);
+    expect(evaluateSong(parseQuery('rating=any'), rated(1))).toBe(true);
+    expect(evaluateSong(parseQuery('rating=any'), rated(null))).toBe(false);
+    expect(evaluateSong(parseQuery('RATING=NONE'), rated(null))).toBe(true);
+  });
+
+  it('never sweeps unrated songs into a threshold comparison', () => {
+    // "rating<3" must not mean "everything I haven't rated yet".
+    for (const query of ['rating<3', 'rating<=5', 'rating>=1', 'rating>0', 'rating=1']) {
+      expect(evaluateSong(parseQuery(query), rated(null))).toBe(false);
+      expect(evaluateSong(parseQuery(query), makeSong())).toBe(false);
+    }
+  });
+
+  it('supports threshold operators on track numbers too', () => {
+    expect(evaluateSong(parseQuery('track>=3'), makeSong())).toBe(true);
+    expect(evaluateSong(parseQuery('track>3'), makeSong())).toBe(false);
+  });
+
+  it('leaves < and > as ordinary text outside numeric fields', () => {
+    expect(parseQuery('<3')).toMatchObject({ type: 'PLAIN', value: '<3' });
+    // Ordering operators are numeric-only, so artist>=x never becomes a comparison.
+    expect(parseQuery('artist>=x').type).not.toBe('COND');
+    expect(evaluateSong(parseQuery('<3'), makeSong({ title: 'I <3 Jazz' }))).toBe(true);
+  });
+});

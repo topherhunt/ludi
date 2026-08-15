@@ -15,6 +15,7 @@ import {
 import { startInternalDrag, endDrag } from '../stores/dragdrop.js';
 import { startNativeFileDrag } from '../utils/dragOut.js';
 import { TagPillList } from './TagPill.jsx';
+import { StarRating } from './StarRating.jsx';
 
 // Row order for SHIFT-range selection. Collapsed folders drop their children
 // from the DOM entirely here, so document order is exactly what the user sees.
@@ -176,6 +177,11 @@ export function SearchSongRow(props) {
         <Show when={columnVisibility().duration}>
           <span class="col-duration">
             {props.song.duration_seconds ? formatTime(props.song.duration_seconds) : ''}
+          </span>
+        </Show>
+        <Show when={columnVisibility().rating}>
+          <span class="col-rating">
+            <StarRating rating={props.song.rating} itemId={props.song.item_id} />
           </span>
         </Show>
         <Show when={columnVisibility().artist}>

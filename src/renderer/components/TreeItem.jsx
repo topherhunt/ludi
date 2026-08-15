@@ -21,6 +21,7 @@ import {
 import { formatTime, pluralize } from '../utils/format.js';
 import { folderContainsSong, getItemById, countSongsInList, getListItems, updateFolderExpanded } from '../utils/api.js';
 import { TagPillList } from './TagPill.jsx';
+import { StarRating } from './StarRating.jsx';
 
 /**
  * Single tree item (folder or song)
@@ -240,6 +241,13 @@ export function TreeItem(props) {
               {props.item.duration_seconds
                 ? formatTime(props.item.duration_seconds)
                 : ''}
+            </span>
+          </Show>
+
+          {/* Rating column */}
+          <Show when={visibility().rating}>
+            <span class="col-rating" data-column="rating">
+              <StarRating rating={props.item.rating} itemId={props.item.id} />
             </span>
           </Show>
 

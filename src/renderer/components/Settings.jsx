@@ -1,7 +1,14 @@
 import { createSignal, createResource, onMount, onCleanup, Show, For } from 'solid-js';
-import { AlertModal } from './Modal.jsx';
+import { AlertModal, ConfirmModal } from './Modal.jsx';
 import { ScanResultsModal } from './ScanResultsModal.jsx';
-import { showAlert, alertModalState, hideAlertModal } from '../stores/modals.js';
+import {
+  showAlert,
+  alertModalState,
+  hideAlertModal,
+  showConfirmModal,
+  confirmModalState,
+  hideConfirmModal,
+} from '../stores/modals.js';
 
 /**
  * Load column settings from localStorage
@@ -11,6 +18,7 @@ function loadColumnSettings() {
     visibility: {
       track: true,
       duration: true,
+      rating: true,
       artist: true,
       album: true,
       tags: true,
@@ -36,6 +44,14 @@ function loadColumnSettings() {
   return defaults;
 }
 
+/** Modal bodies are set via innerHTML, so anything from a file has to be escaped. */
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /**
  * Save column settings to localStorage
  */
@@ -56,6 +72,7 @@ export function Settings() {
   // Column visibility state
   const [colTrack, setColTrack] = createSignal(true);
   const [colDuration, setColDuration] = createSignal(true);
+  const [colRating, setColRating] = createSignal(true);
   const [colArtist, setColArtist] = createSignal(true);
   const [colAlbum, setColAlbum] = createSignal(true);
   const [colTags, setColTags] = createSignal(true);
@@ -70,6 +87,10 @@ export function Settings() {
   const [analysis, setAnalysis] = createSignal({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false });
   const [failures, setFailures] = createSignal([]);
 
+  // Swinsian ratings import. `busy` covers the read+match pass, which happens
+  // before anything is written.
+  const [ratingImport, setRatingImport] = createSignal({ busy: false });
+
   // Load settings on mount
   onMount(async () => {
     // Load app settings
@@ -81,6 +102,7 @@ export function Settings() {
     const columnSettings = loadColumnSettings();
     setColTrack(columnSettings.visibility.track);
     setColDuration(columnSettings.visibility.duration);
+    setColRating(columnSettings.visibility.rating);
     setColArtist(columnSettings.visibility.artist);
     setColAlbum(columnSettings.visibility.album);
     setColTags(columnSettings.visibility.tags);
@@ -166,6 +188,69 @@ export function Settings() {
     );
   };
 
+  // Pick a Swinsian library, show what importing it would change, and only
+  // write once the counts have been approved. The preview pass never writes.
+  const handleChooseRatingsFile = async () => {
+    const dbPath = await window.electronAPI?.chooseSwinsianLibrary?.();
+    if (!dbPath) return;
+
+    setRatingImport({ busy: true });
+    let preview;
+    try {
+      preview = await window.electronAPI.previewSwinsianRatings(dbPath);
+    } catch (e) {
+      setRatingImport({ busy: false });
+      showAlert(
+        '<i class="bi bi-exclamation-triangle" style="margin-right: 8px;"></i>Could Not Read That Library',
+        `<p>${e.message}</p>`
+      );
+      return;
+    }
+    setRatingImport({ busy: false });
+
+    if (preview.songsToRate === 0) {
+      showAlert(
+        '<i class="bi bi-star" style="margin-right: 8px;"></i>Nothing to Import',
+        `<p>Found ${preview.ratedTracks} rated track${preview.ratedTracks === 1 ? '' : 's'} in that library,`
+        + ` but none of them matched a song in your Ludi library.</p>`
+      );
+      return;
+    }
+
+    const scaleNote = preview.scaleMax > 5
+      ? `<p>Its ratings run 0-${preview.scaleMax}, so they'll be converted to 1-5 stars.</p>`
+      : '';
+    const overwriteNote = preview.overwrites > 0
+      ? `<p><strong>${preview.overwrites}</strong> song${preview.overwrites === 1 ? '' : 's'}`
+        + ` already ${preview.overwrites === 1 ? 'has' : 'have'} a different rating here and will be overwritten.</p>`
+      : '';
+    // Titles come from a foreign database and land in innerHTML, so escape them.
+    const shown = preview.unmatched.slice(0, 200);
+    const more = preview.unmatched.length - shown.length;
+    const unmatchedNote = preview.unmatched.length > 0
+      ? `<p>${preview.unmatched.length} rated track${preview.unmatched.length === 1 ? '' : 's'} had no match here:</p>`
+        + `<div class="skipped-files-list"><ul>${shown.map(t => `<li>${escapeHtml(t)}</li>`).join('')}`
+        + (more > 0 ? `<li>...and ${more} more</li>` : '')
+        + `</ul></div>`
+      : '';
+
+    showConfirmModal(
+      'Import Star Ratings',
+      `<p>Found <strong>${preview.ratedTracks}</strong> rated tracks. `
+      + `<strong>${preview.songsToRate}</strong> song${preview.songsToRate === 1 ? '' : 's'} here will be rated`
+      + ` (${preview.matchedByFilename} matched by filename, ${preview.matchedByTitle} by title).</p>`
+      + scaleNote + overwriteNote + unmatchedNote
+      + `<p>Import them?</p>`,
+      async () => {
+        const result = await window.electronAPI.applySwinsianRatings(dbPath);
+        showAlert(
+          '<i class="bi bi-star-fill" style="margin-right: 8px;"></i>Ratings Imported',
+          `<p>Rated <strong>${result.songsRated}</strong> song${result.songsRated === 1 ? '' : 's'}.</p>`
+        );
+      }
+    );
+  };
+
   // Start / stop the audio analysis pass
   const handleAnalyze = async () => {
     setAnalysis(await window.electronAPI.startAnalysis());
@@ -209,6 +294,7 @@ export function Settings() {
     const visibility = {
       track: colTrack(),
       duration: colDuration(),
+      rating: colRating(),
       artist: colArtist(),
       album: colAlbum(),
       tags: colTags(),
@@ -370,6 +456,24 @@ export function Settings() {
         </div>
 
         <div class="setting-item">
+          <label class="setting-label">Import star ratings</label>
+          <div class="setting-description">
+            Read the star ratings out of a Swinsian library and apply them to matching
+            songs here. Songs are matched on filename first, then title. Nothing is
+            written until you've seen what it would change.
+          </div>
+          <div class="button-row">
+            <button
+              class="browse-btn qa-import-ratings"
+              onClick={handleChooseRatingsFile}
+              disabled={ratingImport().busy}
+            >
+              {ratingImport().busy ? 'Reading...' : 'Import from Swinsian...'}
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-item">
           <label class="setting-label">Visible columns</label>
           <div class="setting-description">
             Choose which columns to display in the playlist view
@@ -392,6 +496,15 @@ export function Settings() {
                 onChange={(e) => setColDuration(e.target.checked)}
               />
               {' Time'}
+            </label>
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                id="colRating"
+                checked={colRating()}
+                onChange={(e) => setColRating(e.target.checked)}
+              />
+              {' Rating'}
             </label>
             <label class="checkbox-label">
               <input
@@ -449,6 +562,20 @@ export function Settings() {
           message={alertModalState().message}
           dialogClass={alertModalState().dialogClass}
           onClose={hideAlertModal}
+        />
+      </Show>
+
+      {/* Confirm modal host (ratings import preview) */}
+      <Show when={confirmModalState().isOpen}>
+        <ConfirmModal
+          open={true}
+          title={confirmModalState().title}
+          message={confirmModalState().message}
+          onResponse={(confirmed) => {
+            const onConfirm = confirmModalState().onConfirm;
+            hideConfirmModal();
+            if (confirmed) onConfirm?.();
+          }}
         />
       </Show>
     </div>

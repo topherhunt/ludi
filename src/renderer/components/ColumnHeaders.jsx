@@ -76,6 +76,13 @@ export function ColumnHeaders() {
         </div>
       </Show>
 
+      <Show when={visibility().rating}>
+        <div class="col-header col-rating" data-column="rating">
+          Rating
+          <span class="resize-handle" onMouseDown={(e) => startResize('rating', e)} />
+        </div>
+      </Show>
+
       <Show when={visibility().artist}>
         <div class="col-header col-artist" data-column="artist">
           Artist

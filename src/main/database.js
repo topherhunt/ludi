@@ -295,6 +295,15 @@ function createTables() {
     db.exec(`ALTER TABLE songs ADD COLUMN track_number INTEGER`);
   }
 
+  // Migration - the 1-5 star rating.
+  //
+  // Deliberately nullable rather than defaulting to 0: "I have never rated this"
+  // and "I rated this one star, I dislike it" are different facts, and the whole
+  // point of the column is telling them apart when filtering.
+  if (!songColumns.some(col => col.name === 'rating')) {
+    db.exec(`ALTER TABLE songs ADD COLUMN rating INTEGER`);
+  }
+
   // Drop the unique index if it was previously created (we want to allow duplicates for playlists)
   db.exec(`DROP INDEX IF EXISTS idx_list_items_unique_song_in_list`);
 }
@@ -325,6 +334,7 @@ function getListItems(listId) {
       s.album,
       s.duration_seconds,
       s.track_number,
+      s.rating,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -349,6 +359,7 @@ function getAllListItems() {
       s.album,
       s.duration_seconds,
       s.track_number,
+      s.rating,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -383,6 +394,7 @@ function getSongsWithPlacements(songIds) {
       s.album,
       s.duration_seconds,
       s.track_number,
+      s.rating,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -410,7 +422,8 @@ function getItem(itemId) {
       s.artist,
       s.album,
       s.duration_seconds,
-      s.track_number
+      s.track_number,
+      s.rating
     FROM list_items li
     LEFT JOIN lists l ON li.list_id = l.id
     LEFT JOIN songs s ON li.song_id = s.id
@@ -846,6 +859,30 @@ function updateSong(songId, fields) {
   const setClause = keys.map(k => `${k} = ?`).join(', ');
   const values = keys.map(k => fields[k]);
   db.prepare(`UPDATE songs SET ${setClause}, updated_at = ? WHERE id = ?`).run(...values, now, songId);
+}
+
+/**
+ * Set (or clear) the 1-5 star rating on a set of songs.
+ *
+ * `rating` is null to clear, otherwise an integer 1-5. Anything else throws
+ * rather than being coerced: a rating of 0 or 7 arriving here means a caller
+ * bug, and silently writing it would corrupt the one column in the library that
+ * holds hand-entered judgement.
+ */
+function setSongRating(songIds, rating) {
+  if (rating !== null && !(Number.isInteger(rating) && rating >= 1 && rating <= 5)) {
+    throw new Error(`Invalid rating: ${rating} (expected null or an integer 1-5)`);
+  }
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    const stmt = db.prepare('UPDATE songs SET rating = ?, updated_at = ? WHERE id = ?');
+    for (const songId of songIds) stmt.run(rating, now, songId);
+  })();
+}
+
+/** Every song's id, rating and library-relative path -- the matching table an external ratings import runs against. */
+function getSongsForRatingMatch() {
+  return db.prepare('SELECT id, title, artist, file_path, rating FROM songs').all();
 }
 
 function getSettings() {
@@ -1542,6 +1579,8 @@ module.exports = {
   addTagToSongs,
   removeTagFromSongs,
   updateSong,
+  setSongRating,
+  getSongsForRatingMatch,
   getSettings,
   updateSetting,
   getDbPath,

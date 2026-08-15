@@ -9,6 +9,9 @@
  *   any=value      -- title/album/artist contains value
  *   track=7        -- track_number equals 7 (integer comparison)
  *   tag=name       -- song has a tag named exactly `name` (case-insensitive)
+ *   rating=4       -- star rating is exactly 4
+ *   rating>=4      -- star rating is 4 or more (also > < <= on rating and track)
+ *   rating=none    -- song has never been rated (`rating=any` for the converse)
  *   A AND B        -- both must match
  *   A OR B         -- either must match
  *   NOT A          -- A must not match (also `-A` shorthand, e.g. -tag=fav)
@@ -16,7 +19,30 @@
  *   "quoted value" -- multi-word value (use in field or plain text)
  */
 
-const FIELDS = ['title', 'artist', 'album', 'any', 'track', 'tag'];
+const FIELDS = ['title', 'artist', 'album', 'any', 'track', 'tag', 'rating'];
+
+// Fields that hold a number and so accept the ordering operators. Restricting
+// them keeps `artist>=x` from parsing into something with no sensible meaning.
+const NUMERIC_FIELDS = ['track', 'rating'];
+
+const FIELD_OP_RE = new RegExp(`^(${FIELDS.join('|')})(>=|<=|>|<|=)`, 'i');
+
+/**
+ * At position `i`, match a field name immediately followed by a comparison
+ * operator (`artist=Davis`, `rating>=4`). Returns {field, op, length} or null.
+ *
+ * Matching the operator here rather than teaching readUnquoted to stop on `<`
+ * and `>` means those characters stay ordinary text everywhere else, so a plain
+ * search for "<3" still works.
+ */
+function matchFieldOperator(input, i) {
+  const m = FIELD_OP_RE.exec(input.slice(i));
+  if (!m) return null;
+  const field = m[1].toLowerCase();
+  const op = m[2];
+  if (op !== '=' && !NUMERIC_FIELDS.includes(field)) return null;
+  return { field, op, length: m[0].length };
+}
 
 function tokenize(input) {
   const tokens = [];
@@ -59,6 +85,17 @@ function tokenize(input) {
       continue;
     }
 
+    // field<op>value, checked before the plain word read so operator characters
+    // never end up inside a search term.
+    const cond = matchFieldOperator(input, i);
+    if (cond) {
+      i += cond.length;
+      skipWS();
+      const value = (i < input.length && input[i] === '"') ? readQuoted() : readUnquoted();
+      tokens.push({ type: 'FIELD_COND', field: cond.field, op: cond.op, value });
+      continue;
+    }
+
     const word = readUnquoted();
     if (!word) { i++; continue; }
 
@@ -66,16 +103,6 @@ function tokenize(input) {
     if (upper === 'AND') { tokens.push({ type: 'AND' }); continue; }
     if (upper === 'OR')  { tokens.push({ type: 'OR' });  continue; }
     if (upper === 'NOT') { tokens.push({ type: 'NOT' }); continue; }
-
-    // Check for field=value syntax
-    if (FIELDS.includes(upper.toLowerCase()) && i < input.length && input[i] === '=') {
-      const field = word.toLowerCase();
-      i++; // skip '='
-      skipWS();
-      const value = (i < input.length && input[i] === '"') ? readQuoted() : readUnquoted();
-      tokens.push({ type: 'FIELD_COND', field, value });
-      continue;
-    }
 
     tokens.push({ type: 'PLAIN', value: word });
   }
@@ -142,7 +169,7 @@ function parsePrimary(tokens, pos) {
   }
 
   if (tok.type === 'FIELD_COND') {
-    return [{ type: 'COND', field: tok.field, value: tok.value }, pos + 1];
+    return [{ type: 'COND', field: tok.field, op: tok.op, value: tok.value }, pos + 1];
   }
 
   if (tok.type === 'PLAIN') {
@@ -182,15 +209,36 @@ const contains = (haystack, needle) =>
   (haystack || '').toLowerCase().includes(needle.toLowerCase());
 
 /**
+ * Ordering comparison against a numeric field.
+ *
+ * An unset field matches nothing, whatever the operator: `rating<3` sweeping in
+ * every song you have never rated would be a nasty surprise, and it is the same
+ * surprise in the other direction as `rating>=4` doing it. Songs with no rating
+ * are reached deliberately with `rating=none`.
+ */
+function compareNumeric(actual, op, rawValue) {
+  const n = parseInt(rawValue, 10);
+  if (isNaN(n)) return false;
+  if (actual === null || actual === undefined) return false;
+  switch (op) {
+    case '>':  return actual > n;
+    case '<':  return actual < n;
+    case '>=': return actual >= n;
+    case '<=': return actual <= n;
+    default:   return actual === n;
+  }
+}
+
+/**
  * Evaluate a parsed AST against a song's data.
  * @param {object|null} ast
- * @param {{ title: string, artist: string, album: string, track_number: number|null, ancestorFolderNames: string[] }} songData
+ * @param {{ title: string, artist: string, album: string, track_number: number|null, rating: number|null, ancestorFolderNames: string[], tags: string[] }} songData
  * @returns {boolean}
  */
 export function evaluateSong(ast, songData) {
   if (!ast) return false;
 
-  const { title, artist, album, track_number, ancestorFolderNames, tags } = songData;
+  const { title, artist, album, track_number, rating, ancestorFolderNames, tags } = songData;
 
   switch (ast.type) {
     case 'OR':
@@ -214,16 +262,22 @@ export function evaluateSong(ast, songData) {
     }
 
     case 'COND': {
-      const { field, value } = ast;
+      const { field, value, op = '=' } = ast;
       switch (field) {
         case 'title':  return contains(title, value);
         case 'artist': return contains(artist, value);
         case 'album':  return contains(album, value);
         case 'any':
           return contains(title, value) || contains(artist, value) || contains(album, value);
-        case 'track': {
-          const n = parseInt(value, 10);
-          return !isNaN(n) && track_number === n;
+        case 'track':
+          return compareNumeric(track_number, op, value);
+        case 'rating': {
+          // `none`/`any` are the only way to reach the unrated, since the
+          // ordering operators deliberately skip them.
+          const isUnrated = rating === null || rating === undefined;
+          if (value.toLowerCase() === 'none') return isUnrated;
+          if (value.toLowerCase() === 'any')  return !isUnrated;
+          return compareNumeric(rating, op, value);
         }
         case 'tag':
           // Exact (case-insensitive) tag-name match. `tags` is an array of the

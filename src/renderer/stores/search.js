@@ -129,6 +129,7 @@ async function runSearch(queryString) {
       artist: item.artist || '',
       album: item.album || '',
       track_number: item.track_number,
+      rating: item.rating,
       ancestorFolderNames: ancestorFolders.map(f => f.title),
       tags: (item.tags || []).map(t => t.name),
     };
@@ -141,6 +142,7 @@ async function runSearch(queryString) {
         artist: item.artist || '',
         album: item.album || '',
         track_number: item.track_number,
+        rating: item.rating,
         duration_seconds: item.duration_seconds,
         parent_list_id: item.parent_list_id,
         position: item.position,

@@ -399,7 +399,7 @@ body.resizing-sidebar {
 /* Column Layout - defaults before JS applies settings */
 .column-headers {
   display: grid;
-  grid-template-columns: 300px 40px 50px 150px 150px 100px;
+  grid-template-columns: 300px 40px 50px 90px 150px 150px 100px;
   min-width: fit-content;
   padding: 4px 8px;
   background-color: #252526;
@@ -448,7 +448,7 @@ body.resizing-sidebar {
 /* Grid layout for tree items */
 .tree-item-content {
   display: grid;
-  grid-template-columns: 300px 40px 50px 150px 150px 100px;
+  grid-template-columns: 300px 40px 50px 90px 150px 150px 100px;
   align-items: center;
   padding: 4px 8px;
   border-radius: 4px;
@@ -489,6 +489,39 @@ body.resizing-sidebar {
   color: #999;
   font-size: 13px;
   padding: 0 8px 0 0.2em;
+}
+
+/* Star rating column */
+.tree-item-content > .col-rating {
+  padding: 0 8px 0 0.2em;
+  overflow: visible;
+}
+
+.star-rating {
+  display: inline-flex;
+  gap: 1px;
+  line-height: 1;
+}
+
+.star-rating .star {
+  color: #4a4a4f;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 1px;
+}
+
+.star-rating .bi-star-fill {
+  color: #e0b040;
+}
+
+/* While hovering the widget, the stars that would be filled by clicking are
+   shown in a lighter gold so a preview never reads as a committed rating. */
+.star-rating .star-preview.bi-star-fill {
+  color: #f5d27a;
+}
+
+.star-rating .star:hover {
+  transform: scale(1.15);
 }
 
 /* Hidden columns */

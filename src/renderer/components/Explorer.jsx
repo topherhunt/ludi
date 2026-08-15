@@ -20,6 +20,7 @@ import {
 import { selectedItems, clearSelection } from '../stores/navigation.js';
 import { isSearching, runSearch } from '../stores/search.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
+import { rateFromRow } from '../stores/ratings.js';
 import { SearchResultsView } from './SearchResultsView.jsx';
 import { SimilarSongsView } from './SimilarSongsView.jsx';
 import { ClusterSongsView } from './ClusterSongsView.jsx';
@@ -186,6 +187,12 @@ export function Explorer(props) {
     if (seeds.length === 0) return;
 
     await showSimilarTo(seeds);
+  };
+
+  // Rate from the context menu. Same entry point the star column clicks through,
+  // so both widen to the selection under the same rule.
+  const handleRate = async (itemId, rating) => {
+    await rateFromRow(itemId, rating);
   };
 
   // Rename a folder
@@ -420,6 +427,7 @@ export function Explorer(props) {
           onRename={handleRename}
           onBatchRename={handleBatchRename}
           onFindSimilar={handleFindSimilar}
+          onRate={handleRate}
           onShowInFinder={handleShowInFinder}
           onCopyPath={handleCopyPath}
           onDelete={handleDelete}

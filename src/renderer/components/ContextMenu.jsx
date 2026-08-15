@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { selectedItems, currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 
 /**
@@ -211,6 +211,41 @@ export function ContextMenu(props) {
           }}
         >
           {isSeedingFromSelection() ? `Find songs like these ${selectedItems().size}` : 'Find similar songs'}
+        </div>
+
+        <div class="context-menu-separator" />
+
+        {/* Rate... submenu. Acts on the selection, same as the star column. */}
+        <div class="context-menu-item has-submenu qa-rate-menu">
+          {isSeedingFromSelection() ? `Rate these ${selectedItems().size}...` : 'Rate...'}
+          <div class="context-submenu">
+            <For each={[5, 4, 3, 2, 1]}>
+              {(stars) => (
+                <div
+                  class="context-menu-item qa-rate-option"
+                  data-stars={stars}
+                  onClick={() => {
+                    const itemId = props.item.id;
+                    props.onClose?.();
+                    props.onRate?.(itemId, stars);
+                  }}
+                >
+                  {'★'.repeat(stars)}
+                </div>
+              )}
+            </For>
+            <div class="context-menu-separator" />
+            <div
+              class="context-menu-item qa-rate-clear"
+              onClick={() => {
+                const itemId = props.item.id;
+                props.onClose?.();
+                props.onRate?.(itemId, null);
+              }}
+            >
+              Clear rating
+            </div>
+          </div>
         </div>
 
         <div class="context-menu-separator" />

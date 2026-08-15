@@ -48,6 +48,7 @@ function getAPI() {
     addTagToSongs: async () => {},
     removeTagFromSongs: async () => {},
     updateSong: async () => {},
+    setSongRating: async () => {},
     importFiles: async () => ({ imported: [], unsupported: [], errors: [], targetIsPlaylist: false, itemIds: [] }),
     getSettings: async () => ({ library_path: '', database_path: '' }),
     saveSettings: async () => true,
@@ -338,6 +339,11 @@ export async function removeTagFromSongs(tagId, songIds) {
 /** Update editable song metadata (title/artist/album/track_number). DB only. */
 export async function updateSong(songId, fields) {
   return getAPI().updateSong({ songId, fields });
+}
+
+/** Set the star rating (1-5, or null to clear) on the given songs. */
+export async function setSongRating(songIds, rating) {
+  return getAPI().setSongRating({ songIds, rating });
 }
 
 // File operations

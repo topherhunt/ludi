@@ -6,6 +6,7 @@ export { Sidebar } from './Sidebar.jsx';
 export { ExplorerHeader } from './ExplorerHeader.jsx';
 export { ColumnHeaders } from './ColumnHeaders.jsx';
 export { ContextMenu } from './ContextMenu.jsx';
+export { StarRating } from './StarRating.jsx';
 
 // Tree components
 export { TreeItem } from './TreeItem.jsx';

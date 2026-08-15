@@ -10,6 +10,7 @@ const clusters = require('./clusters');
 const musicMap = require('./music-map');
 const { recalculateAutoTags } = require('./analysis/auto-tagger');
 const { BUNDLE_SCHEME_PRIVILEGES, registerBundleProtocol } = require('./bundle-protocol');
+const swinsianImport = require('./swinsian-import');
 
 let mainWindow;
 let settingsWindow;
@@ -501,6 +502,44 @@ ipcMain.handle('db:removeTagFromSongs', (event, { tagId, songIds }) => {
 
 ipcMain.handle('db:updateSong', (event, { songId, fields }) => {
   return db.updateSong(songId, fields);
+});
+
+ipcMain.handle('db:setSongRating', (event, { songIds, rating }) => {
+  return db.setSongRating(songIds, rating);
+});
+
+// ---- Star-rating import from a Swinsian library --------------------------
+
+ipcMain.handle('ratings:chooseSwinsianLibrary', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    title: 'Select Swinsian Library',
+    message: 'Choose the Swinsian library file to read star ratings from.',
+    filters: [{ name: 'Swinsian library', extensions: ['sqlite', 'db', 'swinsianlibrary'] }],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+// Read-only: reports what the import would change so the user approves counts
+// rather than a black box.
+ipcMain.handle('ratings:previewSwinsian', (event, swinsianDbPath) => {
+  return swinsianImport.previewImport(swinsianDbPath, db.getSongsForRatingMatch());
+});
+
+ipcMain.handle('ratings:applySwinsian', (event, swinsianDbPath) => {
+  const { writes, songsRated } = swinsianImport.resolveImport(swinsianDbPath, db.getSongsForRatingMatch());
+  for (const { rating, songIds } of writes) {
+    db.setSongRating(songIds, rating);
+  }
+
+  // The import runs from the Settings window, so the main window has to be told
+  // its stars just changed.
+  if (songsRated > 0 && mainWindow) {
+    mainWindow.webContents.send('library-changed');
+  }
+  return { songsRated };
 });
 
 ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {

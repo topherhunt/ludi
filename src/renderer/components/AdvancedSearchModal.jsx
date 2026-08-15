@@ -1,4 +1,4 @@
-import { For, Show, createContext, useContext } from 'solid-js';
+import { For, Match, Show, Switch, createContext, useContext } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { tags } from '../stores/tags.js';
 
@@ -9,12 +9,35 @@ const FIELD_OPTIONS = [
   { value: 'any', label: 'Any field' },
   { value: 'track', label: 'Track #' },
   { value: 'tag', label: 'Tag' },
+  { value: 'rating', label: 'Rating' },
 ];
+
+// Rating conditions get an operator of their own, because "songs I like" is a
+// threshold ("4 or more"), not an equality.
+const RATING_OPERATORS = [
+  { value: '>=', label: 'is at least' },
+  { value: '=',  label: 'is exactly' },
+  { value: '<=', label: 'is at most' },
+];
+
+const RATING_VALUES = [
+  { value: '5', label: '★★★★★' },
+  { value: '4', label: '★★★★' },
+  { value: '3', label: '★★★' },
+  { value: '2', label: '★★' },
+  { value: '1', label: '★' },
+  { value: 'any', label: 'Rated (any)' },
+  { value: 'none', label: 'Unrated' },
+];
+
+// `none`/`any` are membership tests, not thresholds -- "at least unrated" is
+// meaningless, so those two values force plain equality.
+const isRatingMembership = (value) => value === 'none' || value === 'any';
 
 let nextId = 0;
 const uid = () => String(++nextId);
 
-const makeCondition = () => ({ id: uid(), type: 'condition', field: 'title', negate: false });
+const makeCondition = () => ({ id: uid(), type: 'condition', field: 'title', negate: false, op: '>=' });
 const makeGroup = (mode = 'any') => ({ id: uid(), type: 'group', mode, children: [makeCondition()] });
 
 // Recursively find a node by id and call fn(node)
@@ -45,6 +68,10 @@ function buildQuery(node, inputRefs, isRoot = false) {
   if (node.type === 'condition') {
     const val = (inputRefs.get(node.id)?.value || '').trim();
     if (!val) return '';
+    if (node.field === 'rating') {
+      const op = isRatingMembership(val) ? '=' : node.op;
+      return `rating${op}${val}`;
+    }
     const quoted = val.includes(' ') ? `"${val}"` : val;
     const base = `${node.field}=${quoted}`;
     return node.negate ? `NOT ${base}` : base;
@@ -63,7 +90,7 @@ function buildQuery(node, inputRefs, isRoot = false) {
 const SearchCtx = createContext();
 
 function ConditionRow({ node, canRemove }) {
-  const { inputRefs, onFieldChange, onNegateChange, onRemove } = useContext(SearchCtx);
+  const { inputRefs, onFieldChange, onNegateChange, onOpChange, onRemove } = useContext(SearchCtx);
 
   return (
     <div class="advsearch-condition-row">
@@ -79,7 +106,7 @@ function ConditionRow({ node, canRemove }) {
         </For>
       </select>
 
-      <Show when={node.field === 'tag'} fallback={
+      <Switch fallback={
         <input
           ref={(el) => { if (el) inputRefs.set(node.id, el); }}
           type="text"
@@ -89,23 +116,46 @@ function ConditionRow({ node, canRemove }) {
         />
       }>
         {/* Tag condition: is / is not toggle + a dropdown of all defined tags */}
-        <select
-          class="advsearch-op-select"
-          value={node.negate ? 'not' : 'is'}
-          onChange={(e) => onNegateChange(node.id, e.target.value === 'not')}
-        >
-          <option value="is">is</option>
-          <option value="not">is not</option>
-        </select>
-        <select
-          ref={(el) => { if (el) inputRefs.set(node.id, el); }}
-          class="advsearch-value-input advsearch-tag-select"
-        >
-          <For each={tags()}>
-            {(tag) => <option value={tag.name}>{tag.name}</option>}
-          </For>
-        </select>
-      </Show>
+        <Match when={node.field === 'tag'}>
+          <select
+            class="advsearch-op-select"
+            value={node.negate ? 'not' : 'is'}
+            onChange={(e) => onNegateChange(node.id, e.target.value === 'not')}
+          >
+            <option value="is">is</option>
+            <option value="not">is not</option>
+          </select>
+          <select
+            ref={(el) => { if (el) inputRefs.set(node.id, el); }}
+            class="advsearch-value-input advsearch-tag-select"
+          >
+            <For each={tags()}>
+              {(tag) => <option value={tag.name}>{tag.name}</option>}
+            </For>
+          </select>
+        </Match>
+
+        {/* Rating condition: threshold operator + a star value */}
+        <Match when={node.field === 'rating'}>
+          <select
+            class="advsearch-op-select qa-rating-op"
+            value={node.op}
+            onChange={(e) => onOpChange(node.id, e.target.value)}
+          >
+            <For each={RATING_OPERATORS}>
+              {(op) => <option value={op.value}>{op.label}</option>}
+            </For>
+          </select>
+          <select
+            ref={(el) => { if (el) inputRefs.set(node.id, el); }}
+            class="advsearch-value-input qa-rating-value"
+          >
+            <For each={RATING_VALUES}>
+              {(v) => <option value={v.value}>{v.label}</option>}
+            </For>
+          </select>
+        </Match>
+      </Switch>
 
       <button
         class="advsearch-remove-btn"
@@ -179,6 +229,7 @@ export function AdvancedSearchModal(props) {
   const onModeChange = (id, mode) => mutate(id, node => { node.mode = mode; });
   const onFieldChange = (id, field) => mutate(id, node => { node.field = field; });
   const onNegateChange = (id, negate) => mutate(id, node => { node.negate = negate; });
+  const onOpChange = (id, op) => mutate(id, node => { node.op = op; });
   const onAddCondition = (parentId) => mutate(parentId, node => { node.children.push(makeCondition()); });
   const onAddGroup = (parentId) => mutate(parentId, node => { node.children.push(makeGroup('any')); });
 
@@ -208,7 +259,7 @@ export function AdvancedSearchModal(props) {
   };
 
   return (
-    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onNegateChange, onAddCondition, onAddGroup, onRemove }}>
+    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onNegateChange, onOpChange, onAddCondition, onAddGroup, onRemove }}>
       <Show when={props.open}>
         <div
           class="modal-overlay visible"

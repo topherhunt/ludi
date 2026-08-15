@@ -9,6 +9,7 @@ import {
 } from '../stores/navigation.js';
 import { isAnyModalOpen, closeAllModals } from '../stores/modals.js';
 import { getItemById } from '../utils/api.js';
+import { rateSelection } from '../stores/ratings.js';
 
 /**
  * Keyboard navigation hook for the explorer tree
@@ -77,6 +78,17 @@ export function useKeyboard(options) {
       e.preventDefault();
       const visibleItems = getVisibleItemIds?.() || [];
       selectAll(visibleItems);
+      return;
+    }
+
+    // 1-5 rate the selection, 0 clears it. No modifier: rating is the most
+    // frequent thing you do while working through a library, so it gets the
+    // cheapest keys. Guarded on a selection existing so a stray digit on an
+    // empty explorer does nothing.
+    if (/^[0-5]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (selectedItems().size === 0) return;
+      await rateSelection(e.key === '0' ? null : parseInt(e.key, 10));
       return;
     }
 
