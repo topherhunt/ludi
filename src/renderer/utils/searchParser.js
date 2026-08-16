@@ -12,6 +12,8 @@
  *   rating=4       -- star rating is exactly 4
  *   rating>=4      -- star rating is 4 or more (also > < <= on rating and track)
  *   rating=none    -- song has never been rated (`rating=any` for the converse)
+ *   plays>=5       -- played at least 5 times (`plays=0` for never played)
+ *   lastplayed>=2026-01-01 -- last played on or after that day (also > < <= =)
  *   A AND B        -- both must match
  *   A OR B         -- either must match
  *   NOT A          -- A must not match (also `-A` shorthand, e.g. -tag=fav)
@@ -19,11 +21,12 @@
  *   "quoted value" -- multi-word value (use in field or plain text)
  */
 
-const FIELDS = ['title', 'artist', 'album', 'any', 'track', 'tag', 'rating'];
+const FIELDS = ['title', 'artist', 'album', 'any', 'track', 'tag', 'rating', 'plays', 'lastplayed'];
 
-// Fields that hold a number and so accept the ordering operators. Restricting
-// them keeps `artist>=x` from parsing into something with no sensible meaning.
-const NUMERIC_FIELDS = ['track', 'rating'];
+// Fields that hold a number or a date and so accept the ordering operators.
+// Restricting them keeps `artist>=x` from parsing into something with no
+// sensible meaning.
+const ORDERED_FIELDS = ['track', 'rating', 'plays', 'lastplayed'];
 
 const FIELD_OP_RE = new RegExp(`^(${FIELDS.join('|')})(>=|<=|>|<|=)`, 'i');
 
@@ -40,7 +43,7 @@ function matchFieldOperator(input, i) {
   if (!m) return null;
   const field = m[1].toLowerCase();
   const op = m[2];
-  if (op !== '=' && !NUMERIC_FIELDS.includes(field)) return null;
+  if (op !== '=' && !ORDERED_FIELDS.includes(field)) return null;
   return { field, op, length: m[0].length };
 }
 
@@ -230,15 +233,40 @@ function compareNumeric(actual, op, rawValue) {
 }
 
 /**
+ * Ordering comparison against a stored ISO timestamp, by calendar day.
+ *
+ * Both sides are cut to `YYYY-MM-DD` before comparing, so "last played on or
+ * before Jan 1" includes the song played at 3pm that day rather than only one
+ * played exactly at midnight.
+ *
+ * A song that has never been played matches nothing, for the same reason an
+ * unrated song doesn't answer `rating<3`. Reach those with `plays=0`.
+ */
+function compareDate(actual, op, rawValue) {
+  const day = rawValue.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  if (!actual) return false;
+  const actualDay = actual.slice(0, 10);
+  switch (op) {
+    case '>':  return actualDay > day;
+    case '<':  return actualDay < day;
+    case '>=': return actualDay >= day;
+    case '<=': return actualDay <= day;
+    default:   return actualDay === day;
+  }
+}
+
+/**
  * Evaluate a parsed AST against a song's data.
  * @param {object|null} ast
- * @param {{ title: string, artist: string, album: string, track_number: number|null, rating: number|null, ancestorFolderNames: string[], tags: string[] }} songData
+ * @param {{ title: string, artist: string, album: string, track_number: number|null, rating: number|null, play_count: number, last_played_at: string|null, ancestorFolderNames: string[], tags: string[] }} songData
  * @returns {boolean}
  */
 export function evaluateSong(ast, songData) {
   if (!ast) return false;
 
-  const { title, artist, album, track_number, rating, ancestorFolderNames, tags } = songData;
+  const { title, artist, album, track_number, rating, play_count, last_played_at,
+          ancestorFolderNames, tags } = songData;
 
   switch (ast.type) {
     case 'OR':
@@ -279,6 +307,10 @@ export function evaluateSong(ast, songData) {
           if (value.toLowerCase() === 'any')  return !isUnrated;
           return compareNumeric(rating, op, value);
         }
+        case 'plays':
+          return compareNumeric(play_count, op, value);
+        case 'lastplayed':
+          return compareDate(last_played_at, op, value);
         case 'tag':
           // Exact (case-insensitive) tag-name match. `tags` is an array of the
           // song's tag names.

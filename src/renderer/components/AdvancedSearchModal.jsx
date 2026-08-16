@@ -10,15 +10,34 @@ const FIELD_OPTIONS = [
   { value: 'track', label: 'Track #' },
   { value: 'tag', label: 'Tag' },
   { value: 'rating', label: 'Rating' },
+  { value: 'plays', label: 'Play count' },
+  { value: 'lastplayed', label: 'Last played' },
 ];
 
-// Rating conditions get an operator of their own, because "songs I like" is a
+// Countable fields compare rather than match, because "songs I like" is a
 // threshold ("4 or more"), not an equality.
-const RATING_OPERATORS = [
+const NUMBER_OPERATORS = [
   { value: '>=', label: 'is at least' },
   { value: '=',  label: 'is exactly' },
   { value: '<=', label: 'is at most' },
 ];
+
+// The same three operators read as nonsense against a date ("last played is at
+// least June 1"), so the date field gets its own labels for them.
+const DATE_OPERATORS = [
+  { value: '>=', label: 'is on or after' },
+  { value: '=',  label: 'is on' },
+  { value: '<=', label: 'is on or before' },
+];
+
+const COMPARED_FIELDS = ['track', 'rating', 'plays', 'lastplayed'];
+const operatorsFor = (field) => (field === 'lastplayed' ? DATE_OPERATORS : NUMBER_OPERATORS);
+
+const numericPlaceholder = (field) => {
+  if (field === 'track') return 'e.g. 7';
+  if (field === 'plays') return 'e.g. 5';
+  return 'Enter value...';
+};
 
 const RATING_VALUES = [
   { value: '5', label: '★★★★★' },
@@ -31,8 +50,13 @@ const RATING_VALUES = [
 ];
 
 // `none`/`any` are membership tests, not thresholds -- "at least unrated" is
-// meaningless, so those two values force plain equality.
+// meaningless, so those two values force plain equality and hide the operator
+// rather than leaving a stale "is at least" sitting next to "Unrated".
 const isRatingMembership = (value) => value === 'none' || value === 'any';
+
+const hasOperator = (node) =>
+  COMPARED_FIELDS.includes(node.field) &&
+  !(node.field === 'rating' && isRatingMembership(node.value));
 
 let nextId = 0;
 const uid = () => String(++nextId);
@@ -68,9 +92,9 @@ function buildQuery(node, inputRefs, isRoot = false) {
   if (node.type === 'condition') {
     const val = (inputRefs.get(node.id)?.value || '').trim();
     if (!val) return '';
-    if (node.field === 'rating') {
-      const op = isRatingMembership(val) ? '=' : node.op;
-      return `rating${op}${val}`;
+    if (COMPARED_FIELDS.includes(node.field)) {
+      const op = node.field === 'rating' && isRatingMembership(val) ? '=' : node.op;
+      return `${node.field}${op}${val}`;
     }
     const quoted = val.includes(' ') ? `"${val}"` : val;
     const base = `${node.field}=${quoted}`;
@@ -90,7 +114,7 @@ function buildQuery(node, inputRefs, isRoot = false) {
 const SearchCtx = createContext();
 
 function ConditionRow({ node, canRemove }) {
-  const { inputRefs, onFieldChange, onNegateChange, onOpChange, onRemove } = useContext(SearchCtx);
+  const { inputRefs, onFieldChange, onNegateChange, onOpChange, onValueChange, onRemove } = useContext(SearchCtx);
 
   return (
     <div class="advsearch-condition-row">
@@ -106,19 +130,33 @@ function ConditionRow({ node, canRemove }) {
         </For>
       </select>
 
+      {/* Every compared field shares one operator dropdown -- only the labels
+          differ (see operatorsFor), so a date never offers "is at least". */}
+      <Show when={hasOperator(node)}>
+        <select
+          class="advsearch-op-select qa-compare-op"
+          value={node.op}
+          onChange={(e) => onOpChange(node.id, e.target.value)}
+        >
+          <For each={operatorsFor(node.field)}>
+            {(op) => <option value={op.value}>{op.label}</option>}
+          </For>
+        </select>
+      </Show>
+
       <Switch fallback={
         <input
           ref={(el) => { if (el) inputRefs.set(node.id, el); }}
           type="text"
           class="advsearch-value-input"
           spellcheck={false}
-          placeholder={node.field === 'track' ? 'e.g. 7' : 'Enter value...'}
+          placeholder={numericPlaceholder(node.field)}
         />
       }>
         {/* Tag condition: is / is not toggle + a dropdown of all defined tags */}
         <Match when={node.field === 'tag'}>
           <select
-            class="advsearch-op-select"
+            class="advsearch-op-select advsearch-op-narrow"
             value={node.negate ? 'not' : 'is'}
             onChange={(e) => onNegateChange(node.id, e.target.value === 'not')}
           >
@@ -135,25 +173,26 @@ function ConditionRow({ node, canRemove }) {
           </select>
         </Match>
 
-        {/* Rating condition: threshold operator + a star value */}
+        {/* Rating condition: a star value, or one of the two membership tests */}
         <Match when={node.field === 'rating'}>
-          <select
-            class="advsearch-op-select qa-rating-op"
-            value={node.op}
-            onChange={(e) => onOpChange(node.id, e.target.value)}
-          >
-            <For each={RATING_OPERATORS}>
-              {(op) => <option value={op.value}>{op.label}</option>}
-            </For>
-          </select>
           <select
             ref={(el) => { if (el) inputRefs.set(node.id, el); }}
             class="advsearch-value-input qa-rating-value"
+            onChange={(e) => onValueChange(node.id, e.target.value)}
           >
             <For each={RATING_VALUES}>
               {(v) => <option value={v.value}>{v.label}</option>}
             </For>
           </select>
+        </Match>
+
+        {/* Last played: a real date picker, so the query never has to be typed */}
+        <Match when={node.field === 'lastplayed'}>
+          <input
+            ref={(el) => { if (el) inputRefs.set(node.id, el); }}
+            type="date"
+            class="advsearch-value-input qa-date-value"
+          />
         </Match>
       </Switch>
 
@@ -227,9 +266,15 @@ export function AdvancedSearchModal(props) {
   const mutateParent = (id, fn) => setRoot(produce(draft => findParentAndMutate(draft, id, fn)));
 
   const onModeChange = (id, mode) => mutate(id, node => { node.mode = mode; });
-  const onFieldChange = (id, field) => mutate(id, node => { node.field = field; });
+  // Switching fields swaps in a different value control, so the recorded value
+  // is stale -- keeping it would let a rating row that once said "Unrated" come
+  // back from another field still missing its operator.
+  const onFieldChange = (id, field) => mutate(id, node => { node.field = field; node.value = undefined; });
   const onNegateChange = (id, negate) => mutate(id, node => { node.negate = negate; });
   const onOpChange = (id, op) => mutate(id, node => { node.op = op; });
+  // Only the dropdown-valued fields report their value into the tree; it is
+  // what tells the rating row whether it still has an operator to show.
+  const onValueChange = (id, value) => mutate(id, node => { node.value = value; });
   const onAddCondition = (parentId) => mutate(parentId, node => { node.children.push(makeCondition()); });
   const onAddGroup = (parentId) => mutate(parentId, node => { node.children.push(makeGroup('any')); });
 
@@ -259,7 +304,7 @@ export function AdvancedSearchModal(props) {
   };
 
   return (
-    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onNegateChange, onOpChange, onAddCondition, onAddGroup, onRemove }}>
+    <SearchCtx.Provider value={{ inputRefs, onModeChange, onFieldChange, onNegateChange, onOpChange, onValueChange, onAddCondition, onAddGroup, onRemove }}>
       <Show when={props.open}>
         <div
           class="modal-overlay visible"

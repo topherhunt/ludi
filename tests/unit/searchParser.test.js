@@ -220,3 +220,40 @@ describe('evaluateSong -- rating', () => {
     expect(evaluateSong(parseQuery('<3'), makeSong({ title: 'I <3 Jazz' }))).toBe(true);
   });
 });
+
+describe('evaluateSong -- listening history', () => {
+  const played = (play_count, last_played_at = null) =>
+    makeSong({ play_count, last_played_at });
+
+  it('compares play counts, including "never played"', () => {
+    expect(parseQuery('plays>=5')).toMatchObject({ field: 'plays', op: '>=', value: '5' });
+    expect(evaluateSong(parseQuery('plays>=5'), played(7))).toBe(true);
+    expect(evaluateSong(parseQuery('plays>=5'), played(4))).toBe(false);
+    expect(evaluateSong(parseQuery('plays<=2'), played(2))).toBe(true);
+    expect(evaluateSong(parseQuery('plays=0'), played(0))).toBe(true);
+    expect(evaluateSong(parseQuery('plays=0'), played(1))).toBe(false);
+  });
+
+  it('compares the last-played date by calendar day, not by timestamp', () => {
+    const afternoon = played(3, '2026-06-15T15:30:00.000Z');
+    expect(evaluateSong(parseQuery('lastplayed=2026-06-15'), afternoon)).toBe(true);
+    // The bug this guards: a raw string compare puts 15:30 *after* the bare
+    // date, so "on or before June 15" would miss a song played that afternoon.
+    expect(evaluateSong(parseQuery('lastplayed<=2026-06-15'), afternoon)).toBe(true);
+    expect(evaluateSong(parseQuery('lastplayed>=2026-06-15'), afternoon)).toBe(true);
+    expect(evaluateSong(parseQuery('lastplayed<2026-06-15'), afternoon)).toBe(false);
+    expect(evaluateSong(parseQuery('lastplayed>2026-06-14'), afternoon)).toBe(true);
+  });
+
+  it('matches nothing on a song that has never been played, whatever the operator', () => {
+    for (const query of ['lastplayed>=2020-01-01', 'lastplayed<=2030-01-01', 'lastplayed=2026-06-15']) {
+      expect(evaluateSong(parseQuery(query), played(0, null))).toBe(false);
+    }
+    // `plays=0` is how you reach them instead.
+    expect(evaluateSong(parseQuery('plays=0'), played(0, null))).toBe(true);
+  });
+
+  it('rejects a last-played value that is not a date', () => {
+    expect(evaluateSong(parseQuery('lastplayed>=yesterday'), played(3, '2026-06-15T15:30:00.000Z'))).toBe(false);
+  });
+});

@@ -1354,9 +1354,20 @@ body.resizing-sidebar {
   padding: 5px 8px;
   outline: none;
   flex-shrink: 0;
-  width: 72px;
+  /* Wide enough for the longest operator label ("is on or before") plus the
+     native dropdown arrow -- at 72px "is at least" was already clipped. */
+  width: 132px;
 }
 .advsearch-op-select:focus { border-color: #007acc; }
+
+/* "is" / "is not" needs nowhere near the width the comparators do. */
+.advsearch-op-narrow { width: 84px; }
+
+/* The native date picker draws its own text and calendar glyph in the light
+   scheme by default, which is unreadable on the dark input. */
+.qa-date-value {
+  color-scheme: dark;
+}
 
 /* ===== Tags ===== */
 

@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeTagFromSongs: (data) => ipcRenderer.invoke('db:removeTagFromSongs', data),
   updateSong: (data) => ipcRenderer.invoke('db:updateSong', data),
   setSongRating: (data) => ipcRenderer.invoke('db:setSongRating', data),
+  recordSongPlay: (songId) => ipcRenderer.invoke('db:recordSongPlay', songId),
 
   // Star-rating import from another music app's library
   chooseSwinsianLibrary: () => ipcRenderer.invoke('ratings:chooseSwinsianLibrary'),

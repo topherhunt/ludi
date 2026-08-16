@@ -130,6 +130,8 @@ async function runSearch(queryString) {
       album: item.album || '',
       track_number: item.track_number,
       rating: item.rating,
+      play_count: item.play_count,
+      last_played_at: item.last_played_at,
       ancestorFolderNames: ancestorFolders.map(f => f.title),
       tags: (item.tags || []).map(t => t.name),
     };

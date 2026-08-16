@@ -21,6 +21,26 @@ const STALL_TIMEOUT_MS = 10000;
 const stallTimeoutMs = () =>
   (typeof window !== 'undefined' && window.__ludiStallTimeoutMs) || STALL_TIMEOUT_MS;
 
+// How much of a track you must actually hear before it counts as a play.
+//
+// Counting at load would inflate every number just from clicking down a list,
+// and counting only at 'ended' would miss the song you cut off in its last
+// verse. Half the track, capped at 30 seconds, is the rule scrobblers settled
+// on. What accumulates is real listening time, so seeking to the end doesn't
+// buy you a play.
+const PLAY_COUNT_CAP_MS = 30000;
+
+// Tests set their own threshold so that a counted play (and a deliberately
+// uncounted one) are both reachable inside a one-second test.
+function playThresholdMs(durationSeconds) {
+  const override = typeof window !== 'undefined' ? window.__ludiPlayThresholdMs : undefined;
+  if (typeof override === 'number') return override;
+  // Duration isn't always known at load. The cap is the conservative guess:
+  // it can only delay a play being counted, never invent one.
+  if (!durationSeconds || durationSeconds <= 0) return PLAY_COUNT_CAP_MS;
+  return Math.min(PLAY_COUNT_CAP_MS, (durationSeconds * 1000) / 2);
+}
+
 /**
  * Audio player hook using Howler.js
  * Provides a reactive interface to audio playback
@@ -45,6 +65,13 @@ export function createAudioPlayer() {
   let onPauseCallback = null;
   let onErrorCallback = null;
   let onStallCallback = null;
+  let onPlayCountedCallback = null;
+
+  // Listening progress toward counting a play, reset by each load.
+  let countingSongId = null;
+  let listenedMs = 0;
+  let lastListenTickAt = 0;
+  let playCounted = false;
 
   // Watchdog state. `wantsToPlay` is our *intent*: a deliberate pause must not
   // look like a stall, and a track that is still loading must.
@@ -99,10 +126,27 @@ export function createAudioPlayer() {
   }
 
   /**
+   * Add the time since the last tick to this track's listening total, and
+   * report the play once it crosses the threshold. Only ever called while
+   * audio is actually playing, so a pause or a stall accrues nothing.
+   */
+  function accrueListening() {
+    const now = Date.now();
+    listenedMs += now - lastListenTickAt;
+    lastListenTickAt = now;
+
+    if (playCounted) return;
+    if (listenedMs < playThresholdMs(duration())) return;
+    playCounted = true;
+    onPlayCountedCallback?.(countingSongId);
+  }
+
+  /**
    * Start the time update interval
    */
   function startTimeUpdates() {
     if (updateInterval) return;
+    lastListenTickAt = Date.now();
 
     updateInterval = setInterval(() => {
       if (sound && sound.playing()) {
@@ -114,6 +158,8 @@ export function createAudioPlayer() {
         if (isFinite(dur) && dur > 0 && duration() !== dur) {
           setDuration(dur);
         }
+
+        accrueListening();
       }
     }, 250);
   }
@@ -139,6 +185,12 @@ export function createAudioPlayer() {
     setError(null);
     wantsToPlay = true;
     pendingSeek = startAt;
+
+    // A fresh load is a fresh play: listening time never carries over from the
+    // last track, and replaying the same song can be counted again.
+    countingSongId = songId;
+    listenedMs = 0;
+    playCounted = false;
 
     try {
       // Get song data from database
@@ -489,6 +541,15 @@ export function createAudioPlayer() {
     onStallCallback = callback;
   }
 
+  /**
+   * Set callback for when a track has been listened to long enough to count as
+   * a play. Called once per load, with the song id.
+   * @param {Function} callback
+   */
+  function onPlayCounted(callback) {
+    onPlayCountedCallback = callback;
+  }
+
   // Test hook: the underlying <audio> element, so tests can reproduce the
   // failures this recovery exists for (a device that drops out mid-song fires
   // 'error', or simply pauses the element behind Howler's back).
@@ -537,6 +598,7 @@ export function createAudioPlayer() {
     onPause,
     onError,
     onStall,
+    onPlayCounted,
   };
 }
 

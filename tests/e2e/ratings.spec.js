@@ -201,8 +201,8 @@ test.describe('Star ratings', () => {
     // operator + star dropdowns.
     await window.locator('.advsearch-action-btn').filter({ hasText: 'Condition' }).first().click();
     await window.locator('.advsearch-field-select').nth(1).selectOption('rating');
-    await expect(window.locator('.qa-rating-op')).toBeVisible();
-    await window.locator('.qa-rating-op').selectOption('>=');
+    await expect(window.locator('.qa-compare-op')).toBeVisible();
+    await window.locator('.qa-compare-op').selectOption('>=');
     await window.locator('.qa-rating-value').selectOption('4');
 
     await window.locator('.modal-btn').filter({ hasText: 'Search' }).click();

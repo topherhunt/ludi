@@ -304,6 +304,19 @@ function createTables() {
     db.exec(`ALTER TABLE songs ADD COLUMN rating INTEGER`);
   }
 
+  // Migration - listening history.
+  //
+  // Unlike rating, `play_count` is NOT NULL DEFAULT 0: "never played" is a real
+  // count rather than a missing fact, which is what makes `plays=0` a search
+  // that reaches every song you have never got to. `last_played_at` has no such
+  // zero, so it stays null until the first counted play.
+  if (!songColumns.some(col => col.name === 'play_count')) {
+    db.exec(`ALTER TABLE songs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!songColumns.some(col => col.name === 'last_played_at')) {
+    db.exec(`ALTER TABLE songs ADD COLUMN last_played_at TEXT`);
+  }
+
   // Drop the unique index if it was previously created (we want to allow duplicates for playlists)
   db.exec(`DROP INDEX IF EXISTS idx_list_items_unique_song_in_list`);
 }
@@ -360,6 +373,8 @@ function getAllListItems() {
       s.duration_seconds,
       s.track_number,
       s.rating,
+      s.play_count,
+      s.last_played_at,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -878,6 +893,25 @@ function setSongRating(songIds, rating) {
     const stmt = db.prepare('UPDATE songs SET rating = ?, updated_at = ? WHERE id = ?');
     for (const songId of songIds) stmt.run(rating, now, songId);
   })();
+}
+
+/**
+ * Record that a song was played: bump its count and stamp the time.
+ *
+ * `updated_at` is deliberately left alone -- it tracks edits to the song's
+ * metadata, and listening to a track is not an edit to it.
+ *
+ * Called once per play by the renderer, which decides when a play has actually
+ * happened (see the listening threshold in useAudio.js). Throws on an unknown
+ * song id rather than counting a play against nothing.
+ */
+function recordSongPlay(songId) {
+  const now = new Date().toISOString();
+  const result = db
+    .prepare('UPDATE songs SET play_count = play_count + 1, last_played_at = ? WHERE id = ?')
+    .run(now, songId);
+  if (result.changes === 0) throw new Error(`Cannot record a play: no song with id ${songId}`);
+  return db.prepare('SELECT play_count, last_played_at FROM songs WHERE id = ?').get(songId);
 }
 
 /** Every song's id, rating and library-relative path -- the matching table an external ratings import runs against. */
@@ -1580,6 +1614,7 @@ module.exports = {
   removeTagFromSongs,
   updateSong,
   setSongRating,
+  recordSongPlay,
   getSongsForRatingMatch,
   getSettings,
   updateSetting,

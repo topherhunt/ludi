@@ -4,6 +4,16 @@ Notable changes at each version checkpoint. Dates are the release build dates.
 
 ## Unreleased
 
+**Fixed: the packaged app crashed on startup with "Cannot find module '../../shared/audio-model.json'".** The 0.3.0 build's `files` list never included `src/shared/`, so the analysis vocabulary and label files the main process reads were left out of the asar. Dev runs from source, which is why nothing caught it until the `.dmg` was installed. `tests/e2e/packaging-manifest.spec.js` now walks every `require` in the main process and fails if the target isn't covered by a packaging glob.
+
+**Play counts and last-played dates.** Every song now carries both. A play is counted once you have actually listened to half the track (30 seconds is enough for anything longer) and what accumulates is listening time, so clicking down a list doesn't inflate the counts and seeking to the end doesn't buy a play. Both are searchable -- `plays>=5`, `plays=0` for everything you have never got to, `lastplayed>=2026-01-01` -- and both are conditions in Advanced Search, where Last played gets a date picker and reads "is on or after" rather than "is at least".
+
+**Advanced Search compares every number, not just ratings.** Track # and Play count gained the same is-at-least / is-exactly / is-at-most operator Rating had, and the operator dropdown is wide enough for its labels. Choosing "Rated (any)" or "Unrated" now hides the operator instead of leaving a stale "is at least" beside a value that was always going to be tested for membership.
+
+## 0.3.0 -- 2026-08-16
+
+**Star ratings.** A 1-5 star column in the song list, the thing the library was missing to answer "what do I actually like". Click a star to rate, click the same star again to clear it back to unrated, or press `1`-`5` to rate everything you have selected (`0` clears). Right-click offers the same as a menu. Ratings are searchable -- `rating>=4` for the good stuff, `rating=none` for what you haven't judged yet -- and Advanced Search gained a Rating condition with an is-at-least / is-exactly / is-at-most operator. Unrated is deliberately distinct from zero stars, so `rating<3` means "songs I don't like", not "everything I haven't got to". Settings can **import the ratings out of an existing Swinsian library**: it matches on filename first, then title, and shows you the counts and every track it couldn't place before it writes anything.
+
 **Ludi now listens to your music.** A local audio-analysis pass (essentia.js for mel-spectrograms, a MusiCNN model on ONNX Runtime, both as WASM in a hidden window) fingerprints every song into 200 numbers plus genre, mood, and energy scores. Nothing leaves your machine and there are no API keys. It runs in the background from Settings -> Audio analysis, drops to a single worker while you're playing music, and its queue is persisted so quitting mid-pass loses nothing. Everything below is built on that:
 
 - **Similar songs.** Right-click a song (or a selection) for the tracks that sound most like it.

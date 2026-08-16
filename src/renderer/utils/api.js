@@ -346,6 +346,11 @@ export async function setSongRating(songIds, rating) {
   return getAPI().setSongRating({ songIds, rating });
 }
 
+/** Count one play of a song and stamp its last-played time. */
+export async function recordSongPlay(songId) {
+  return getAPI().recordSongPlay(songId);
+}
+
 // File operations
 
 /**

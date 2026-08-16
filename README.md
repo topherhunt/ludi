@@ -10,7 +10,8 @@ Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nest
 - **Playlists.** Reference-only song lists in the sidebar -- adding a song to a playlist copies the reference, never the file, and never moves it out of your library.
 - **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; the chips are scoped to whatever you're looking at and carry a count, and clicking them stacks up as filters.
 - **Star ratings.** A 1-5 star column in the song list. Click a star to rate, click the same star again to clear it, or press `1`-`5` (and `0` to clear) to rate everything you have selected. Ratings are searchable -- `rating>=4`, `rating=none` -- and available as a condition in the advanced-search composer. Settings can import the ratings out of an existing Swinsian library, showing you what it would match before writing anything.
-- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, rating, and tags. Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
+- **Listening history.** Every song carries a play count and a last-played date, both searchable -- `plays>=5`, `plays=0` for everything you have never got to, `lastplayed>=2026-01-01` -- and both offered as conditions in the advanced-search composer. A play is counted once you have actually listened to half the track (30 seconds is enough for anything longer), so skipping down a list leaves the counts alone.
+- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, track number, rating, play count, last-played date, and tags. Numbers and dates compare rather than match, so a condition can say "is at least 4" or "is on or after June 1". Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
 - **Audio analysis.** Ludi listens to every song locally (no uploads, no API keys) with a MusiCNN model running on ONNX Runtime, and stores a 200-number fingerprint of how each track sounds. It runs in the background, backs off while you're playing music, and picks up where it left off if you quit. Everything below is built on it:
   - **Similar songs.** Right-click any song for the tracks that sound most like it.
   - **Auto-tags.** Genre and mood tags applied from the model's own scores, calibrated against your library rather than absolute thresholds. Machine-applied tags carry a gear badge so they're never confused with your own, and re-running the analysis only ever rewrites those.
@@ -92,9 +93,9 @@ The integration tests use Playwright to launch the app, verify the UI is display
 Push a version tag and GitHub Actions builds the `.dmg` and opens a draft release for review:
 
 ```bash
-npm version 0.2.0 --no-git-tag-version   # keep package.json in sync with the tag
-git commit -am "Release v0.2.0" && git tag v0.2.0
-git push && git push origin v0.2.0
+npm version 0.3.0 --no-git-tag-version   # keep package.json in sync with the tag
+git commit -am "Release v0.3.0" && git tag v0.3.0
+git push && git push origin v0.3.0
 ```
 
 `npm run release` ad-hoc signs the app (`build.mac.identity: "-"`), then verifies the signature via the `afterSign` hook in `scripts/verify-signature.js`, which fails the build rather than shipping a bundle macOS will reject. This matters: without an explicit identity, electron-builder finds no Developer ID cert, silently skips signing, and leaves the stock Electron linker signature attached to a bundle it then rewrites. macOS reads that as tampering and tells the user the app is "damaged and can't be opened" -- with no way to override, which is strictly worse than being unsigned. `tests/e2e/packaged-app.spec.js` covers both halves: that the signature seals the bundle, and that the signed app actually launches.
@@ -137,6 +138,8 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - album
   - track_number
   - rating (int, nullable 1-5 -- null means "never rated", which is a different fact from a deliberate 1 star, so ratings never default to 0)
+  - play_count (int not null, default 0 -- bumped once you have listened to half the track, capped at 30 seconds of accumulated listening, so clicking down a list never inflates it)
+  - last_played_at (text, nullable ISO timestamp -- null until that first counted play)
   - file_path (text not null, unique constraint)
   - duration_seconds (int not null)
   - inserted_at

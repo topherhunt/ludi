@@ -508,6 +508,10 @@ ipcMain.handle('db:setSongRating', (event, { songIds, rating }) => {
   return db.setSongRating(songIds, rating);
 });
 
+ipcMain.handle('db:recordSongPlay', (event, songId) => {
+  return db.recordSongPlay(songId);
+});
+
 // ---- Star-rating import from a Swinsian library --------------------------
 
 ipcMain.handle('ratings:chooseSwinsianLibrary', async () => {

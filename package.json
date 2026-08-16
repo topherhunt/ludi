@@ -1,7 +1,7 @@
 {
   "name": "ludi-music",
   "productName": "Ludi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fast, intuitive, lightweight MacOS music library & player",
   "main": "src/main/main.js",
   "scripts": {
@@ -32,6 +32,7 @@
     "files": [
       "dist/renderer/**/*",
       "src/main/**/*",
+      "src/shared/**/*",
       "package.json"
     ],
     "afterSign": "./scripts/verify-signature.js",

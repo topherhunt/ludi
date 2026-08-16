@@ -41,7 +41,7 @@ import {
   loopMode,
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
-import { getSongsInList, getSong, getRootListId } from './utils/api.js';
+import { getSongsInList, getSong, getRootListId, recordSongPlay } from './utils/api.js';
 
 /**
  * Main App component
@@ -120,6 +120,9 @@ export function App() {
       notePlaybackStarted();
       updateMediaSession('playing');
     });
+    // Listening history. Nothing on screen reads it yet, so there is nothing to
+    // refresh -- the count is picked up by the next search that asks for it.
+    player.onPlayCounted((songId) => recordSongPlay(songId));
     player.onPause(() => updateMediaSession('paused'));
   });
 
