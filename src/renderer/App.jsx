@@ -43,6 +43,18 @@ import {
 import { getAudioPlayer } from './hooks/useAudio.js';
 import { getSongsInList, getSong, getRootListId, recordSongPlay } from './utils/api.js';
 
+// How long playback may be stopped before we let macOS suspend the app again.
+// Long enough to cover loading the next track over a slow disk or a network
+// volume, short enough that a paused app isn't holding the machine awake in any
+// way a person would notice.
+const PLAYBACK_GAP_MS = 10000;
+
+// Tests shorten the window so a deliberate pause releases the block inside one
+// test, the same way they shorten the stall timeout.
+const playbackGapMs = () => window.__ludiPlaybackGapMs || PLAYBACK_GAP_MS;
+
+let playbackGapTimer = null;
+
 /**
  * Main App component
  */
@@ -129,9 +141,32 @@ export function App() {
   // Hold a power-save block while playing so an idle Mac doesn't suspend the
   // app out from under an unattended playlist. The screen is still free to
   // sleep -- 'prevent-app-suspension' only keeps the system (and us) running.
+  //
+  // The block has to survive the gap BETWEEN tracks, which is why the release
+  // is delayed. `isPlaying` goes false the moment a track ends and only comes
+  // back once the next one has loaded and started, so releasing on the falling
+  // edge dropped the block for a fraction of a second at every single track
+  // boundary. Once macOS's idle timer has already run out -- three or four
+  // songs into a playlist you walked away from -- that fraction of a second is
+  // all it needs to sleep the machine mid-playlist. A single song on loop never
+  // hit it because it has no boundaries to speak of.
+  //
+  // So a stop only reaches the main process if nothing has resumed within the
+  // grace window. Holding the block for a few extra seconds after a deliberate
+  // pause costs nothing; dropping it for 200ms between songs costs the party.
   createEffect(() => {
-    window.electronAPI?.setPlaybackActive?.(isPlaying());
+    const playing = isPlaying();
+    clearTimeout(playbackGapTimer);
+    if (playing) {
+      window.electronAPI?.setPlaybackActive?.(true);
+    } else {
+      playbackGapTimer = setTimeout(
+        () => window.electronAPI?.setPlaybackActive?.(false),
+        playbackGapMs(),
+      );
+    }
   });
+  onCleanup(() => clearTimeout(playbackGapTimer));
 
   // Listen for column settings changes from Settings window
   onMount(() => {

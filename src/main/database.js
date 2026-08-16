@@ -819,16 +819,6 @@ function deleteTag(tagId) {
   })();
 }
 
-// Rewrite tag positions to match the given order of tag ids.
-function reorderTags(orderedIds) {
-  const now = new Date().toISOString();
-  return db.transaction(() => {
-    orderedIds.forEach((tagId, index) => {
-      db.prepare('UPDATE tags SET position = ?, updated_at = ? WHERE id = ?').run(index, now, tagId);
-    });
-  })();
-}
-
 // Applying a tag by hand always wins: an association the analyzer created (or
 // one you previously suppressed) is promoted to 'manual', which takes it
 // permanently out of the analyzer's reach.
@@ -1609,7 +1599,6 @@ module.exports = {
   renameTag,
   setTagColor,
   deleteTag,
-  reorderTags,
   addTagToSongs,
   removeTagFromSongs,
   updateSong,

@@ -5,14 +5,13 @@ import {
   renameTag,
   setTagColor,
   deleteTag,
-  reorderTags,
   createPlaylist,
   deletePlaylist,
   reorderPlaylists,
   renameFolder,
   addSongsToList,
 } from '../utils/api.js';
-import { tags, refreshTags, bumpLibraryVersion, libraryVersion, findTagByName } from '../stores/tags.js';
+import { refreshTags, bumpLibraryVersion, libraryVersion, findTagByName } from '../stores/tags.js';
 import { scopedTags, isTagFiltered } from '../stores/tagFacets.js';
 import { savedSearches, renameSavedSearch, deleteSavedSearch } from '../stores/savedSearches.js';
 import {
@@ -52,7 +51,6 @@ export function Sidebar(props) {
   const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
   const [savedSearchMenu, setSavedSearchMenu] = createSignal(null); // { x, y, saved } | null
   const [clusterMenu, setClusterMenu] = createSignal(null); // { x, y, cluster } | null
-  let draggingTagId = null;
   let playlistListRef;
   let colorPopoverRef;
 
@@ -176,35 +174,6 @@ export function Sidebar(props) {
         await refreshAfterTagChange();
       }
     );
-  };
-
-  // Drag-and-drop reorder of tag chips.
-  //
-  // A tag drag in progress suppresses every playlist row's drop handling, so the
-  // flag MUST be cleared however the drag ends -- a cancelled drag that left it
-  // set made dropping songs onto playlists silently stop working until restart.
-  const onChipDragStart = (e, tag) => {
-    draggingTagId = tag.id;
-    e.dataTransfer.effectAllowed = 'move';
-  };
-  const onChipDragEnd = () => {
-    draggingTagId = null;
-  };
-  const onChipDrop = async (e, targetTag) => {
-    e.preventDefault();
-    const dragged = draggingTagId;
-    // Reordering re-renders the chips, and a removed source element never fires
-    // dragend, so this drop is the last chance to clear the flag.
-    draggingTagId = null;
-    if (dragged === null || dragged === targetTag.id) return;
-    const ids = tags().map(t => t.id);
-    const from = ids.indexOf(dragged);
-    if (from === -1) return;
-    ids.splice(from, 1);
-    const insertAt = ids.indexOf(targetTag.id);
-    ids.splice(insertAt, 0, dragged);
-    await reorderTags(ids);
-    await refreshTags();
   };
 
   // ---- Saved searches ----
@@ -527,119 +496,115 @@ export function Sidebar(props) {
         </Show>
       </div>
 
-      <div class="playlist-list" id="playlistList" ref={playlistListRef}>
-        <For each={lists() || []}>
-          {(list) => (
-            <SidebarPlaylistRow
-              list={list}
-              depth={0}
-              isTagDragging={() => draggingTagId !== null}
-              getListContainer={() => playlistListRef}
-              onSelect={handlePlaylistClick}
-              onPlay={handlePlayPlaylist}
-              onContextMenu={handlePlaylistContextMenu}
-              onReorder={handleReorderPlaylists}
-              onCopyItems={handleCopyItemsToPlaylist}
-              onDropFiles={handleDropFilesOnPlaylist}
-            />
-          )}
-        </For>
-        <DropIndicator scope="sidebar" />
-      </div>
-
-      {/* Groups the analysis found, and the map of the same space. Always shown,
-          so the buttons that make them are somewhere you can find them before
-          there is anything to show. */}
-      <div class="clusters-section qa-clusters-section">
-        <div
-          class="saved-search-item qa-open-map"
-          classList={{ active: mapOpen() }}
-          onClick={handleOpenMap}
-        >
-          <i class="bi bi-map saved-search-icon" />
-          <span class="saved-search-name">Music Map</span>
+      {/* Everything you browse with scrolls as one region, so a long tag list
+          costs scrolling rather than costing the playlist tree its height. The
+          song edit panel and the analysis strip sit outside it and stay put. */}
+      <div class="sidebar-scroll qa-sidebar-scroll">
+        <div class="playlist-list" id="playlistList" ref={playlistListRef}>
+          <For each={lists() || []}>
+            {(list) => (
+              <SidebarPlaylistRow
+                list={list}
+                depth={0}
+                getListContainer={() => playlistListRef}
+                onSelect={handlePlaylistClick}
+                onPlay={handlePlayPlaylist}
+                onContextMenu={handlePlaylistContextMenu}
+                onReorder={handleReorderPlaylists}
+                onCopyItems={handleCopyItemsToPlaylist}
+                onDropFiles={handleDropFilesOnPlaylist}
+              />
+            )}
+          </For>
+          <DropIndicator scope="sidebar" />
         </div>
 
-        <div
-          class="saved-search-item qa-open-facets"
-          classList={{ active: facetsOpen() }}
-          onClick={handleOpenFacets}
-        >
-          <i class="bi bi-signpost-split saved-search-icon" />
-          <span class="saved-search-name">Facets</span>
-        </div>
-
-        <div class="tags-heading clusters-heading">
-          <span>Groups</span>
-          <button
-            class="add-btn qa-recluster"
-            data-tooltip={clusters().length > 0 ? 'Regroup library' : 'Group songs that sound alike'}
-            disabled={clustering()}
-            onClick={handleRegenerateClusters}
+        {/* Groups the analysis found, and the map of the same space. Always shown,
+            so the buttons that make them are somewhere you can find them before
+            there is anything to show. */}
+        <div class="clusters-section qa-clusters-section">
+          <div
+            class="saved-search-item qa-open-map"
+            classList={{ active: mapOpen() }}
+            onClick={handleOpenMap}
           >
-            <i class="bi bi-diagram-2" />
-          </button>
-        </div>
-        <Show
-          when={clusters().length > 0}
-          fallback={
-            <div class="clusters-empty qa-clusters-empty">
-              {clustering() ? 'Grouping...' : 'Not grouped yet.'}
-            </div>
-          }
-        >
-          <For each={clusters()}>
-            {(cluster) => (
-              <div
-                class="saved-search-item qa-cluster-item"
-                classList={{ active: isShowingCluster() && activeCluster().id === cluster.id }}
-                data-cluster-id={cluster.id}
-                onClick={() => handleClusterClick(cluster)}
-                onContextMenu={(e) => handleClusterContextMenu(e, cluster)}
-              >
-                <i class="bi bi-diagram-2 saved-search-icon" />
-                <span class="saved-search-name">{cluster.name}</span>
-                <span class="cluster-size qa-cluster-size">{cluster.size}</span>
-              </div>
-            )}
-          </For>
-        </Show>
-      </div>
+            <i class="bi bi-map saved-search-icon" />
+            <span class="saved-search-name">Music Map</span>
+          </div>
 
-      <Show when={savedSearches().length > 0}>
-        <div class="saved-searches-section qa-saved-searches">
-          <div class="tags-heading">Saved Searches</div>
-          <For each={savedSearches()}>
-            {(saved) => (
-              <div
-                class="saved-search-item qa-saved-search"
-                classList={{ active: isSavedSearchActive(saved) }}
-                data-saved-search-id={saved.id}
-                title={saved.query}
-                onClick={() => handleSavedSearchClick(saved)}
-                onContextMenu={(e) => handleSavedSearchContextMenu(e, saved)}
-              >
-                <i class="bi bi-search saved-search-icon" />
-                <span class="saved-search-name">{saved.name}</span>
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
+          <div
+            class="saved-search-item qa-open-facets"
+            classList={{ active: facetsOpen() }}
+            onClick={handleOpenFacets}
+          >
+            <i class="bi bi-signpost-split saved-search-icon" />
+            <span class="saved-search-name">Facets</span>
+          </div>
 
-      <Show when={scopedTags().length > 0}>
-        <div class="tags-section qa-tags-section">
-          <div class="tags-heading">Tags</div>
-          <div class="tags-list">
-            <For each={scopedTags()}>
-              {(tag) => (
-                <span
-                  draggable={true}
-                  onDragStart={(e) => onChipDragStart(e, tag)}
-                  onDragEnd={onChipDragEnd}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => onChipDrop(e, tag)}
+          <div class="tags-heading clusters-heading">
+            <span>Groups</span>
+            <button
+              class="add-btn qa-recluster"
+              data-tooltip={clusters().length > 0 ? 'Regroup library' : 'Group songs that sound alike'}
+              disabled={clustering()}
+              onClick={handleRegenerateClusters}
+            >
+              <i class="bi bi-diagram-2" />
+            </button>
+          </div>
+          <Show
+            when={clusters().length > 0}
+            fallback={
+              <div class="clusters-empty qa-clusters-empty">
+                {clustering() ? 'Grouping...' : 'Not grouped yet.'}
+              </div>
+            }
+          >
+            <For each={clusters()}>
+              {(cluster) => (
+                <div
+                  class="saved-search-item qa-cluster-item"
+                  classList={{ active: isShowingCluster() && activeCluster().id === cluster.id }}
+                  data-cluster-id={cluster.id}
+                  onClick={() => handleClusterClick(cluster)}
+                  onContextMenu={(e) => handleClusterContextMenu(e, cluster)}
                 >
+                  <i class="bi bi-diagram-2 saved-search-icon" />
+                  <span class="saved-search-name">{cluster.name}</span>
+                  <span class="cluster-size qa-cluster-size">{cluster.size}</span>
+                </div>
+              )}
+            </For>
+          </Show>
+        </div>
+
+        <Show when={savedSearches().length > 0}>
+          <div class="saved-searches-section qa-saved-searches">
+            <div class="tags-heading">Saved Searches</div>
+            <For each={savedSearches()}>
+              {(saved) => (
+                <div
+                  class="saved-search-item qa-saved-search"
+                  classList={{ active: isSavedSearchActive(saved) }}
+                  data-saved-search-id={saved.id}
+                  title={saved.query}
+                  onClick={() => handleSavedSearchClick(saved)}
+                  onContextMenu={(e) => handleSavedSearchContextMenu(e, saved)}
+                >
+                  <i class="bi bi-search saved-search-icon" />
+                  <span class="saved-search-name">{saved.name}</span>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        <Show when={scopedTags().length > 0}>
+          <div class="tags-section qa-tags-section">
+            <div class="tags-heading">Tags</div>
+            <div class="tags-list">
+              <For each={scopedTags()}>
+                {(tag) => (
                   <TagPill
                     tag={tag}
                     count={tag.count}
@@ -647,12 +612,12 @@ export function Sidebar(props) {
                     onClick={(e) => handleTagClick(tag, e)}
                     onContextMenu={(e) => handleTagContextMenu(e, tag)}
                   />
-                </span>
-              )}
-            </For>
+                )}
+              </For>
+            </div>
           </div>
-        </div>
-      </Show>
+        </Show>
+      </div>
 
       <SongEditPanel />
 

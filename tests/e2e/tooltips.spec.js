@@ -15,12 +15,16 @@ test.describe('Tooltips', () => {
     }
   });
 
-  test('sidebar does not clip header tooltips (scroll lives on the playlist list)', async ({ window }) => {
+  test('sidebar does not clip header tooltips (scroll lives below the header)', async ({ window }) => {
     // overflow:visible on the sidebar lets the header button tooltips escape;
-    // the playlist list scrolls instead.
+    // the region below the header scrolls instead.
     const sidebarOverflowX = await window.locator('.sidebar').evaluate((el) => getComputedStyle(el).overflowX);
     expect(sidebarOverflowX).toBe('visible');
-    const listOverflowY = await window.locator('.playlist-list').evaluate((el) => getComputedStyle(el).overflowY);
-    expect(listOverflowY).toBe('auto');
+    const scrollOverflowY = await window.locator('.qa-sidebar-scroll').evaluate((el) => getComputedStyle(el).overflowY);
+    expect(scrollOverflowY).toBe('auto');
+    // The header, and so its tooltips, sit outside that scroll region.
+    const headerInScroll = await window.locator('.sidebar-header')
+      .evaluate((el) => !!el.closest('.qa-sidebar-scroll'));
+    expect(headerInScroll).toBe(false);
   });
 });

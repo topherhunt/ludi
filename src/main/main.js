@@ -489,10 +489,6 @@ ipcMain.handle('db:deleteTag', (event, tagId) => {
   return db.deleteTag(tagId);
 });
 
-ipcMain.handle('db:reorderTags', (event, orderedIds) => {
-  return db.reorderTags(orderedIds);
-});
-
 ipcMain.handle('db:addTagToSongs', (event, { tagId, songIds }) => {
   return db.addTagToSongs(tagId, songIds);
 });

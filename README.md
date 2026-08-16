@@ -161,7 +161,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - id
   - name (text not null, unique COLLATE NOCASE)
   - color (text not null)
-  - position (int not null -- the manual drag-to-reorder order used wherever tags are listed)
+  - position (int not null -- creation order; the sidebar sorts chips itself, hand-applied ones alphabetically and auto ones by count)
   - is_auto (int not null, default 0 -- a tag *definition* the analyzer created; draws the gear badge)
   - inserted_at
   - updated_at

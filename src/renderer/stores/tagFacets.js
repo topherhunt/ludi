@@ -20,6 +20,30 @@ import { isShowingSimilar, similarResults } from './similar.js';
 import { buildRootResolver } from '../utils/listTree.js';
 import { tagTermsIn } from '../utils/tagFilter.js';
 
+/**
+ * Sidebar chip order: your own tags first, alphabetically, then the analyzer's,
+ * commonest here first.
+ *
+ * The two halves are looked at differently, so they're sorted differently. A tag
+ * you applied by hand is one you go looking for by name, and there are few
+ * enough of them to scan -- alphabetical is the order that lets you find one.
+ * Auto tags arrive fifty at a time and you don't know their names, so the useful
+ * question is "what is this view mostly made of", which is frequency order. The
+ * long descending tail of one-song genre tags then sits at the bottom, out of
+ * the way, rather than interleaved with everything.
+ *
+ * Takes tags carrying a `count` (as scopedTags builds them). Pure, so it's unit
+ * tested directly.
+ */
+function sortTagsForSidebar(scoped) {
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  return [...scoped].sort((a, b) => {
+    if (!a.is_auto !== !b.is_auto) return a.is_auto ? 1 : -1;
+    if (!a.is_auto) return byName(a, b);
+    return b.count - a.count || byName(a, b);
+  });
+}
+
 const { visibleSongs, tagCounts, activeTagNames, scopedTags } = createRoot(() => {
   // Every song under the list being viewed, folders included. The tree only
   // renders expanded folders, but a tag on a collapsed one is still a tag in
@@ -61,9 +85,11 @@ const { visibleSongs, tagCounts, activeTagNames, scopedTags } = createRoot(() =>
     // An active filter keeps its chip even at zero: combining two tags that
     // share no songs empties the view, and a chip that vanished at that moment
     // would leave no way to click the filter back off.
-    return tags()
-      .filter(tag => counts.has(tag.id) || active.has(tag.name.toLowerCase()))
-      .map(tag => ({ ...tag, count: counts.get(tag.id) || 0 }));
+    return sortTagsForSidebar(
+      tags()
+        .filter(tag => counts.has(tag.id) || active.has(tag.name.toLowerCase()))
+        .map(tag => ({ ...tag, count: counts.get(tag.id) || 0 }))
+    );
   });
 
   return { visibleSongs, tagCounts, activeTagNames, scopedTags };
@@ -74,4 +100,4 @@ function isTagFiltered(tag) {
   return activeTagNames().has(tag.name.toLowerCase());
 }
 
-export { visibleSongs, tagCounts, activeTagNames, scopedTags, isTagFiltered };
+export { visibleSongs, tagCounts, activeTagNames, scopedTags, isTagFiltered, sortTagsForSidebar };

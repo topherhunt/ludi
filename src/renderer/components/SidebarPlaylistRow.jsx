@@ -20,13 +20,12 @@ import {
  *   sidebar-playlist drag -> top/bottom half = insert above/below (indicator line)
  *   tree drag (songs/folders) -> whole row = copy into this playlist (.drop-into)
  *   OS files -> whole row = import + add (.drop-into)
- *   tag chip drag -> ignored entirely
  *
  * `depth` is the sidebar nesting level. It is always 0 today; it exists so that
  * folders-of-playlists can be added later without reworking this component.
  *
  * Props:
- *   list, depth, isTagDragging,
+ *   list, depth,
  *   onSelect(list), onPlay(list), onContextMenu(e, list),
  *   onReorder(draggedListId, targetListId, insertBefore),
  *   onCopyItems(list, itemIds), onDropFiles(list, paths),
@@ -44,7 +43,6 @@ export function SidebarPlaylistRow(props) {
 
   // What this row would do with the drag currently in progress.
   const dropMode = (e) => {
-    if (props.isTagDragging()) return null;
     if (e.dataTransfer.types.includes('Files')) return 'copy';
     if (dragSource() === 'sidebar-playlist') {
       // The Main Library is pinned first and never reorders.

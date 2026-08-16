@@ -151,36 +151,6 @@ test.describe('Playlists', () => {
     await removePlaylist(window, name);
   });
 
-  test('a cancelled tag-chip drag does not disable dropping songs on playlists', async ({ window }) => {
-    const name = `PL Tagdrag ${STAMP}`;
-    await makePlaylist(window, name);
-    const listId = await playlistIdOf(window, name);
-
-    // A tag drag suppresses playlist drops while it is in flight, so a drag that
-    // ends without a drop (Escape, released over nothing) used to leave that
-    // suppression stuck on forever.
-    await openList(window, mainLibraryRow(window));
-    await songRow(window, song.songId).click();
-    const tagInput = window.locator('.qa-tag-input');
-    await tagInput.click();
-    await tagInput.fill(`tagdrag-${STAMP}`);
-    await window.locator('.qa-tag-create').click();
-    const chip = window.locator('.qa-tags-section .tag-pill', { hasText: `tagdrag-${STAMP}` });
-    await expect(chip).toBeVisible({ timeout: 2000 });
-
-    await chip.evaluate((el) => {
-      const dt = new DataTransfer();
-      const opts = { bubbles: true, cancelable: true, dataTransfer: dt };
-      el.parentElement.dispatchEvent(new DragEvent('dragstart', opts));
-      el.parentElement.dispatchEvent(new DragEvent('dragend', opts));
-    });
-
-    await dragOnto(window, songRow(window, song.songId), playlistRow(window, name));
-    expect(await itemsIn(window, listId)).toHaveLength(1);
-
-    await removePlaylist(window, name);
-  });
-
   test('dragging a folder onto a playlist copies the folder, not moves it', async ({ window }) => {
     const folderName = `PLFolder${STAMP}`;
     const tempDir = path.join(os.tmpdir(), folderName);

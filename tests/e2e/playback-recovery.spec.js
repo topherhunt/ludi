@@ -21,6 +21,18 @@ const NO_STALL_MS = 5000;
 const setStallTimeout = (window, ms) =>
   window.evaluate((value) => { window.__ludiStallTimeoutMs = value; }, ms);
 
+// How long the app waits, after playback stops, before letting macOS suspend it.
+// `null` restores the real ten seconds, which is what the gap between two tracks
+// has to fit inside.
+const setPlaybackGap = (window, ms) =>
+  window.evaluate((value) => {
+    if (value === null) delete window.__ludiPlaybackGapMs;
+    else window.__ludiPlaybackGapMs = value;
+  }, ms);
+
+const blockingSuspension = (window) =>
+  window.evaluate(() => window.electronAPI.isPlaybackPreventingSuspension());
+
 let folder = null;  // { listId, itemId }
 let songIds = [];
 
@@ -83,7 +95,10 @@ test.describe('Playback recovery', () => {
   });
 
   test.afterAll(async ({ window }) => {
-    await window.evaluate(() => { delete window.__ludiStallTimeoutMs; });
+    await window.evaluate(() => {
+      delete window.__ludiStallTimeoutMs;
+      delete window.__ludiPlaybackGapMs;
+    });
     if (folder) {
       await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), folder.itemId);
     }
@@ -134,14 +149,54 @@ test.describe('Playback recovery', () => {
   });
 
   test('playing holds a power-save block so an idle Mac cannot suspend the app', async ({ window }) => {
-    const blocked = () => window.evaluate(() => window.electronAPI.isPlaybackPreventingSuspension());
+    const blocked = () => blockingSuspension(window);
 
     await setStallTimeout(window, NO_STALL_MS);
+    await setPlaybackGap(window, 50);
     await playFirstSong(window);
     await expect.poll(blocked, { timeout: 2000 }).toBe(true);
 
     await window.locator('#playPauseBtn').click();
     await expect(window.locator('#playPauseBtn')).not.toHaveClass(/playing/);
     await expect.poll(blocked, { timeout: 2000 }).toBe(false);
+  });
+
+  test('the power-save block is held across a track change, not dropped between songs', async ({ window }) => {
+    // The bug that stopped a party mix three or four songs in: playback stops
+    // for as long as the next track takes to load, and the block used to be
+    // released for exactly that window -- once per song, all evening. An idle
+    // Mac whose sleep timer had already expired took the first one it was
+    // offered, so the music died mid-playlist while the app sat there healthy.
+    await setStallTimeout(window, NO_STALL_MS);
+    await setPlaybackGap(window, null);
+    await playFirstSong(window);
+    await expect.poll(() => blockingSuspension(window), { timeout: 2000 }).toBe(true);
+
+    // Run the track off its own end -- Howler refuses a synthetic 'ended' while
+    // the element is still playing -- and watch the block continuously until the
+    // next song is playing. A single check afterwards would pass even if the
+    // block had been dropped and re-taken in between.
+    const { samples, sawGap } = await window.evaluate(async () => {
+      const btn = document.querySelector('#playPauseBtn');
+      const node = window.__ludiAudioNode();
+      node.currentTime = node.duration - 0.3;
+
+      const samples = [];
+      let sawGap = false;
+      const deadline = Date.now() + 4000;
+      while (Date.now() < deadline) {
+        const playing = btn.classList.contains('playing');
+        if (sawGap && playing) break;
+        if (!playing) sawGap = true;
+        samples.push(await window.electronAPI.isPlaybackPreventingSuspension());
+      }
+      return { samples, sawGap };
+    });
+
+    await expect(rowOf(window, songIds[1])).toHaveClass(/current-song/, { timeout: 3000 });
+    expect(sawGap).toBe(true);                   // the gap was actually observed
+    expect(samples.every(Boolean)).toBe(true);
+
+    await window.locator('#playPauseBtn').click();
   });
 });

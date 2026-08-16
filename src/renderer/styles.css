@@ -64,8 +64,13 @@ body.resizing-sidebar {
   display: flex;
   flex-direction: column;
   /* Keep overflow visible so header button tooltips aren't clipped; the scroll
-     lives on .playlist-list instead (which also keeps the header pinned). */
+     lives on .sidebar-scroll instead (which also keeps the header pinned). */
   overflow: visible;
+  /* A grid item defaults to min-height: auto, so the sidebar grew past its row
+     rather than being bounded by the window -- and a scroll region inside
+     something that isn't itself bounded never scrolls, it just gets taller. That
+     is how the song edit panel ended up below the bottom of the screen. */
+  min-height: 0;
   padding-top: 20px; /* Account for macOS traffic lights */
 }
 
@@ -188,10 +193,32 @@ body.resizing-sidebar {
   background-color: #094771;
 }
 
-.playlist-list {
+/* Everything you browse with -- the playlist tree, the AI sections, the tag
+   chips -- scrolls together as one region. They used to be a stack of siblings
+   with the scroll on the tree alone, which meant a long tag list had nowhere to
+   go but downward, off the end of a sidebar whose own height nothing bounded. */
+.sidebar-scroll {
   flex: 1;
   min-height: 0; /* allow the flex child to shrink so it can scroll */
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The one tooltip inside the scroll region would be clipped by it, so it hangs
+   off the button's right edge inward instead of centred and overflowing. */
+.sidebar-scroll [data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Grows into whatever the sections below it don't use, so the dead space under
+   the last playlist is still part of the tree and still clears the selection
+   when you click it -- but never shrinks below its rows, so a long tag list
+   scrolls rather than squeezing the tree. */
+.playlist-list {
+  flex: 1 0 auto;
   padding: 8px;
   position: relative; /* the sidebar's reorder drop indicator anchors here */
 }
@@ -1469,6 +1496,11 @@ body.resizing-sidebar {
   color: #858585;
   margin-bottom: 8px;
 }
+
+/* Every chip, however many auto-tagging produced: the list sits inside
+   .sidebar-scroll, so a long one costs scrolling there rather than a scrollbar
+   of its own. A second, nested scroll region in a 250px sidebar is mostly
+   scrollbar. */
 .tags-list {
   display: flex;
   flex-wrap: wrap;

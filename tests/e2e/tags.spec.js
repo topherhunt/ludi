@@ -261,36 +261,23 @@ test.describe('Tags', () => {
     await expect(window.locator('.col-tags .tag-pill', { hasText: 'deleteme' })).toHaveCount(0);
   });
 
-  test('drag-reordering tag chips persists the new order', async ({ window }) => {
+  test('hand-applied chips are alphabetical, not in the order they were created', async ({ window }) => {
     await gotoLibrary(window);
-    // Create two fresh, order-deterministic tags on the first song
     await window.locator(SONG_ROW).first().click();
     await createTag(window, 'zeta-order');
     await createTag(window, 'alpha-order');
 
-    const names = () => window.evaluate(() =>
+    const names = await window.evaluate(() =>
       Array.from(document.querySelectorAll('.qa-tags-section .tag-pill'))
         .map(el => el.dataset.tagName));
 
-    const before = await names();
-    const zi = before.indexOf('zeta-order');
-    const ai = before.indexOf('alpha-order');
-    expect(zi).toBeGreaterThanOrEqual(0);
-    expect(ai).toBeGreaterThan(zi); // alpha was created after zeta -> later position
+    // zeta was created first, so creation order would have put it first.
+    expect(names.indexOf('alpha-order')).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf('alpha-order')).toBeLessThan(names.indexOf('zeta-order'));
 
-    // Drag alpha-order onto zeta-order (drop-before), via native DnD events
-    await window.evaluate(() => {
-      const chips = Array.from(document.querySelectorAll('.qa-tags-section .tag-pill'));
-      const src = chips.find(c => c.dataset.tagName === 'alpha-order').parentElement;
-      const tgt = chips.find(c => c.dataset.tagName === 'zeta-order').parentElement;
-      const dt = new DataTransfer();
-      src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
-      tgt.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: dt }));
-    });
-    await window.waitForTimeout(250);
-
-    const after = await names();
-    expect(after.indexOf('alpha-order')).toBeLessThan(after.indexOf('zeta-order'));
+    // Nothing here is analyzer-applied, so the whole list should be sorted.
+    const byName = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+    expect(names).toEqual([...names].sort(byName));
   });
 
   test('the Tags column stretches to fill the remaining width (last column)', async ({ window }) => {

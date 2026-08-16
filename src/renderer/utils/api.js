@@ -44,7 +44,6 @@ function getAPI() {
     renameTag: async () => {},
     setTagColor: async () => {},
     deleteTag: async () => {},
-    reorderTags: async () => {},
     addTagToSongs: async () => {},
     removeTagFromSongs: async () => {},
     updateSong: async () => {},
@@ -319,11 +318,6 @@ export async function setTagColor(tagId, color) {
 /** Delete a tag and all its song associations. */
 export async function deleteTag(tagId) {
   return getAPI().deleteTag(tagId);
-}
-
-/** Rewrite tag sort order to match the given array of tag ids. */
-export async function reorderTags(orderedIds) {
-  return getAPI().reorderTags(orderedIds);
 }
 
 /** Apply a tag to the given songs. */
