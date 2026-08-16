@@ -2,7 +2,7 @@
 
 Notable changes at each version checkpoint. Dates are the release build dates.
 
-## Unreleased
+## 0.4.0 -- 2026-08-16
 
 **Fixed: the Mac went to sleep a few songs into an unattended playlist.** Ludi has held a power-save block while playing since 0.2.0, but it released that block at the end of every track and only took it again once the next one had loaded and started. That gap is a fraction of a second, and it happens once per song -- so as soon as macOS's idle timer had run out, the very next track change handed it permission to sleep, typically three or four songs after you walked away. A single long song on loop never hit it, which is why it looked like shuffle or the Bluetooth speaker was to blame; neither was. The block is now held across the gap between tracks and only released once playback has actually been stopped for ten seconds.
 
@@ -23,6 +23,8 @@ Notable changes at each version checkpoint. Dates are the release build dates.
 **Advanced Search compares every number, not just ratings.** Track # and Play count gained the same is-at-least / is-exactly / is-at-most operator Rating had, and the operator dropdown is wide enough for its labels. Choosing "Rated (any)" or "Unrated" now hides the operator instead of leaving a stale "is at least" beside a value that was always going to be tested for membership.
 
 ## 0.3.0 -- 2026-08-16
+
+A checkpoint, not a build: 0.3.0 was never tagged, so everything below first reached a `.dmg` in 0.4.0.
 
 **Star ratings.** A 1-5 star column in the song list, the thing the library was missing to answer "what do I actually like". Click a star to rate, click the same star again to clear it back to unrated, or press `1`-`5` to rate everything you have selected (`0` clears). Right-click offers the same as a menu. Ratings are searchable -- `rating>=4` for the good stuff, `rating=none` for what you haven't judged yet -- and Advanced Search gained a Rating condition with an is-at-least / is-exactly / is-at-most operator. Unrated is deliberately distinct from zero stars, so `rating<3` means "songs I don't like", not "everything I haven't got to". Settings can **import the ratings out of an existing Swinsian library**: it matches on filename first, then title, and shows you the counts and every track it couldn't place before it writes anything.
 
