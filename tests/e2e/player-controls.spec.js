@@ -37,42 +37,51 @@ test.describe('Player Controls', () => {
     expect(disabledState).toBe(false);
   });
 
-  test('should cycle through loop modes when loop button is clicked', async ({ window }) => {
-    const loopBtn = await window.locator('#loopBtn');
+  test('a single click toggles loop off/all and never lands on repeat-one', async ({ window }) => {
+    const loopBtn = window.locator('#loopBtn');
+    // A real cold click is 5s after the last one; the app reads the window from
+    // this override so the test doesn't have to wait it out.
+    const coldClick = async () => {
+      await window.waitForTimeout(60);
+      await loopBtn.click();
+    };
+    await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 50; });
 
-    const initialMode = await window.evaluate(() => {
-      return window.loopMode;
-    });
-    expect(initialMode).toBe('all');
+    expect(await window.evaluate(() => window.loopMode)).toBe('all');
+    await expect(loopBtn).toHaveClass(/active/);
+
+    await coldClick();
+    expect(await window.evaluate(() => window.loopMode)).toBe('off');
+    await expect(loopBtn.locator('i.bi-repeat')).toBeVisible();
+
+    await coldClick();
+    expect(await window.evaluate(() => window.loopMode)).toBe('all');
+    await expect(loopBtn).toHaveClass(/active/);
+
+    await window.evaluate(() => { delete window.__ludiRepeatOneWindowMs; });
+  });
+
+  test('two clicks inside the window enter repeat-one, and one click leaves it', async ({ window }) => {
+    const loopBtn = window.locator('#loopBtn');
+    await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 300; });
+    await window.waitForTimeout(350); // start cold, so click one isn't click two
+
+    // Whatever mode we start in, two quick clicks land on repeat-one.
+    await loopBtn.click();
+    await loopBtn.click();
+    expect(await window.evaluate(() => window.loopMode)).toBe('one');
+    await expect(loopBtn.locator('i.bi-repeat-1')).toBeVisible();
     await expect(loopBtn).toHaveClass(/active/);
 
     await loopBtn.click();
+    expect(await window.evaluate(() => window.loopMode)).toBe('off');
 
-    let loopMode = await window.evaluate(() => {
-      return window.loopMode;
-    });
-    expect(loopMode).toBe('one');
-    await expect(loopBtn).toHaveClass(/active/);
-
-    const loopOneIcon = loopBtn.locator('i.bi-repeat-1');
-    await expect(loopOneIcon).toBeVisible();
-
+    // Leave the app in its default loop mode for the specs that follow. Still a
+    // cold click, so drop the override only once it's done.
+    await window.waitForTimeout(350);
     await loopBtn.click();
-
-    loopMode = await window.evaluate(() => {
-      return window.loopMode;
-    });
-    expect(loopMode).toBe('off');
-
-    const loopOffIcon = loopBtn.locator('i.bi-repeat');
-    await expect(loopOffIcon).toBeVisible();
-
-    await loopBtn.click();
-
-    loopMode = await window.evaluate(() => {
-      return window.loopMode;
-    });
-    expect(loopMode).toBe('all');
+    expect(await window.evaluate(() => window.loopMode)).toBe('all');
+    await window.evaluate(() => { delete window.__ludiRepeatOneWindowMs; });
   });
 
   test('should have volume controls', async ({ window }) => {

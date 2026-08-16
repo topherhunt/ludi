@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
   getSongFilePathsForItems: (itemIds) => ipcRenderer.invoke('db:getSongFilePathsForItems', itemIds),
 
+  // Copy a selection's audio files into a folder the user picks. Same result as
+  // dragging out to the Finder, without needing the Option key.
+  copyItemsToFolder: (itemIds) => ipcRenderer.invoke('files:copyItemsToFolder', itemIds),
+
   // Native drag-out to Finder. `send`, not `invoke`: it has to run synchronously
   // inside the renderer's dragstart while the mouse is still down.
   startFileDragForItems: (itemIds) => ipcRenderer.send('drag:startForItems', itemIds),

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const db = require('./database');
 const { parseFile } = require('music-metadata');
 const { audioContentType } = require('./audio-mime');
@@ -1049,6 +1050,50 @@ ipcMain.on('drag:startForItems', (event, itemIds) => {
     : nativeImage.createEmpty();
 
   event.sender.startDrag({ files: filePaths, icon });
+});
+
+// A name in `targetDir` that is not taken yet: "Song.mp3", then "Song (2).mp3".
+// Two songs from different folders can share a filename, so this also has to
+// hold within a single export, not just against what was already there.
+function uniqueDestination(targetDir, fileName) {
+  const ext = path.extname(fileName);
+  const base = path.basename(fileName, ext);
+  let candidate = path.join(targetDir, fileName);
+  for (let n = 2; fs.existsSync(candidate); n++) {
+    candidate = path.join(targetDir, `${base} (${n})${ext}`);
+  }
+  return candidate;
+}
+
+// Copy the audio files behind a selection into a folder the user picks. This is
+// the drag-free route to what Option-dragging out to the Finder does; dragging
+// can't do it without the modifier (see renderer/utils/dragOut.js).
+ipcMain.handle('files:copyItemsToFolder', async (event, itemIds) => {
+  const filePaths = db.getSongFilePathsForItems(itemIds);
+
+  const picked = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Copy Files To',
+    message: `Choose where to copy ${filePaths.length} audio file${filePaths.length === 1 ? '' : 's'}.`,
+    buttonLabel: 'Copy Here',
+  });
+  if (picked.canceled || picked.filePaths.length === 0) return { canceled: true };
+
+  const targetDir = picked.filePaths[0];
+  const errors = [];
+  let copied = 0;
+
+  for (const filePath of filePaths) {
+    try {
+      // Async so a big selection doesn't freeze the window mid-copy.
+      await fsp.copyFile(filePath, uniqueDestination(targetDir, path.basename(filePath)));
+      copied++;
+    } catch (error) {
+      errors.push({ filePath, error: error.message });
+    }
+  }
+
+  return { canceled: false, targetDir, total: filePaths.length, copied, errors };
 });
 
 ipcMain.handle('clipboard:writeText', (event, text) => {

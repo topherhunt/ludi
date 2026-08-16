@@ -284,6 +284,16 @@ export function createAudioPlayer() {
           // file is present and the error is just a blip in playback.
           const fileExists = await window.electronAPI.fileExists(fullPath);
           if (!fileExists) {
+            // A file that isn't there won't be there in ten seconds either. Give
+            // up on it here: leaving the watchdog running let the stall recovery
+            // retry the dead track on a timer, and every retry threw another
+            // "File Not Found" alert on screen -- which, since alerts and
+            // confirms share one modal, wiped out the delete confirmation of
+            // anyone trying to remove the song from their library.
+            wantsToPlay = false;
+            stopWatchdog();
+            stopTimeUpdates();
+            setIsPlaying(false);
             setError(`Failed to load audio: ${err}`);
             showAlert(
               '<i class="bi bi-exclamation-diamond" style="margin-right: 8px;"></i>File Not Found',

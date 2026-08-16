@@ -10,6 +10,7 @@ import { RenameModal, ConfirmModal } from './Modal.jsx';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import {
   addFolder,
+  copyItemsToFolder,
   deleteItemWithFiles,
   removeItemsFromList,
   renameFolder,
@@ -166,6 +167,30 @@ export function Explorer(props) {
   const handleCopyPath = async (item) => {
     const song = await getSong(item.song_id);
     if (song) await window.electronAPI?.copyToClipboard?.(song.file_path);
+  };
+
+  // Copy the selection's audio files into a folder the user picks -- the same
+  // thing Option-dragging out to the Finder does, minus the modifier. Acts on
+  // the whole selection when the click landed inside it, on the one row when it
+  // didn't, like every other context action here.
+  const handleCopyFilesTo = async (item) => {
+    const selected = selectedItems();
+    const itemIds = selected.has(item.id) ? Array.from(selected) : [item.id];
+
+    const result = await copyItemsToFolder(itemIds);
+    if (result.canceled) return;
+
+    const failures = result.errors.length === 0
+      ? ''
+      : `<p>${result.errors.length} could not be copied:</p><p style="word-break: break-all; font-family: monospace; font-size: 12px;">${
+          result.errors.map((e) => `${e.filePath}: ${e.error}`).join('<br>')
+        }</p>`;
+    showAlert(
+      '<i class="bi bi-folder-symlink" style="margin-right: 8px;"></i>Copy Files To',
+      `<p>Copied ${result.copied} of ${result.total} file${result.total === 1 ? '' : 's'} to</p>` +
+        `<p style="word-break: break-all; font-family: monospace; font-size: 12px;">${result.targetDir}</p>` +
+        failures
+    );
   };
 
   // Show songs that sound like the right-clicked one.
@@ -429,6 +454,7 @@ export function Explorer(props) {
           onFindSimilar={handleFindSimilar}
           onRate={handleRate}
           onShowInFinder={handleShowInFinder}
+          onCopyFilesTo={handleCopyFilesTo}
           onCopyPath={handleCopyPath}
           onDelete={handleDelete}
         />

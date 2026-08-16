@@ -82,3 +82,92 @@ test.describe('Drag out to Finder', () => {
     expect(paths).toEqual([inFolder[0].absPath, inFolder[1].absPath]);
   });
 });
+
+// Dragging out needs the Option key and nothing can change that (see
+// renderer/utils/dragOut.js), so the same job has a menu command that doesn't:
+// pick a folder, and the selection's audio files are copied into it.
+test.describe('Copy files to a folder', () => {
+  let song = null; // { itemId, songId, absPath, title }
+  let targetDir = null;
+
+  // Answer the folder chooser with `dir` instead of opening it. `dialog` is the
+  // live electron object main.js calls through, so patching it lands.
+  const chooseFolder = (electronApp, dir) =>
+    electronApp.evaluate(({ dialog }, chosen) => {
+      dialog.showOpenDialog = async () => ({ canceled: chosen === null, filePaths: chosen ? [chosen] : [] });
+    }, dir);
+
+  test.beforeAll(async ({ window, electronApp }) => {
+    // Keep the real chooser to put back: later specs open their own dialogs.
+    await electronApp.evaluate(({ dialog }) => { globalThis.__realShowOpenDialog = dialog.showOpenDialog; });
+
+    const src = path.join(os.tmpdir(), `ludi-copyto-${STAMP}.m4a`);
+    fs.copyFileSync(TONE, src);
+    song = await window.evaluate(async (fp) => {
+      const result = await window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 });
+      const { songId, itemId } = result.imported[0];
+      const row = await window.electronAPI.getSong(songId);
+      return { songId, itemId, absPath: row.file_path, title: row.title };
+    }, src);
+    fs.unlinkSync(src);
+
+    targetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-export-'));
+  });
+
+  test.afterAll(async ({ window, electronApp }) => {
+    await electronApp.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.__realShowOpenDialog; });
+    await window.evaluate((i) => window.electronAPI.deleteItemWithFiles(i), song.itemId);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  });
+
+  test('the song context menu copies the file into the chosen folder', async ({ window, electronApp }) => {
+    await chooseFolder(electronApp, targetDir);
+
+    await window.keyboard.press('Escape');
+    await window.locator('.playlist-item').first().click();
+    const row = window.locator(`.tree-item-content[data-item-id="${song.itemId}"]`);
+    await expect(row).toBeVisible({ timeout: 2000 });
+    await row.click({ button: 'right' });
+
+    const command = window.locator('.context-menu .qa-copy-files-to');
+    await expect(command).toBeVisible();
+    await command.click();
+
+    // The summary says where the files went, and they are actually there.
+    const overlay = window.locator('.modal-overlay.visible');
+    await expect(overlay.locator('.modal-content')).toContainText(targetDir, { timeout: 3000 });
+    await expect(overlay.locator('.modal-content')).toContainText('Copied 1 of 1 file');
+    await overlay.locator('.modal-btn', { hasText: 'OK' }).click();
+
+    const copied = path.join(targetDir, path.basename(song.absPath));
+    expect(fs.existsSync(copied)).toBe(true);
+    expect(fs.statSync(copied).size).toBe(fs.statSync(song.absPath).size);
+  });
+
+  test('copying the same song again keeps both files instead of overwriting', async ({ window, electronApp }) => {
+    await chooseFolder(electronApp, targetDir);
+
+    const result = await window.evaluate(
+      (itemIds) => window.electronAPI.copyItemsToFolder(itemIds),
+      [song.itemId]
+    );
+    expect(result).toMatchObject({ canceled: false, targetDir, total: 1, copied: 1, errors: [] });
+
+    const base = path.basename(song.absPath, path.extname(song.absPath));
+    const ext = path.extname(song.absPath);
+    expect(fs.existsSync(path.join(targetDir, `${base}${ext}`))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, `${base} (2)${ext}`))).toBe(true);
+  });
+
+  test('cancelling the folder chooser copies nothing', async ({ window, electronApp }) => {
+    await chooseFolder(electronApp, null);
+
+    const before = fs.readdirSync(targetDir);
+    const result = await window.evaluate(
+      (itemIds) => window.electronAPI.copyItemsToFolder(itemIds),
+      [song.itemId]
+    );
+    expect(result).toEqual({ canceled: true });
+    expect(fs.readdirSync(targetDir)).toEqual(before);
+  });
+});

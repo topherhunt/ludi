@@ -71,12 +71,13 @@ export function PlayerControls(props) {
     return 'bi bi-repeat';
   });
 
-  // Get loop button title
+  // Get loop button title. Repeat-one takes a double-click, so the tooltip is
+  // the only place that gesture is discoverable.
   const loopTitle = createMemo(() => {
     const mode = loopMode();
-    if (mode === 'off') return 'Loop: Off';
-    if (mode === 'all') return 'Loop: All';
-    return 'Loop: One';
+    if (mode === 'one') return 'Loop: One song';
+    const state = mode === 'off' ? 'Loop: Off' : 'Loop: All';
+    return `${state} (double-click to repeat one song)`;
   });
 
   // Get play/pause icon

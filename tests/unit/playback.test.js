@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   isPlaying,
   setIsPlaying,
@@ -90,20 +90,60 @@ describe('Playback Store', () => {
   });
 
   describe('loopMode', () => {
+    // A cold click is one that follows a gap longer than the double-click
+    // window, which is what every real click after a pause looks like.
+    const coldClick = () => {
+      vi.setSystemTime(new Date(Date.now() + 6000));
+      cycleLoopMode();
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-16T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should default to off', () => {
       expect(loopMode()).toBe('off');
     });
 
-    it('should cycle through modes: off -> all -> one -> off', () => {
-      expect(loopMode()).toBe('off');
-
-      cycleLoopMode();
+    it('toggles off <-> all on single clicks, never landing on repeat-one', () => {
+      coldClick();
       expect(loopMode()).toBe('all');
 
+      coldClick();
+      expect(loopMode()).toBe('off');
+
+      coldClick();
+      expect(loopMode()).toBe('all');
+    });
+
+    it('enters repeat-one on a second click inside the window', () => {
+      coldClick();
+      expect(loopMode()).toBe('all');
+
+      vi.setSystemTime(new Date(Date.now() + 400));
+      cycleLoopMode();
+      expect(loopMode()).toBe('one');
+    });
+
+    it('does not enter repeat-one when the second click is too late', () => {
+      coldClick();
+      vi.setSystemTime(new Date(Date.now() + 5001));
+      cycleLoopMode();
+      expect(loopMode()).toBe('off');
+    });
+
+    it('leaves repeat-one on a single click', () => {
+      coldClick();
+      vi.setSystemTime(new Date(Date.now() + 100));
       cycleLoopMode();
       expect(loopMode()).toBe('one');
 
-      cycleLoopMode();
+      coldClick();
       expect(loopMode()).toBe('off');
     });
   });

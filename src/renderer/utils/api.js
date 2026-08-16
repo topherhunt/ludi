@@ -28,6 +28,7 @@ function getAPI() {
     updateFolderExpanded: async () => true,
     deleteItemWithFiles: async () => ({ totalFiles: 0, deletedFiles: 0, errors: [] }),
     getSongFilePathsForItems: async () => [],
+    copyItemsToFolder: async () => ({ canceled: true }),
     startFileDragForItems: () => {},
     createPlaylist: async (title) => ({ id: 0, title, is_subfolder: 0, sidebar_position: 0 }),
     deletePlaylist: async () => {},
@@ -213,6 +214,17 @@ export async function updateFolderExpanded(listId, isExpanded) {
  */
 export async function deleteItemWithFiles(itemId) {
   return getAPI().deleteItemWithFiles(itemId);
+}
+
+/**
+ * Copy the audio files behind a selection into a folder the user picks. The
+ * folder chooser opens in the main process, so a cancelled chooser is a normal
+ * result, not an error.
+ * @param {number[]} itemIds
+ * @returns {Promise<{ canceled: boolean, targetDir?: string, total?: number, copied?: number, errors?: Array }>}
+ */
+export async function copyItemsToFolder(itemIds) {
+  return getAPI().copyItemsToFolder(itemIds);
 }
 
 /**

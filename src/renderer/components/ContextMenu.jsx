@@ -273,6 +273,21 @@ export function ContextMenu(props) {
         </div>
       </Show>
 
+      <div class="context-menu-separator" />
+
+      {/* Copy the audio files out to a folder. Works on folders too -- they
+          export everything inside them, exactly like Option-dragging out. */}
+      <div
+        class="context-menu-item qa-copy-files-to"
+        onClick={() => {
+          const item = props.item;
+          props.onClose?.();
+          props.onCopyFilesTo?.(item);
+        }}
+      >
+        {isSeedingFromSelection() ? `Copy these ${selectedItems().size} to a folder...` : 'Copy files to a folder...'}
+      </div>
+
       {/* Delete. In a playlist this only removes the placement, so say so. */}
       <div
         class="context-menu-item"

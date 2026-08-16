@@ -31,7 +31,7 @@ Deleting a song moves its audio file to the macOS Trash rather than destroying i
 
 Requires an Apple Silicon Mac (M1 or later) running macOS 12 or later. There is no Intel build.
 
-1. Download `Ludi-<version>-arm64.dmg` from the [Releases page](../../releases).
+1. Download `Ludi-<version>-arm64.dmg` from the [Releases page](https://github.com/topherhunt/ludi/releases).
 2. Open the `.dmg` and drag **Ludi** into your Applications folder.
 3. The first time you open it, **Control-click (or right-click) Ludi in Applications and choose Open**, then confirm in the dialog. Double-clicking it the normal way will be blocked.
 
@@ -117,15 +117,15 @@ git push && git push origin v0.4.0
 The app runs in one of three isolated modes, so dev/test/live never share a database or music folder:
 
 | Mode | Trigger | Database (`~/.ludi/`) | Music library (`~/Music/`) |
-|------|---------|-----------------------|----------------------------|
+| --- | --- | --- | --- |
 | live | packaged `.dmg` | `ludi-library-live.sqlite` | `Ludi Library` |
-| dev  | `npm run dev`, `npm start` | `ludi-library-dev.sqlite` | `Ludi Library Dev` |
+| dev | `npm run dev`, `npm start` | `ludi-library-dev.sqlite` | `Ludi Library Dev` |
 | test | `npm test` (reset each run) | `ludi-library-test.sqlite` | `Ludi Library Test` |
 
 ### The SQLite DB schema
 
-- `lists`
-  *Represents a playlist (such as the mandatory "Main Library" list) or a subfolder within a list. The app auto-creates one mandatory playlist with id=0, position=0, and title="Main Library". For now, root-level playlists will be ordered in the sidebar using the `sidebar_position` field but long-term we may need a `sidebar_items` table.*
+- `lists`\
+  *Represents a playlist (such as the mandatory "Main Library" list) or a subfolder within a list. The app auto-creates one mandatory playlist with id=0, position=0, and title="Main Library". For now, root-level playlists will be ordered in the sidebar using the* `sidebar_position` *field but long-term we may need a* `sidebar_items` *table.*
   - id
   - title
   - is_subfolder (not null)
@@ -133,7 +133,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - inserted_at
   - updated_at
 
-- `list_items`
+- `list_items`\
   *Represents a song's or folder's placement in a playlist or subfolder.*
   - id
   - parent_list_id (FK not null, represents the parent list/folder)
@@ -166,7 +166,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - inserted_at
   - updated_at
 
-- `song_tags`
+- `song_tags`\
   *Song<->tag associations (many-to-many). PK (song_id, tag_id).*
   - song_id (FK not null)
   - tag_id (FK not null, indexed)
@@ -174,7 +174,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - confidence (real -- the model's score, kept for sorting and for explaining why a tag is there)
   - inserted_at
 
-- `saved_searches`
+- `saved_searches`\
   *A named query pinned to the sidebar. Stored as the query string, not a resolved song list, so a song that acquires the right tags next month joins it on its own.*
   - id
   - name (text not null)
@@ -183,7 +183,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - inserted_at
   - updated_at
 
-- `song_analysis`
+- `song_analysis`\
   *One row per analyzed song.*
   - song_id (PK, FK)
   - model_version (text not null)
@@ -194,7 +194,7 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - cluster_id (int, indexed -- cached k-means assignment)
   - analyzed_at
 
-- `analysis_queue`
+- `analysis_queue`\
   *Work list for the background analyzer, persisted so a pass that takes hours survives quitting the app.*
   - song_id (PK, FK)
   - state (text not null -- 'pending' | 'running' | 'failed')
@@ -202,8 +202,8 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - attempts (int not null, default 0 -- after 3 the song stays as 'failed', visible and retryable, but stops being handed out)
   - queued_at
 
-- `clusters`
-  *Names for the auto-generated groups. `id` is the same number as `song_analysis.cluster_id`, so membership lives with the analysis and only the name lives here -- which is what lets a rename survive a re-clustering.*
+- `clusters`\
+  *Names for the auto-generated groups.* `id` *is the same number as* `song_analysis.cluster_id`*, so membership lives with the analysis and only the name lives here -- which is what lets a rename survive a re-clustering.*
   - id
   - name (text not null)
   - inserted_at

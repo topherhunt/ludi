@@ -140,14 +140,31 @@ function toggleShuffle() {
   }
 }
 
+// Repeat-one is the mode nobody means to be in. It used to sit in the middle of
+// a three-way cycle, so a single click walking from "loop all" to "off" landed
+// on it, and it reads as an ordinary loop until you notice the same song coming
+// round for the third time. Entering it now takes two clicks inside this window,
+// like a double-click; one cold click only ever toggles loop-all on or off.
+const REPEAT_ONE_WINDOW_MS = 5000;
+
+// Tests shorten the window so the cold-click path doesn't cost them five
+// seconds, the same way they shorten the stall timeout.
+const repeatOneWindowMs = () =>
+  (typeof window !== 'undefined' && window.__ludiRepeatOneWindowMs) || REPEAT_ONE_WINDOW_MS;
+
+let lastLoopClickAt = 0;
+
 /**
- * Cycle through loop modes: off -> all -> one -> off
+ * Loop button: off <-> all on a single click, and repeat-one only on a second
+ * click within REPEAT_ONE_WINDOW_MS. Leaving repeat-one is always one click.
  */
 function cycleLoopMode() {
+  const secondClick = Date.now() - lastLoopClickAt < repeatOneWindowMs();
+  lastLoopClickAt = Date.now();
   setLoopMode((prev) => {
-    if (prev === 'off') return 'all';
-    if (prev === 'all') return 'one';
-    return 'off';
+    if (prev === 'one') return 'off';
+    if (secondClick) return 'one';
+    return prev === 'off' ? 'all' : 'off';
   });
 }
 
@@ -241,6 +258,9 @@ function clearPlayback() {
   setShuffledIndices([]);
   setShuffleEnabled(false);
   setLoopMode('off');
+  // Otherwise the first click after a reset could count as the second half of a
+  // double-click from before it.
+  lastLoopClickAt = 0;
 }
 
 // Expose for testing
