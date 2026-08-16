@@ -2,10 +2,10 @@ const { test: base, _electron: electron } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const { startViteServer } = require('../../scripts/vite-server');
 
 // Shared state across all tests
-let viteProcess = null;
+let viteServer = null;
 let electronApp = null;
 let window = null;
 const consoleMessages = [];
@@ -27,44 +27,16 @@ async function setupElectronApp() {
     fs.rmSync(testLibraryPath, { recursive: true, force: true });
   }
 
-  // Start Vite dev server in its own process group so teardown can kill the whole
-  // tree (npm -> vite -> esbuild). A bare SIGTERM to the npm shell leaks the rest.
-  viteProcess = spawn('npm', ['run', 'vite'], {
-    cwd: path.join(__dirname, '../..'),
-    stdio: 'pipe',
-    shell: true,
-    detached: true
+  // The test suite gets its own dev server on its own port, reaping anything a
+  // previous run left behind. See scripts/vite-server.js -- a killed test run
+  // used to leak a fully functional Vite server every time.
+  viteServer = await startViteServer({
+    role: 'test',
+    onOutput: (text) => console.log('[Vite]:', text),
   });
-
-  // Wait for Vite to report its actual port. Vite drifts off 5173 when it's busy
-  // (e.g. another project's dev server), so we read the real port from its output
-  // and hand it to Electron rather than assuming 5173.
-  const vitePort = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Vite server did not start within 30 seconds'));
-    }, 30000);
-
-    viteProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      console.log('[Vite]:', output);
-      // Vite colorizes output with ANSI escapes, so strip them before matching.
-      const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
-      const match = clean.match(/Local:\s+https?:\/\/localhost:(\d+)/);
-      if (match) {
-        clearTimeout(timeout);
-        setTimeout(() => resolve(match[1]), 1000);
-      }
-    });
-
-    viteProcess.stderr.on('data', (data) => {
-      console.error('[Vite stderr]:', data.toString());
-    });
-
-    viteProcess.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
+  // Vite reports "ready" a beat before it will serve the first module.
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const vitePort = String(viteServer.port);
 
   // Launch Electron in dev mode
   electronApp = await electron.launch({
@@ -95,6 +67,19 @@ async function setupElectronApp() {
   await window.waitForLoadState('domcontentloaded');
   await window.waitForTimeout(500);
 
+  // A clean slate has to include the UI state the renderer persists, not just
+  // the database. Sidebar width and column visibility live in localStorage,
+  // which survives in the Electron profile forever -- so the run that resized
+  // the sidebar moved every LATER run's columns 30px right, far enough that the
+  // centre of a song row (where `row.click()` lands) stopped being dead space in
+  // the rating column and became a star. Clicking a star deliberately doesn't
+  // change the selection, so a dozen specs across tags, song-edit-panel and
+  // similarity started failing on a machine that had once run sidebar-resize.
+  await window.evaluate(() => localStorage.clear());
+  await window.reload();
+  await window.waitForLoadState('domcontentloaded');
+  await window.waitForTimeout(500);
+
   // Set volume low to avoid disruption during tests
   await window.evaluate(() => {
     const volumeSlider = document.getElementById('volumeSlider');
@@ -114,16 +99,10 @@ async function teardownElectronApp() {
     window = null;
   }
 
-  if (viteProcess) {
-    // Kill the whole process group (npm -> vite -> esbuild); killing only the npm
-    // shell would orphan the real Vite/esbuild and leak ports across runs.
-    try {
-      process.kill(-viteProcess.pid, 'SIGTERM');
-    } catch (err) {
-      viteProcess.kill('SIGTERM');
-    }
+  if (viteServer) {
+    viteServer.stop();
     await new Promise(resolve => setTimeout(resolve, 500));
-    viteProcess = null;
+    viteServer = null;
   }
 }
 

@@ -65,7 +65,8 @@ npm install
 npm start
 
 # Run in development mode (Vite live reload + DevTools). Reflects source changes
-# immediately -- prefer this while iterating on the UI.
+# immediately -- prefer this while iterating on the UI. Serves on port 5273
+# (tests use 5274), and reaps any dev server a previous run left behind.
 npm run dev
 
 # Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)
@@ -87,6 +88,17 @@ The integration tests use Playwright to launch the app, verify the UI is display
 - essentia.js (mel-spectrograms) + ONNX Runtime Web (MusiCNN inference) for audio analysis, both running as WASM in a hidden renderer window
 - umap-js for projecting the analysis embeddings down to the 2D music map
 - Thorough integration tests using Playwright for Electron
+
+### What bounds the audio analysis
+
+A library-wide pass is the most memory-hungry thing Ludi does, and it has to stay bounded by constants rather than by how big your library is. Every number lives in `src/renderer/analysis/limits.js`:
+
+- **Workers**: `min(6, budget / 256 MB, cores - 2, songs left to do)`, where the budget is `min(1024 MB, 12% of system RAM)`. On a 16 GB Mac that's 4 workers holding at most 1 GB between them, whatever the queue looks like.
+- **Worker lifetime**: retired and replaced after 200 tracks, or as soon as it reports an essentia heap over 192 MB, or on any error at all. An Emscripten `abort()` poisons the WASM module permanently, so a worker that has failed once will fail for every song after it -- retiring it is what stops one bad track becoming thousands of failures.
+- **Per track**: files over 512 MB are skipped, and only the first 10 minutes of any track is analyzed (long enough for the fingerprint to be stable, short enough to cap the spectrogram).
+- **Decoding is serialized.** Decoding is the page's own allocation, not a worker's, and running six at once was enough to push the renderer over on its own.
+
+The pass reports the essentia heap size with every result, which is how the pool notices a worker growing. That growth used to be guaranteed: essentia.js's own `computeFrameWise()` leaks three WASM handles per frame, about 35 MB per four-minute track, and an Emscripten heap never shrinks. `src/renderer/analysis/mel-spectrogram.js` is that function rewritten to free what it allocates, with `tests/unit/mel-spectrogram.test.js` driving a real essentia build to prove both that the output is byte-identical and that the heap comes back flat.
 
 ### Releasing
 

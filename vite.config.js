@@ -54,8 +54,14 @@ export default defineConfig({
       },
     },
   },
+  // scripts/vite-server.js passes --port and --strictPort, which override this;
+  // these are the fallback for a bare `npm run vite`. Ludi deliberately does not
+  // use 5173 -- that is the port every Vite project on the machine competes for,
+  // and drifting onto the next free port is how orphaned dev servers used to
+  // accumulate unnoticed.
   server: {
-    port: 5173,
+    port: 5273,
+    strictPort: true,
   },
   resolve: {
     alias: {

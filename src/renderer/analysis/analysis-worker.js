@@ -13,6 +13,14 @@
  *
  * essentia.js has no TensorFlow dependency, which is what lets us pair a GPL
  * feature extractor with an MIT inference runtime.
+ *
+ * Memory is the thing to be careful about here. essentia.js is Emscripten, so
+ * every value that crosses the WASM boundary is a handle into a heap that only
+ * ever grows, and its own computeFrameWise() leaks three of them per frame --
+ * about 35 MB per four-minute track, per worker, until the module hits its
+ * hard 2 GB ceiling and aborts. mel-spectrogram.js is that function rewritten
+ * to free what it allocates; this worker reports the heap size with every
+ * result so the pool can throw away a worker that starts growing anyway.
  */
 
 import { EssentiaWASM } from 'essentia.js/dist/essentia-wasm.es.js';
@@ -24,6 +32,7 @@ import {
   SAMPLE_RATE, PATCH_SIZE, MEL_BANDS, PATCH_BATCH_SIZE,
   EMBEDDING_DIMS, ACTIVATION_DIMS, HEAD_FILES, AXIS_SPECS,
 } from './model-config.js';
+import { melSpectrogram } from './mel-spectrogram.js';
 
 // Threads would need SharedArrayBuffer, which needs cross-origin isolation
 // headers we don't control under file://. We get our parallelism from running
@@ -66,6 +75,9 @@ async function initialize(baseUrl) {
   );
   heads = await Promise.all(HEAD_FILES.map((name) => loadHead(baseUrl, name)));
 }
+
+/** Size of the essentia WASM heap, which is what actually leaks when it leaks. */
+const heapMb = () => EssentiaWASM.HEAPU8.length / (1024 * 1024);
 
 /**
  * Average the model's per-patch outputs over the whole track.
@@ -147,10 +159,13 @@ async function runHeads(embedding) {
 /** Analyze one decoded track. `samples` is mono float32 at SAMPLE_RATE. */
 async function analyze(samples) {
   const t0 = performance.now();
-  const features = extractor.computeFrameWise(samples);
+  let spectrogram = melSpectrogram(extractor, samples);
   const t1 = performance.now();
-  const { embedding, activations, numPatches } = await runMainModel(features.melSpectrum);
+  const { embedding, activations, numPatches } = await runMainModel(spectrogram);
   const t2 = performance.now();
+  // The spectrogram is the largest thing this worker holds (~7 MB for a
+  // ten-minute track); the heads only need the pooled embedding.
+  spectrogram = null;
   const axes = await runHeads(embedding);
   const t3 = performance.now();
 
@@ -159,6 +174,7 @@ async function analyze(samples) {
     activations,
     axes,
     numPatches,
+    heapMb: heapMb(),
     timings: { mel: t1 - t0, infer: t2 - t1, heads: t3 - t2 },
   };
 }

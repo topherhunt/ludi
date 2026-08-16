@@ -1706,6 +1706,11 @@ body.resizing-sidebar {
   color: #858585;
   margin-bottom: 6px;
 }
+/* Same red as the failure count in Settings, which is where the reasons are. */
+.analysis-progress-failed {
+  margin-left: auto;
+  color: #f48771;
+}
 .analysis-progress-track {
   height: 4px;
   border-radius: 2px;

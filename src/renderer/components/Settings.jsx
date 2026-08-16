@@ -108,7 +108,12 @@ export function Settings() {
     setColTags(columnSettings.visibility.tags);
 
     setAnalysis(await window.electronAPI.getAnalysisProgress());
-    window.electronAPI.onAnalysisProgress(setAnalysis);
+    window.electronAPI.onAnalysisProgress(async (progress) => {
+      setAnalysis(progress);
+      // An open failure list keeps up with the pass rather than freezing at
+      // whatever it said when it was opened.
+      if (failures().length > 0) setFailures(await window.electronAPI.getFailedAnalyses());
+    });
     window.electronAPI.onAnalysisComplete(({ tags }) => {
       const summary = tags.skipped
         ? `<p>Analysis finished, but tags weren't generated: ${tags.skipped}.</p>`
@@ -397,21 +402,21 @@ export function Settings() {
             <Show
               when={analysis().running}
               fallback={
-                <span>
-                  {analysis().analyzed} of {analysis().total} songs analyzed
-                  <Show when={analysis().failed > 0}>
-                    {' '}&middot;{' '}
-                    <button class="analysis-failed qa-show-failures" onClick={handleShowFailures}>
-                      {analysis().failed} failed
-                    </button>
-                  </Show>
-                </span>
+                <span>{analysis().analyzed} of {analysis().total} songs analyzed</span>
               }
             >
               <span>
                 Analyzing... {analysis().analyzed} of {analysis().total} done,
                 {' '}{analysis().pending} to go
               </span>
+            </Show>
+            {/* Outside the Show on purpose: a pass that is failing every song
+                should say so on the first one, not hours later when it ends. */}
+            <Show when={analysis().failed > 0}>
+              {' '}&middot;{' '}
+              <button class="analysis-failed qa-show-failures" onClick={handleShowFailures}>
+                {analysis().failed} failed
+              </button>
             </Show>
           </div>
 

@@ -29,6 +29,14 @@ export function AnalysisProgress() {
         <div class="analysis-progress-label">
           <i class="bi bi-soundwave" />
           <span class="qa-analysis-progress-text">Analyzing {done()} of {goal()}</span>
+          {/* A pass that is failing should say so on the first failure. Waiting
+              until the end means hours spent watching a bar fill for nothing --
+              Settings has the reason for each one. */}
+          <Show when={progress().failed > 0}>
+            <span class="analysis-progress-failed qa-analysis-failed-count">
+              {progress().failed} failed
+            </span>
+          </Show>
         </div>
         <div class="analysis-progress-track">
           <div class="analysis-progress-fill" style={{ width: `${percent()}%` }} />

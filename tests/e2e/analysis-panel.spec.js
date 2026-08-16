@@ -100,6 +100,30 @@ test.describe('Analysis progress reporting', () => {
     await expect(window.locator('.qa-analysis-progress')).toHaveCount(0);
   });
 
+  test('the sidebar strip reports failures as they happen, not at the end', async ({ window, electronApp }) => {
+    const push = (payload) => electronApp.evaluate(async ({ BrowserWindow }, progress) => {
+      const main = BrowserWindow.getAllWindows()
+        .find((w) => !w.isDestroyed() && w.webContents.getURL().includes('index.html'));
+      main.webContents.send('analysis:progress', progress);
+    }, payload);
+
+    // A pass whose very first song failed. Nothing about that should have to
+    // wait for the other 3900 -- that is hours of watching a bar fill up for
+    // nothing before finding out.
+    await push({ total: 4000, analyzed: 0, pending: 3999, failed: 1, running: true });
+    await expect(window.locator('.qa-analysis-failed-count')).toHaveText('1 failed');
+
+    await push({ total: 4000, analyzed: 2, pending: 3900, failed: 98, running: true });
+    await expect(window.locator('.qa-analysis-failed-count')).toHaveText('98 failed');
+
+    // No failures, no scolding.
+    await push({ total: 4000, analyzed: 100, pending: 3900, failed: 0, running: true });
+    await expect(window.locator('.qa-analysis-failed-count')).toHaveCount(0);
+
+    await push({ total: 40, analyzed: 10, pending: 0, failed: 0, running: false });
+    await expect(window.locator('.qa-analysis-progress')).toHaveCount(0);
+  });
+
   test('Settings reports the queue\'s own counts and lists what failed', async ({ window, electronApp }) => {
     const stats = await window.evaluate(() => window.electronAPI.getAnalysisProgress());
     expect(stats.failed).toBe(1);
@@ -121,6 +145,36 @@ test.describe('Analysis progress reporting', () => {
 
     await settings.locator('.qa-show-failures').click();
     await expect(settings.locator('.qa-failure-list')).toHaveCount(0);
+
+    await settings.close();
+  });
+
+  test('Settings surfaces failures while the pass is still running', async ({ electronApp }) => {
+    const settings = await openSettings(electronApp);
+
+    const push = (payload) => electronApp.evaluate(async ({ BrowserWindow }, progress) => {
+      const target = BrowserWindow.getAllWindows()
+        .find((w) => !w.isDestroyed() && w.webContents.getURL().includes('settings.html'));
+      target.webContents.send('analysis:progress', progress);
+    }, payload);
+
+    // The count and the list used to live only in the not-running branch, so a
+    // pass that was failing every single song looked perfectly healthy until it
+    // finished hours later. Push until it lands -- a window that has just opened
+    // may not have subscribed yet.
+    await expect(async () => {
+      await push({ total: 4000, analyzed: 292, pending: 99, failed: 3609, running: true });
+      await expect(settings.locator('.qa-analysis-status')).toContainText('Analyzing... 292 of 4000 done', { timeout: 500 });
+    }).toPass({ timeout: 5000 });
+    await expect(settings.locator('.qa-show-failures')).toHaveText('3609 failed');
+
+    await settings.locator('.qa-show-failures').click();
+    await expect(settings.locator(`.qa-failure-row[data-song-id="${songId}"]`))
+      .toContainText(FAILURE_MESSAGE);
+
+    // Stopping is still the offer while it runs; retrying comes after.
+    await expect(settings.locator('.qa-stop-analysis')).toBeVisible();
+    await expect(settings.locator('.qa-retry-analysis')).toHaveCount(0);
 
     await settings.close();
   });

@@ -17,9 +17,10 @@ let settingsWindow;
 
 // Check if running in development mode (with Vite dev server)
 const isDev = process.env.VITE_DEV === 'true';
-// Vite picks the next free port if 5173 is taken; the launcher passes the actual
-// port via VITE_PORT so we never load a stray server squatting on 5173.
-const devPort = process.env.VITE_PORT || '5173';
+// The launcher passes the port it started Vite on via VITE_PORT, so we never
+// load a stray dev server that happens to be listening somewhere else. See
+// scripts/vite-server.js for the ports and why they aren't 5173.
+const devPort = process.env.VITE_PORT || '5273';
 
 // Suppress Electron security warnings in dev mode (CSP warnings from Vite's eval usage)
 if (isDev) {

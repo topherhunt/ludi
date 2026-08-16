@@ -37,4 +37,17 @@ test.describe('Sidebar resize', () => {
     const stored = parseInt(await window.evaluate(() => localStorage.getItem('ludi-sidebar-width')), 10);
     expect(stored).toBe(after);
   });
+
+  // The width this test leaves behind moves every column in the song rows, and
+  // the specs that run after it click the centre of a row to select a song --
+  // which at the wrong width lands on a rating star instead of dead space, and
+  // rating deliberately doesn't change the selection. Put the sidebar back.
+  test.afterAll(async () => {
+    const { setupElectronApp } = require('./fixtures');
+    const { window } = await setupElectronApp();
+    await window.evaluate(() => localStorage.removeItem('ludi-sidebar-width'));
+    await window.reload();
+    await window.waitForLoadState('domcontentloaded');
+    await window.waitForTimeout(500);
+  });
 });

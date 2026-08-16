@@ -21,6 +21,7 @@
  * to know how long a track takes.
  */
 
+const os = require('os');
 const path = require('path');
 const { BrowserWindow, ipcMain } = require('electron');
 const db = require('./database');
@@ -89,9 +90,13 @@ function createAnalyzerWindow(pending) {
     },
   });
 
-  // The page sizes its worker pool from `pending` -- no point loading six copies
-  // of the model to analyze one song.
-  const query = `?pending=${pending}`;
+  // The page sizes its worker pool from these two: `pending`, because there's no
+  // point loading six copies of the model to analyze one song, and the machine's
+  // RAM, because the pass must claim a share of the machine rather than as much
+  // as it can get. The policy that turns them into a worker count lives in
+  // src/renderer/analysis/limits.js; main only reports the hardware fact.
+  const totalMemoryMb = Math.floor(os.totalmem() / (1024 * 1024));
+  const query = `?pending=${pending}&totalMemoryMb=${totalMemoryMb}`;
   if (config.isDev) {
     window.loadURL(`http://localhost:${config.devPort}/analyzer.html${query}`);
   } else {
