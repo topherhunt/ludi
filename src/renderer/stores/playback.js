@@ -159,13 +159,21 @@ let lastLoopClickAt = 0;
  * click within REPEAT_ONE_WINDOW_MS. Leaving repeat-one is always one click.
  */
 function cycleLoopMode() {
-  const secondClick = Date.now() - lastLoopClickAt < repeatOneWindowMs();
-  lastLoopClickAt = Date.now();
-  setLoopMode((prev) => {
-    if (prev === 'one') return 'off';
-    if (secondClick) return 'one';
-    return prev === 'off' ? 'all' : 'off';
-  });
+  const now = Date.now();
+  const secondClick = now - lastLoopClickAt < repeatOneWindowMs();
+  const prev = loopMode();
+
+  let next;
+  if (prev === 'one') next = 'off';
+  else if (secondClick) next = 'one';
+  else next = prev === 'off' ? 'all' : 'off';
+
+  // Clicks pair up rather than chain: a click that completed a pair, or that
+  // just left repeat-one, disarms, so the click after it starts cold. Staying
+  // armed on every click made steady clicking flip off <-> one forever, since
+  // each click then counted as the second half of the one before it.
+  lastLoopClickAt = next === 'one' || prev === 'one' ? 0 : now;
+  setLoopMode(next);
 }
 
 /**

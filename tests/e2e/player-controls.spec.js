@@ -84,6 +84,34 @@ test.describe('Player Controls', () => {
     await window.evaluate(() => { delete window.__ludiRepeatOneWindowMs; });
   });
 
+  test('clicking steadily walks all three loop modes, at the real 5s window', async ({ window }) => {
+    // No override here on purpose: back-to-back clicks are all well inside the
+    // real window, which is exactly how the button used to get stuck flipping
+    // off <-> repeat-one and never showing loop-all again.
+    const loopBtn = window.locator('#loopBtn');
+
+    // Start from repeat-one, which is the one mode that leaves no half-finished
+    // double-click armed, so the walk below starts from a known state.
+    await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 50; });
+    await window.waitForTimeout(60);
+    await loopBtn.click();
+    await loopBtn.click();
+    expect(await window.evaluate(() => window.loopMode)).toBe('one');
+    await window.evaluate(() => { delete window.__ludiRepeatOneWindowMs; });
+
+    const modes = [];
+    for (let i = 0; i < 6; i++) {
+      await loopBtn.click();
+      modes.push(await window.evaluate(() => window.loopMode));
+    }
+    expect(modes).toEqual(['off', 'all', 'one', 'off', 'all', 'one']);
+
+    // Back to the default mode for the specs that follow.
+    await loopBtn.click();
+    await loopBtn.click();
+    expect(await window.evaluate(() => window.loopMode)).toBe('all');
+  });
+
   test('should have volume controls', async ({ window }) => {
     const volumeSlider = await window.locator('#volumeSlider');
     await expect(volumeSlider).toBeVisible();

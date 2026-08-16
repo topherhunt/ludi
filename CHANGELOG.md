@@ -2,6 +2,10 @@
 
 Notable changes at each version checkpoint. Dates are the release build dates.
 
+## 0.5.1 -- 2026-08-16
+
+**Fixed: the loop button got stuck between off and repeat-one.** 0.5.0's double-click guard armed its timer on every click rather than on every other one, so clicks chained instead of pairing: once you had clicked twice, every further click inside the five-second window counted as the second half of the one before it. Clicking steadily went off, loop-all, repeat-one, off, repeat-one, off, and loop-all never came back. Clicks pair up now -- a click that completes a pair, or that leaves repeat-one, starts the next one cold -- so clicking steadily walks all three modes and a single click after a pause still never lands on repeat-one.
+
 ## 0.5.0 -- 2026-08-16
 
 **Repeat-one is behind a double-click now.** The loop button used to cycle off -> all -> one, so walking from "loop all" back to "off" landed on repeat-one on the way past, and repeat-one looks exactly like an ordinary loop until you notice you have heard the same song three times. A single click now toggles between off and loop-all only. Repeat-one takes a second click within five seconds; leaving it is always one click. The tooltip says so, since with repeat-one off the cycle there is nowhere else to find it.

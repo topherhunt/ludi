@@ -146,6 +146,19 @@ describe('Playback Store', () => {
       coldClick();
       expect(loopMode()).toBe('off');
     });
+
+    it('walks all three modes when clicked steadily inside the window', () => {
+      // Clicks pair up rather than chain. Without that, every click after the
+      // first counted as a second click and the button flipped off <-> one,
+      // never showing loop-all again.
+      const modes = [];
+      for (let i = 0; i < 6; i++) {
+        vi.setSystemTime(new Date(Date.now() + 1000));
+        cycleLoopMode();
+        modes.push(loopMode());
+      }
+      expect(modes).toEqual(['all', 'one', 'off', 'all', 'one', 'off']);
+    });
   });
 
   describe('playlist navigation', () => {
