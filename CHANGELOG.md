@@ -2,6 +2,16 @@
 
 Notable changes at each version checkpoint. Dates are the release build dates.
 
+## 0.5.0 -- 2026-08-16
+
+**Repeat-one is behind a double-click now.** The loop button used to cycle off -> all -> one, so walking from "loop all" back to "off" landed on repeat-one on the way past, and repeat-one looks exactly like an ordinary loop until you notice you have heard the same song three times. A single click now toggles between off and loop-all only. Repeat-one takes a second click within five seconds; leaving it is always one click. The tooltip says so, since with repeat-one off the cycle there is nowhere else to find it.
+
+**Fixed: a song whose file you deleted or renamed in the Finder could not be deleted from the library.** Playing it failed to load, which is expected, but the stall recovery kept retrying the dead track every few seconds and each retry raised another "File Not Found" alert. Alerts and confirmations share one modal, so every retry wiped out the delete confirmation before you could answer it, and the song could not be removed. A failed load whose file genuinely is not on disk now gives up instead of retrying: one alert, and the row deletes normally.
+
+**New: "Copy files to a folder..." in the right-click menu.** Pick a folder (the chooser can make a new one) and the selected songs' audio files are copied into it -- the whole selection when the right-click landed inside it, the one row when it didn't. Folders export everything inside them, a song reachable two ways is still copied once, and a name that is already taken becomes `Song (2).m4a` rather than an overwrite. A summary says how many of how many landed and where, and lists anything that failed.
+
+This is the drag-out-to-the-Finder feature without the drag. Dragging a selection out to the Desktop still works but still needs the Option key held, and that is a platform limit rather than a preference: Electron's native file drag has to cancel the HTML5 drag to start, so a single gesture can be an in-app drag or a file export, never both. Making the plain drag export files was tried and it takes out dropping songs onto playlists, reordering, and dropping into folders.
+
 ## 0.4.0 -- 2026-08-16
 
 **Fixed: the Mac went to sleep a few songs into an unattended playlist.** Ludi has held a power-save block while playing since 0.2.0, but it released that block at the end of every track and only took it again once the next one had loaded and started. That gap is a fraction of a second, and it happens once per song -- so as soon as macOS's idle timer had run out, the very next track change handed it permission to sleep, typically three or four songs after you walked away. A single long song on loop never hit it, which is why it looked like shuffle or the Bluetooth speaker was to blame; neither was. The block is now held across the gap between tracks and only released once playback has actually been stopped for ten seconds.
