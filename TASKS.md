@@ -1,23 +1,22 @@
 *See also the wishlist in [readme.md](http://readme.md).*
 
-Working:
-
-- Currently the Loop icon toggles between 3 states: off, on, and repeat-1. If you are NOT on repeat-1, I want you to have to click the toggle button twice within a 5-second span in order to activate it. So clicking the loop button once (after a 5+s cooloff) will never cause you to enter Repeat 1 mode. Otherwise it's too confusing.
-- Fix bug: if I deleted or renamed a song file on disk, then I try to delete it in the Main Library, I can't delete it. JS error: `Error loading audio: 4 Path: ludi-audio:///Users/topher/Music/Ludi Library/Unknown/Unknown/1 hour handpan music - Malte Marten.mp3?_=93`
-- Support dragging a selection of songs/items out to desktop or a Finder folder. Doing so copies each included-in-selection audiofile into that target folder.
-  - Claude said that it fixed or implemented this, but possibly I have to hold down the option key, but when I tried it it wasn't working, but I figured maybe that was just because it's in the Dev Electron app and I need to wait until I actually install the app on my computer into my applications folder before I can actually test it properly. But I should circle back to this at some point.
-  - EDIT: I'm circling back, and confirm that this is not working in vivo with the released / built app. I haven't tried an option keymodifier but I don't want that to be required anyway. I wan drag-and-drop out of Ludi into desktop, a finder folder, etc to cause the selected files to be copied to that location.
+- [ ] Check if bug still occurs: when you put songs into a folder, then you select everything & delete, songs within the subfolder do NOT have their audiofiles deleted.
+- [ ] When I have a long list of search results, some weird delay bug is happening: if I scroll down a ways and then select ~10 songs and click and drag to the sidebar over a playlist, there's a multi-second long delay before the playlist highlights and I can drop the songs into that playlist. And then another multi-second-long delay before the highlight appears, indicating that the songs were successfully added to that playlist. What's going on here? The time duration maybe seems to scale to the # of songs I have selected.
+- [ ] When I have a search applied in a particular playlist (eg the Main Library) and I switch to another playlist, it should clear the search. But then if I click back on teh original playlist,  it should restore (a) the search that was applied and (b) my scroll position, so I can flip back and forth while transferring content from 1 filtered/searched list to another list, with minimal friction.
+- In search results, when you double-click to play a song, the current play queue should honor what's shown in that search result at the moment you double-clicked. If the search is later changed and thus the shown list of items changes, that's NOT reflected in the current play queue unless you double-click something else.
+- In any playlist (including in search results), when you double-click on a song, it should set the current play queue to the FULL shown playlist, NOT just the nearest parent folder that that song is in. Currently it just plays the direct children of that folder on loop, nothing in subfolders, and nothing outside of the folder. By contrast, when you double-click on a FOLDER itself (whether "real" DB entity or "virtual" search result grouping-folder) the current play queue should be set to just the contents of that folder (INCLUDING subfolders).
+- Also, double-clicking on a folder in search results should set the current play queue to JUST the contents of that folder. Currently it just collapse/expands the folder, fitting with the broader theme of "search results aren't treated as first-class citizens".
+- Right-click on selected song(s) should work even when you're in the search results list (with irrelevant / incoherent context menu options grayed out); currently it does nothing, you can't right-click on songs in the search results list.
+- [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
 
 ---
 
+Unsure about these:
+
 - Revisit the README features list. It seems pretty underwhelming when I look through it now, and it feels like it doesn't really do the app justice.
-- [ ] Persist song metadata edits (title/artist/album/track) into the audio files' embedded tags. The edit panel currently writes to the DB only. NOTE: many-to-many app tags have no ID3 equivalent and will remain DB-only, which is fine.
 - [ ] Consider: Instead of collapse/expand carets like what we've been doing in the Main Library UI so far, what if clicking on a folder just zoomed into that folder, and you see a breadcrumb at top showing where you've zoomed into? More Google Drive style?
   - ...talk throguh w Claude-- have it look at my data structure -- is "putting songs into nested folders" even a useful concept, like at all? Would it be better to list everything flat, and use "ephemeral folders" to support collapsing songs in the same album, to make my library more navigable?
 - You can right-click selected items and click "Move..." to open a pop-up that lists all folders in the Main Library, with their dropdown toggles so you can zoom in and select a specific folder you want to drill into.
-- Misc
-  - Check if bug still occurs: when you put songs into a folder, then you select everything & delete, songs within the subfolder do NOT have their audiofiles deleted.
-  - On import: Warning message if any unsupported filetypes were dragged in, listing them and saying they'll be ignored.
 - Sanity & safety checks
   - Keep an append-only text log, of every song deleted & every song added. Also keep an append-only `audit_log` table of each ListItem or Song creation and deletion events.
   - Utilities -> "Health Check" window

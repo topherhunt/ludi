@@ -8,7 +8,7 @@ module.exports = defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  reporter: 'list',
+  reporter: [['list'], ['./tests/e2e/pass-stamp-reporter.js']],
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

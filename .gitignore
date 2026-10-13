@@ -28,3 +28,4 @@ npm-debug.log*
 .idea/
 
 test-results/
+.last-test-pass.json

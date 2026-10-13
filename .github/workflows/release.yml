@@ -1,16 +1,10 @@
-name: Build and Release
+name: Build
 
-# Push a version tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) to build the
-# macOS .dmg and attach it to a draft GitHub Release for that tag.
-# Can also be run manually (workflow_dispatch) to verify the build without releasing.
+# Run manually to verify the .dmg builds on a clean runner. Releases are cut locally
+# with scripts/release.sh; there is deliberately no tag trigger, since that script's
+# tag would start a second, competing build.
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-
-permissions:
-  contents: write # required for the release job to create/update the Release
 
 jobs:
   build:
@@ -43,17 +37,3 @@ jobs:
           path: ${{ matrix.assets }}
           if-no-files-found: error
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') # only release on a tag, not manual runs
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          path: artifacts
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          draft: true # download + smoke-test the .dmg, then click Publish
-          generate_release_notes: true

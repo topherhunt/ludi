@@ -72,7 +72,7 @@ npm run dev
 # Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)
 npm test
 
-# Build a packaged macOS app + .dmg (output in release/)
+# Build a packaged macOS app + .dmg (output in release/), without publishing
 npm run release
 ```
 
@@ -102,13 +102,13 @@ The pass reports the essentia heap size with every result, which is how the pool
 
 ### Releasing
 
-Push a version tag and GitHub Actions builds the `.dmg` and opens a draft release for review:
+Bump the version (`npm version X.Y.Z --no-git-tag-version`), add its `CHANGELOG.md` section, commit, and push. Run `npm test` and, within the hour, run:
 
 ```bash
-npm version 0.5.1 --no-git-tag-version   # keep package.json in sync with the tag
-git commit -am "Release v0.5.1" && git tag v0.5.1
-git push && git push origin v0.5.1
+bash scripts/release.sh
 ```
+
+It refuses unless you're on a clean `main` that matches `origin/main`, the version is unreleased and has a changelog section, and the full e2e suite passed within the last hour (`tests/e2e/pass-stamp-reporter.js` records each passing run). It then runs the unit tests, builds the `.dmg`, tests the packaged app, and asks before publishing it with `gh release create`, which also creates the tag. The GitHub Actions workflow is manual-only, for checking that the build works on a clean runner.
 
 `npm run release` ad-hoc signs the app (`build.mac.identity: "-"`), then verifies the signature via the `afterSign` hook in `scripts/verify-signature.js`, which fails the build rather than shipping a bundle macOS will reject. This matters: without an explicit identity, electron-builder finds no Developer ID cert, silently skips signing, and leaves the stock Electron linker signature attached to a bundle it then rewrites. macOS reads that as tampering and tells the user the app is "damaged and can't be opened" -- with no way to override, which is strictly worse than being unsigned. `tests/e2e/packaged-app.spec.js` covers both halves: that the signature seals the bundle, and that the signed app actually launches.
 
