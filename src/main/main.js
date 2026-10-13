@@ -18,6 +18,9 @@ let settingsWindow;
 
 // Check if running in development mode (with Vite dev server)
 const isDev = process.env.VITE_DEV === 'true';
+// Test runs keep every window hidden, the app out of the Dock and the audio muted,
+// so a suite running in the background never steals focus or makes noise.
+const isTest = process.env.NODE_ENV === 'test';
 // The launcher passes the port it started Vite on via VITE_PORT, so we never
 // load a stray dev server that happens to be listening somewhere else. See
 // scripts/vite-server.js for the ports and why they aren't 5173.
@@ -54,15 +57,13 @@ const CORS_HEADERS = {
 };
 
 function createWindow() {
-  const isTest = process.env.NODE_ENV === 'test';
-
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
-    show: !isTest, // Don't show window during tests
+    show: !isTest,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -80,6 +81,12 @@ function createWindow() {
     mainWindow.loadURL(`http://localhost:${devPort}/index.html`);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
+  }
+
+  // Muted at the Chromium level, below Howler: playback, timeupdate and 'ended'
+  // all still run, so tests verify the real audio path without hearing it.
+  if (isTest) {
+    mainWindow.webContents.setAudioMuted(true);
   }
 
   // Open DevTools in development (but not during tests, as it interferes with Playwright)
@@ -140,6 +147,7 @@ function createSettingsWindow() {
     minWidth: 600,
     minHeight: 400,
     titleBarStyle: 'hiddenInset',
+    show: !isTest,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -233,6 +241,12 @@ function createMenu() {
 
 app.whenReady().then(() => {
   try {
+    // No Dock icon also means the app never activates, so launching it can't
+    // pull focus away from whatever the user is doing.
+    if (isTest && process.platform === 'darwin') {
+      app.dock.hide();
+    }
+
     // Custom protocol handler for serving local audio files (dev + prod).
     //
     // ============================================================================
