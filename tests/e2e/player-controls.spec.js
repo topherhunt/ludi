@@ -92,8 +92,8 @@ test.describe('Player Controls', () => {
 
     // Start from repeat-one, which is the one mode that leaves no half-finished
     // double-click armed, so the walk below starts from a known state.
-    await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 50; });
-    await window.waitForTimeout(60);
+    await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 300; });
+    await window.waitForTimeout(350);
     await loopBtn.click();
     await loopBtn.click();
     expect(await window.evaluate(() => window.loopMode)).toBe('one');
