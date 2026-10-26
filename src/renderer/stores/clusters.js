@@ -1,9 +1,10 @@
-import { createSignal, createMemo, createRoot } from 'solid-js';
+import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import * as api from '../utils/api.js';
 import { clearSearch } from './search.js';
 import { clearSimilar } from './similar.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
+import { libraryVersion } from './tags.js';
 
 /**
  * The auto-generated groups.
@@ -102,6 +103,18 @@ async function showCluster(cluster) {
   setActiveCluster(cluster);
   setClusterSongs(await api.getClusterSongs(cluster.id));
 }
+
+/** Re-read the open group's songs after a library change (a rating, an edit, a delete). */
+async function refreshClusterSongs() {
+  const cluster = activeCluster();
+  if (!cluster) return;
+  const songs = await api.getClusterSongs(cluster.id);
+  // Another group (or none) was opened while this one was loading.
+  if (activeCluster() === null || activeCluster().id !== cluster.id) return;
+  setClusterSongs(songs);
+}
+
+createRoot(() => createEffect(on(libraryVersion, refreshClusterSongs, { defer: true })));
 
 /** Rename a group. Its membership is untouched. */
 async function renameCluster(clusterId, newName) {

@@ -9,7 +9,6 @@ import {
   isYourTag,
 } from '../stores/tags.js';
 import { addTagToSongs, removeTagFromSongs } from '../utils/api.js';
-import { isSearching, searchQuery, runSearch } from '../stores/search.js';
 
 /**
  * Multi-select tag input for the song edit panel.
@@ -104,7 +103,6 @@ export function TagEditor(props) {
   const refresh = () => {
     refreshTags();
     bumpLibraryVersion();
-    if (isSearching()) runSearch(searchQuery());
   };
 
   const focusInput = () => {

@@ -1,9 +1,10 @@
-import { createSignal, createRoot } from 'solid-js';
+import { createSignal, createRoot, createEffect, on } from 'solid-js';
 import * as api from '../utils/api.js';
 import { clearSearch } from './search.js';
 import { clearSimilar } from './similar.js';
 import { clearCluster, closeGroups } from './clusters.js';
 import { closeFacets } from './facets.js';
+import { libraryVersion } from './tags.js';
 
 /**
  * The music map.
@@ -74,6 +75,9 @@ async function openMap() {
 function closeMap() {
   setMapOpen(false);
 }
+
+// Deleted songs leave the map and edited titles show in its tooltip.
+createRoot(() => createEffect(on(libraryVersion, () => { if (mapOpen()) loadMapPoints(); }, { defer: true })));
 
 /**
  * Every song on the map, the one at `itemId` first and then outward by distance

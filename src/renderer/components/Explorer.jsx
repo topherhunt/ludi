@@ -20,15 +20,15 @@ import {
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
 import { isSearching, runSearch, searchFolderSongs } from '../stores/search.js';
-import { isShowingSimilar, similarSeeds, showSimilarTo } from '../stores/similar.js';
+import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
 import { SearchResultsView } from './SearchResultsView.jsx';
 import { SimilarSongsView } from './SimilarSongsView.jsx';
 import { ClusterSongsView } from './ClusterSongsView.jsx';
-import { isShowingCluster, activeCluster, showCluster, groupsOpen } from '../stores/clusters.js';
+import { isShowingCluster, groupsOpen } from '../stores/clusters.js';
 import { GroupsView } from './GroupsView.jsx';
 import { MusicMapView } from './MusicMapView.jsx';
-import { mapOpen, openMap } from '../stores/musicMap.js';
+import { mapOpen } from '../stores/musicMap.js';
 import { FacetBrowser } from './FacetBrowser.jsx';
 import { facetsOpen } from '../stores/facets.js';
 import { AdvancedSearchModal } from './AdvancedSearchModal.jsx';
@@ -347,9 +347,6 @@ export function Explorer(props) {
       }
       clearSelection();
       refetchTree?.();
-      if (isShowingSimilar()) showSimilarTo(similarSeeds());
-      if (isShowingCluster()) showCluster(activeCluster());
-      if (mapOpen()) openMap();
       hideConfirmModal();
     });
   };

@@ -178,6 +178,19 @@ test.describe('Playing from search results', () => {
     await expect(row(window, HIT_A)).toHaveCount(0);
   });
 
+  test('a hit rated out of the query stays until the search is run again', async ({ window }) => {
+    await search(window, `${TERM} rating=none`, 2);
+    const stars = row(window, HIT_A).locator('.qa-star-rating');
+
+    await stars.locator('[data-star="5"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '5');
+    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+
+    await window.locator('.search-input').press('Enter');
+    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(row(window, HIT_A)).toHaveCount(0);
+  });
+
   test('deleting a hit from the search menu drops it from the results', async ({ window }) => {
     await search(window, TERM, 3);
 

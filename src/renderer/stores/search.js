@@ -60,6 +60,10 @@ const {
 // overtaken doesn't write its stale results (or reopen a cleared search).
 let searchGeneration = 0;
 
+// The items the last run of the query matched. A refresh redraws exactly these,
+// so a song you edit out of the query's reach stays put until you search again.
+let matchedItemIds = null;
+
 /**
  * Run a search against the list currently being viewed (the Main Library or a
  * playlist). Loads all list items, parses the query, filters songs, stores
@@ -86,19 +90,23 @@ async function runSearch(queryString) {
   setSearchQuery(trimmed);
   setSearchRootListId(currentListId());
   setCollapsedFolders(new Set());
-  await filterResults(trimmed, currentListId());
+  await filterResults(trimmed, currentListId(), null);
 }
 
-/** Re-run the current search against the library as it is now, keeping its view state. */
+/** Redraw the current results from the library as it is now, keeping their membership and view state. */
 async function refreshSearch() {
   if (!isSearching()) return;
-  await filterResults(searchQuery(), searchRootListId());
+  await filterResults(searchQuery(), searchRootListId(), matchedItemIds);
 }
 
-// The results are a snapshot, so any library change (a rating, a tag, a delete) re-filters them.
+// Any library change (a rating, a tag, a delete) redraws the results.
 createRoot(() => createEffect(on(libraryVersion, refreshSearch, { defer: true })));
 
-async function filterResults(trimmed, rootListId) {
+/**
+ * @param {Set<number>|null} keepItemIds - redraw just these items rather than
+ *   evaluating the query; null evaluates it and records what matched.
+ */
+async function filterResults(trimmed, rootListId, keepItemIds) {
   const generation = ++searchGeneration;
   if (isInvalidQuery(trimmed)) {
     setSearchError('invalid_syntax');
@@ -165,7 +173,7 @@ async function filterResults(trimmed, rootListId) {
       tags: (item.tags || []).map(t => t.name),
     };
 
-    if (evaluateSong(ast, songData)) {
+    if (keepItemIds ? keepItemIds.has(item.id) : evaluateSong(ast, songData)) {
       results.push({
         item_id: item.id,
         song_id: item.song_id,
@@ -183,6 +191,7 @@ async function filterResults(trimmed, rootListId) {
     }
   }
 
+  if (!keepItemIds) matchedItemIds = new Set(results.map(result => result.item_id));
   setSearchResults(results);
 }
 
@@ -191,6 +200,7 @@ async function filterResults(trimmed, rootListId) {
  */
 function clearSearch() {
   searchGeneration++;
+  matchedItemIds = null;
   setSearchResults(null);
   setSearchQuery('');
   setSearchError(null);

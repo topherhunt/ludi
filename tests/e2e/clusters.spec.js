@@ -217,6 +217,14 @@ test.describe('Song groups', () => {
     await window.locator('.qa-cluster-title').click();
   });
 
+  test('rating a song in a group redraws its stars', async ({ window }) => {
+    const stars = window.locator('.qa-cluster-view .tree-item-content').first().locator('.qa-star-rating');
+    await stars.locator('[data-star="4"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '4');
+    await stars.locator('[data-star="4"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '');
+  });
+
   test('saving a group as a playlist puts its songs in a real playlist', async ({ window }) => {
     await window.locator('.qa-cluster-save-playlist').click();
     await expect(window.locator('#renameInput')).toHaveValue(RENAMED);

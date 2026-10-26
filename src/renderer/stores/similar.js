@@ -1,9 +1,10 @@
-import { createSignal, createMemo, createRoot } from 'solid-js';
+import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import { findSimilarSongs } from '../utils/api.js';
 import { clearSearch } from './search.js';
 import { clearCluster, closeGroups } from './clusters.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
+import { libraryVersion } from './tags.js';
 
 /**
  * "Songs like this one" results.
@@ -96,6 +97,26 @@ async function showMoreSimilar() {
   setSimilarTotal(response.total);
   setSimilarLoading(false);
 }
+
+/**
+ * Re-read the slice already on screen after a library change (a rating, an edit,
+ * a delete), keeping its length so paging survives.
+ */
+async function refreshSimilar() {
+  if (!isShowingSimilar() || similarLoading()) return;
+  const seeds = similarSeeds();
+  const response = await findSimilarSongs(seeds.map(seed => seed.songId), {
+    limit: Math.max(PAGE_SIZE, similarResults().length),
+    offset: 0,
+  });
+  // A different search started while this one was loading.
+  if (similarSeeds() !== seeds) return;
+  setSimilarResults(response.results);
+  setSimilarTotal(response.total);
+  setSimilarNotice(noticeFor(response, seeds.length));
+}
+
+createRoot(() => createEffect(on(libraryVersion, refreshSimilar, { defer: true })));
 
 /**
  * An empty result can mean two very different things, and silently showing

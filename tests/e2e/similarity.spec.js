@@ -238,6 +238,16 @@ test.describe('Similar songs', () => {
     await expect(window.locator('.qa-find-similar')).toHaveCount(0);
   });
 
+  test('rating a result redraws its stars and keeps every page shown', async ({ window }) => {
+    const rows = window.locator('.qa-similar-view .tree-item-content');
+    const stars = rows.last().locator('.qa-star-rating');
+    await stars.locator('[data-star="3"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '3');
+    await expect(rows).toHaveCount(RANKED_COUNT);
+    await stars.locator('[data-star="3"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '');
+  });
+
   test('seeds from the whole selection when several songs are picked', async ({ window }) => {
     // Reuses the library the previous test built and seeded.
     await window.locator('.qa-exit-similar').click();
