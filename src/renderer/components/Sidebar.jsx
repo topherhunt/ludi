@@ -1,5 +1,5 @@
 import { For, createResource, createSignal, createEffect, onMount, onCleanup, Show } from 'solid-js';
-import { currentListId, setCurrentListId, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { currentListId, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import {
   getLists,
   renameTag,
@@ -11,23 +11,21 @@ import {
   renameFolder,
   addSongsToList,
 } from '../utils/api.js';
-import { refreshTags, bumpLibraryVersion, libraryVersion, findTagByName } from '../stores/tags.js';
-import { scopedTags, isTagFiltered } from '../stores/tagFacets.js';
-import { savedSearches, renameSavedSearch, deleteSavedSearch } from '../stores/savedSearches.js';
 import {
-  clusters,
-  activeCluster,
-  clustering,
-  isShowingCluster,
-  regenerateClusters,
-  showCluster,
-  renameCluster,
-  clearCluster,
-} from '../stores/clusters.js';
-import { mapOpen, openMap, closeMap } from '../stores/musicMap.js';
-import { facetsOpen, openFacets, closeFacets } from '../stores/facets.js';
+  refreshTags,
+  bumpLibraryVersion,
+  libraryVersion,
+  findTagByName,
+  showAiTags,
+  toggleShowAiTags,
+} from '../stores/tags.js';
+import { scopedTags, aiTagsInView, isTagFiltered } from '../stores/tagFacets.js';
+import { savedSearches, renameSavedSearch, deleteSavedSearch } from '../stores/savedSearches.js';
+import { groupsOpen, isShowingCluster, openGroups } from '../stores/clusters.js';
+import { mapOpen, openMap } from '../stores/musicMap.js';
+import { facetsOpen, openFacets } from '../stores/facets.js';
 import { runSearch, isSearching, searchQuery, clearSearch } from '../stores/search.js';
-import { clearSimilar } from '../stores/similar.js';
+import { switchToList, setListTitles } from '../stores/viewHistory.js';
 import { addTagTerm, removeTagTerm } from '../utils/tagFilter.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, showAlert } from '../stores/modals.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
@@ -50,7 +48,6 @@ export function Sidebar(props) {
   const [colorPicker, setColorPicker] = createSignal(null); // { x, y, tag } | null
   const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
   const [savedSearchMenu, setSavedSearchMenu] = createSignal(null); // { x, y, saved } | null
-  const [clusterMenu, setClusterMenu] = createSignal(null); // { x, y, cluster } | null
   let playlistListRef;
   let colorPopoverRef;
 
@@ -61,11 +58,15 @@ export function Sidebar(props) {
     getLists
   );
 
+  createEffect(() => {
+    const loaded = lists();
+    if (loaded) setListTitles(new Map(loaded.map((list) => [list.id, list.title])));
+  });
+
   // Refresh views after a tag definition changes (rename/recolor/delete/reorder).
   const refreshAfterTagChange = async () => {
     await refreshTags();
     bumpLibraryVersion();
-    if (isSearching()) runSearch(searchQuery());
   };
 
   // A tag is "active" when the current query filters for it -- whether it got
@@ -216,27 +217,7 @@ export function Sidebar(props) {
     );
   };
 
-  // ---- Groups (clusters) ----
-
-  const handleRegenerateClusters = async () => {
-    const summary = await regenerateClusters();
-    if (summary.clusters.length === 0) {
-      showAlert(
-        '<i class="bi bi-diagram-2" style="margin-right: 8px;"></i>Not Enough To Group',
-        `Only ${summary.songs} songs have been analyzed. Run the audio analysis from Settings first -- grouping needs a library to find patterns in.`
-      );
-      return;
-    }
-    showAlert(
-      '<i class="bi bi-diagram-2" style="margin-right: 8px;"></i>Library Grouped',
-      `${summary.songs} songs sorted into ${summary.clusters.length} groups.`
-    );
-  };
-
-  const handleClusterClick = (cluster) => {
-    clearSelection();
-    showCluster(cluster);
-  };
+  // ---- Analysis views ----
 
   const handleOpenMap = () => {
     clearSelection();
@@ -248,38 +229,15 @@ export function Sidebar(props) {
     openFacets();
   };
 
-  const handleClusterContextMenu = (e, cluster) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setTagMenu(null);
-    setColorPicker(null);
-    setPlaylistMenu(null);
-    setSavedSearchMenu(null);
-    setClusterMenu({ x: e.clientX, y: e.clientY, cluster });
-  };
-
-  const handleRenameCluster = (cluster) => {
-    setClusterMenu(null);
-    showRenameModal(cluster.name, async (newName) => {
-      const trimmed = (newName || '').trim();
-      if (!trimmed || trimmed === cluster.name) return;
-      await renameCluster(cluster.id, trimmed);
-    }, 'Rename Group');
+  const handleOpenGroups = () => {
+    clearSelection();
+    openGroups();
   };
 
   // ---- Playlists ----
 
-  // Handle clicking on a playlist item. Switching lists drops any active search:
-  // results are scoped to one list, so keeping them would show stale hits. Same
-  // for a similarity ranking -- you asked for a playlist, show the playlist.
   const handlePlaylistClick = (list) => {
-    clearSearch();
-    clearSimilar();
-    clearCluster();
-    closeMap();
-    closeFacets();
-    setCurrentListId(list.id);
-    clearSelection();
+    switchToList(list.id);
     props.onListChange?.(list.id);
   };
 
@@ -393,7 +351,7 @@ export function Sidebar(props) {
       if (e.key === 'Escape' && isDropdownOpen()) closeDropdown();
       if (e.key === 'Escape') {
         setTagMenu(null); setColorPicker(null); setPlaylistMenu(null);
-        setSavedSearchMenu(null); setClusterMenu(null);
+        setSavedSearchMenu(null);
       }
     };
     const onDocClick = (e) => {
@@ -408,7 +366,6 @@ export function Sidebar(props) {
       const inPopover = e.target.closest('.tag-color-popover');
       if (playlistMenu() && !e.target.closest('.playlist-context-menu')) setPlaylistMenu(null);
       if (savedSearchMenu() && !e.target.closest('.saved-search-context-menu')) setSavedSearchMenu(null);
-      if (clusterMenu() && !e.target.closest('.cluster-context-menu')) setClusterMenu(null);
       if (tagMenu() && !inMenu) setTagMenu(null);
       // Don't close the color popover on the very menu click that opened it.
       if (colorPicker() && !inPopover && !inMenu) setColorPicker(null);
@@ -439,7 +396,6 @@ export function Sidebar(props) {
       !e.target.closest('.saved-searches-section') &&
       !e.target.closest('.saved-search-context-menu') &&
       !e.target.closest('.clusters-section') &&
-      !e.target.closest('.cluster-context-menu') &&
       !e.target.closest('.tag-context-menu') &&
       !e.target.closest('.tag-color-popover') &&
       !e.target.closest('.playlist-context-menu')
@@ -519,9 +475,9 @@ export function Sidebar(props) {
           <DropIndicator scope="sidebar" />
         </div>
 
-        {/* Groups the analysis found, and the map of the same space. Always shown,
-            so the buttons that make them are somewhere you can find them before
-            there is anything to show. */}
+        {/* The views built from the audio analysis. Always shown, so the buttons
+            that build them are somewhere you can find before there is anything
+            to show. */}
         <div class="clusters-section qa-clusters-section">
           <div
             class="saved-search-item qa-open-map"
@@ -541,41 +497,14 @@ export function Sidebar(props) {
             <span class="saved-search-name">Facets</span>
           </div>
 
-          <div class="tags-heading clusters-heading">
-            <span>Groups</span>
-            <button
-              class="add-btn qa-recluster"
-              data-tooltip={clusters().length > 0 ? 'Regroup library' : 'Group songs that sound alike'}
-              disabled={clustering()}
-              onClick={handleRegenerateClusters}
-            >
-              <i class="bi bi-diagram-2" />
-            </button>
-          </div>
-          <Show
-            when={clusters().length > 0}
-            fallback={
-              <div class="clusters-empty qa-clusters-empty">
-                {clustering() ? 'Grouping...' : 'Not grouped yet.'}
-              </div>
-            }
+          <div
+            class="saved-search-item qa-open-groups"
+            classList={{ active: groupsOpen() || isShowingCluster() }}
+            onClick={handleOpenGroups}
           >
-            <For each={clusters()}>
-              {(cluster) => (
-                <div
-                  class="saved-search-item qa-cluster-item"
-                  classList={{ active: isShowingCluster() && activeCluster().id === cluster.id }}
-                  data-cluster-id={cluster.id}
-                  onClick={() => handleClusterClick(cluster)}
-                  onContextMenu={(e) => handleClusterContextMenu(e, cluster)}
-                >
-                  <i class="bi bi-diagram-2 saved-search-icon" />
-                  <span class="saved-search-name">{cluster.name}</span>
-                  <span class="cluster-size qa-cluster-size">{cluster.size}</span>
-                </div>
-              )}
-            </For>
-          </Show>
+            <i class="bi bi-diagram-2 saved-search-icon" />
+            <span class="saved-search-name">Groups</span>
+          </div>
         </div>
 
         <Show when={savedSearches().length > 0}>
@@ -599,7 +528,8 @@ export function Sidebar(props) {
           </div>
         </Show>
 
-        <Show when={scopedTags().length > 0}>
+        {/* Kept when every tag here is the analyzer's, so the link to show them stays. */}
+        <Show when={scopedTags().length > 0 || aiTagsInView()}>
           <div class="tags-section qa-tags-section">
             <div class="tags-heading">Tags</div>
             <div class="tags-list">
@@ -615,6 +545,11 @@ export function Sidebar(props) {
                 )}
               </For>
             </div>
+            <Show when={aiTagsInView()}>
+              <span class="text-link qa-toggle-ai-tags" onClick={toggleShowAiTags}>
+                {showAiTags() ? 'Hide AI tags' : 'Show AI tags'}
+              </span>
+            </Show>
           </div>
         </Show>
       </div>
@@ -647,18 +582,6 @@ export function Sidebar(props) {
               <i class="bi bi-trash context-menu-icon"></i>Delete
             </div>
           </Show>
-        </div>
-      </Show>
-
-      {/* Group right-click context menu */}
-      <Show when={clusterMenu()}>
-        <div
-          class="context-menu cluster-context-menu"
-          style={{ left: `${clusterMenu().x}px`, top: `${clusterMenu().y}px` }}
-        >
-          <div class="context-menu-item qa-cluster-rename" onClick={() => handleRenameCluster(clusterMenu().cluster)}>
-            <i class="bi bi-pencil context-menu-icon"></i>Rename
-          </div>
         </div>
       </Show>
 

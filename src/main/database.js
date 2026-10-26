@@ -34,12 +34,21 @@ const LIBRARY_FOLDER = {
   live: 'Ludi Library',
 };
 
+// Test runs keep their database and library inside a throwaway directory the
+// test fixture creates, so nothing lands in the user's home folder.
+function testHome() {
+  const dir = process.env.LUDI_TEST_HOME;
+  if (!dir) throw new Error('NODE_ENV=test requires LUDI_TEST_HOME (see tests/e2e/fixtures.js)');
+  return dir;
+}
+
 // Determine database filename based on mode.
 // Can be overridden with LUDI_DB_PATH environment variable.
 function getDbPath() {
   if (process.env.LUDI_DB_PATH) {
     return process.env.LUDI_DB_PATH;
   }
+  if (getMode() === 'test') return path.join(testHome(), 'ludi-library-test.sqlite');
   return path.join(DB_DIR, `ludi-library-${getMode()}.sqlite`);
 }
 
@@ -78,7 +87,9 @@ function initialize() {
 }
 
 function initializeDefaultSettings() {
-  const defaultLibraryPath = path.join(os.homedir(), 'Music', LIBRARY_FOLDER[getMode()]);
+  const defaultLibraryPath = getMode() === 'test'
+    ? path.join(testHome(), LIBRARY_FOLDER.test)
+    : path.join(os.homedir(), 'Music', LIBRARY_FOLDER[getMode()]);
 
   const libraryPath = db.prepare('SELECT * FROM settings WHERE key = ?').get('library_path');
   if (!libraryPath) {
@@ -475,6 +486,25 @@ function isSongInList(songId, parentListId) {
 // Walk up the folder chain to the root list (a playlist, or the Main Library)
 // that ultimately contains `listId`. A list is a root when nothing places it
 // inside another list.
+/**
+ * Every song under a list, subfolders included, in display order, as play-queue
+ * entries. One query, so queueing a big library costs one IPC round trip.
+ */
+function getSongsInListDeep(listId) {
+  return db.prepare(`
+    WITH RECURSIVE tree(item_id, list_id, song_id, sort_key) AS (
+      SELECT id, list_id, song_id, printf('%010d', position)
+        FROM list_items WHERE parent_list_id = ?
+      UNION ALL
+      SELECT li.id, li.list_id, li.song_id, tree.sort_key || '.' || printf('%010d', li.position)
+        FROM list_items li JOIN tree ON li.parent_list_id = tree.list_id
+    )
+    SELECT tree.item_id, s.id, s.title, s.artist, s.album, s.duration_seconds
+      FROM tree JOIN songs s ON s.id = tree.song_id
+     ORDER BY tree.sort_key
+  `).all(listId);
+}
+
 function getRootListId(listId) {
   const stmt = db.prepare('SELECT parent_list_id FROM list_items WHERE list_id = ?');
   const seen = new Set();
@@ -785,8 +815,15 @@ function deleteSavedSearch(id) {
 
 // ---- Tags ----------------------------------------------------------------
 
+// `manual_count` is how many songs carry the tag by hand: a tag is yours if you
+// created it or applied it yourself, whoever created it.
 function getAllTags() {
-  return db.prepare('SELECT * FROM tags ORDER BY position').all();
+  return db.prepare(`
+    SELECT t.*,
+      (SELECT COUNT(*) FROM song_tags st WHERE st.tag_id = t.id AND st.source = 'manual') AS manual_count
+    FROM tags t
+    ORDER BY t.position
+  `).all();
 }
 
 // Create a tag at the end of the sort order. Throws on a duplicate name
@@ -854,8 +891,8 @@ function removeTagFromSongs(tagId, songIds) {
 
 // ---- Song metadata -------------------------------------------------------
 
-// Update editable song metadata. Only the provided fields are changed. Writes
-// to the DB only; the audio file's embedded tags are NOT updated (see TASKS.md).
+// Update editable song metadata. Only the provided fields are changed. The
+// db:updateSong handler in main.js writes them into the audio file first.
 function updateSong(songId, fields) {
   const allowed = ['title', 'artist', 'album', 'track_number'];
   const keys = Object.keys(fields).filter(k => allowed.includes(k));
@@ -1557,6 +1594,7 @@ function clearAutoTags() {
 }
 
 module.exports = {
+  getSongsInListDeep,
   MAIN_LIBRARY_ID,
   MAX_ANALYSIS_ATTEMPTS,
   initialize,

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker, contentTracing } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -27,6 +27,8 @@ const isTest = process.env.NODE_ENV === 'test';
 // in Control Center; the renderer's MediaSession API still works without it.
 if (isTest) {
   app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling');
+  // localStorage and the rest of the Chromium profile go in the run's temp dir too.
+  app.setPath('userData', path.join(process.env.LUDI_TEST_HOME, 'userData'));
 }
 // The launcher passes the port it started Vite on via VITE_PORT, so we never
 // load a stray dev server that happens to be listening somewhere else. See
@@ -178,6 +180,33 @@ function createSettingsWindow() {
   });
 }
 
+// The categories the DevTools Performance panel records, so a saved trace opens
+// there (or in Perfetto) with the usual flame chart.
+const TRACE_CATEGORIES = [
+  'devtools.timeline', 'disabled-by-default-devtools.timeline',
+  'disabled-by-default-devtools.timeline.frame', 'disabled-by-default-devtools.timeline.stack',
+  'v8.execute', 'blink.user_timing', 'toplevel', 'loading',
+];
+let isTracing = false;
+
+/** Start recording, or stop and reveal the saved trace. Costs nothing until started. */
+async function togglePerformanceTrace() {
+  if (!isTracing) {
+    await contentTracing.startRecording({ included_categories: TRACE_CATEGORIES });
+    isTracing = true;
+    createMenu();
+    return null;
+  }
+  const dir = path.join(app.getPath('userData'), 'traces');
+  fs.mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const tracePath = await contentTracing.stopRecording(path.join(dir, `ludi-trace-${stamp}.json`));
+  isTracing = false;
+  createMenu();
+  if (!isTest) shell.showItemInFolder(tracePath);
+  return tracePath;
+}
+
 function createMenu() {
   const template = [
     {
@@ -224,6 +253,11 @@ function createMenu() {
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
+        {
+          id: 'performance-trace',
+          label: isTracing ? 'Stop Performance Trace' : 'Start Performance Trace',
+          click: togglePerformanceTrace,
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -444,6 +478,10 @@ ipcMain.handle('db:flattenFolder', (event, listId) => {
 
 // The root list a (possibly nested) list belongs to -- i.e. which sidebar
 // playlist a folder lives in.
+ipcMain.handle('db:getSongsInListDeep', (event, listId) => {
+  return db.getSongsInListDeep(listId);
+});
+
 ipcMain.handle('db:getRootListId', (event, listId) => {
   return db.getRootListId(listId);
 });
@@ -520,8 +558,36 @@ ipcMain.handle('db:removeTagFromSongs', (event, { tagId, songIds }) => {
   return db.removeTagFromSongs(tagId, songIds);
 });
 
+// Song fields that also live in the audio file's own tags, and the value that
+// clears each. App tags have no file equivalent and stay in the database.
+const FILE_TAGS = {
+  title: { tag: 'title', cleared: '' },
+  artist: { tag: 'artist', cleared: '' },
+  album: { tag: 'album', cleared: '' },
+  track_number: { tag: 'track', cleared: 0 },
+};
+
+// Each tag write rewrites the whole file, so two at once (fields committed in
+// quick succession) would each save over the other's change. One at a time.
+let tagWriteQueue = Promise.resolve();
+
+// The file is written first: if that fails the edit fails, rather than leaving
+// the database saying something the file doesn't.
 ipcMain.handle('db:updateSong', (event, { songId, fields }) => {
-  return db.updateSong(songId, fields);
+  const fileTags = {};
+  for (const [field, { tag, cleared }] of Object.entries(FILE_TAGS)) {
+    if (field in fields) fileTags[tag] = fields[field] === null ? cleared : fields[field];
+  }
+  const update = tagWriteQueue.then(async () => {
+    if (Object.keys(fileTags).length > 0) {
+      // taglib-wasm is ESM-only, so it can't be require()d from this CommonJS file.
+      const { applyTagsToFile } = await import('taglib-wasm/simple');
+      await applyTagsToFile(db.getSong(songId).file_path, fileTags);
+    }
+    return db.updateSong(songId, fields);
+  });
+  tagWriteQueue = update.catch(() => {});
+  return update;
 });
 
 ipcMain.handle('db:setSongRating', (event, { songIds, rating }) => {

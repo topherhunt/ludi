@@ -64,6 +64,7 @@
     "music-metadata": "^7.14.0",
     "onnxruntime-web": "^1.27.0",
     "solid-js": "^1.9.10",
+    "taglib-wasm": "^2.4.0",
     "umap-js": "^1.4.0"
   }
 }

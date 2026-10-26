@@ -7,7 +7,7 @@ import { facetsFor } from '../utils/facets.js';
 import { addTagTerm } from '../utils/tagFilter.js';
 import { clearSearch } from './search.js';
 import { clearSimilar } from './similar.js';
-import { clearCluster } from './clusters.js';
+import { clearCluster, closeGroups } from './clusters.js';
 import { closeMap } from './musicMap.js';
 
 /**
@@ -59,6 +59,7 @@ function openFacets() {
   clearSearch();
   clearSimilar();
   clearCluster();
+  closeGroups();
   closeMap();
   setFacetsOpen(true);
 }

@@ -24,6 +24,7 @@ import { applySettingsFromIPC } from './stores/columns.js';
 import { refreshTags } from './stores/tags.js';
 import { refreshSavedSearches } from './stores/savedSearches.js';
 import { refreshClusters } from './stores/clusters.js';
+import { listTitles } from './stores/viewHistory.js';
 import {
   playlist,
   setCurrentPlaylist,
@@ -42,6 +43,9 @@ import {
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
 import { isSearching, searchRootListId, searchResultsInDisplayOrder, searchFolderSongs } from './stores/search.js';
+import { isShowingSimilar, similarResults } from './stores/similar.js';
+import { isShowingCluster, clusterSongs } from './stores/clusters.js';
+import { mapOpen, mapPointsNearestTo } from './stores/musicMap.js';
 import { getSongsInList, getSong, getRootListId, recordSongPlay } from './utils/api.js';
 
 // How long playback may be stopped before we let macOS suspend the app again.
@@ -64,8 +68,8 @@ export function App() {
   const [songTitle, setSongTitle] = createSignal('');
   const [songArtist, setSongArtist] = createSignal('');
 
-  // List title for explorer header
-  const [listTitle, setListTitle] = createSignal('Main Library');
+  // Derived rather than set on sidebar clicks, so Back/Forward retitle too.
+  const listTitle = () => listTitles().get(currentListId());
 
   const [isAboutOpen, setIsAboutOpen] = createSignal(false);
 
@@ -341,9 +345,10 @@ export function App() {
     await playCurrentTrack();
   };
 
-  // Queue search hits as they stand right now. The queue is a snapshot: editing
-  // the search afterwards changes what's shown, not what's playing.
-  const playSearchHits = async (hits, itemId) => {
+  // Queue the rows a results view shows, as they stand right now. The queue is a
+  // snapshot: editing the search afterwards changes what's shown, not what's
+  // playing. `rootListId` is the sidebar list to mark as playing, if any.
+  const playRows = async (hits, itemId, rootListId) => {
     const songs = hits.map((hit) => ({
       item_id: hit.item_id,
       id: hit.song_id,
@@ -353,32 +358,43 @@ export function App() {
       duration_seconds: hit.duration_seconds,
     }));
     const songIndex = itemId === null ? 0 : songs.findIndex((s) => s.item_id === itemId);
-    if (songIndex === -1) throw new Error(`Item ${itemId} is not in the search results`);
+    if (songIndex === -1) throw new Error(`Item ${itemId} is not in the rows shown`);
 
-    setCurrentPlaylist(songs, songIndex, searchRootListId());
-    setPlayingRootListId(searchRootListId());
+    setCurrentPlaylist(songs, songIndex, rootListId);
+    setPlayingRootListId(rootListId);
     await playCurrentTrack();
   };
 
   // A virtual folder in the nested search view plays just its own hits.
-  const handlePlaySearchFolder = (listId) => playSearchHits(searchFolderSongs(listId), null);
+  const handlePlaySearchFolder = (listId) => playRows(searchFolderSongs(listId), null, searchRootListId());
+
+  const mapPointsAsRows = (points) => points.map((point) => ({
+    item_id: point.itemId,
+    song_id: point.songId,
+    title: point.title,
+    artist: point.artist,
+    album: point.album,
+    duration_seconds: point.durationSeconds,
+  }));
 
   // Handle play song in context. Identified by its list_items id, not its song
-  // id -- the same song can appear more than once in one playlist. While a
-  // search is showing, the context is the results, not the song's folder.
+  // id -- the same song can appear more than once in one playlist. The context
+  // is the whole playlist the song sits in (every folder, collapsed or not), or
+  // the rows of whichever results view is showing.
   const handlePlaySong = async (itemId, parentListId) => {
-    if (isSearching()) return playSearchHits(searchResultsInDisplayOrder(), itemId);
+    // Similar songs, groups and the map aren't any one sidebar list.
+    if (isShowingSimilar()) return playRows(similarResults(), itemId, null);
+    if (isShowingCluster()) return playRows(clusterSongs(), itemId, null);
+    if (mapOpen()) return playRows(mapPointsAsRows(mapPointsNearestTo(itemId)), itemId, null);
+    if (isSearching()) return playRows(searchResultsInDisplayOrder(), itemId, searchRootListId());
 
-    // Get all songs in the parent list to build playlist
-    const songs = await getSongsInList(parentListId);
-    if (songs.length === 0) return;
-
-    // Find the index of the clicked row
+    const rootListId = await getRootListId(parentListId);
+    const songs = await getSongsInList(rootListId);
     const songIndex = songs.findIndex((s) => s.item_id === itemId);
-    if (songIndex === -1) return;
+    if (songIndex === -1) throw new Error(`Item ${itemId} is not in list ${rootListId}`);
 
-    setCurrentPlaylist(songs, songIndex, parentListId);
-    setPlayingRootListId(await getRootListId(parentListId));
+    setCurrentPlaylist(songs, songIndex, rootListId);
+    setPlayingRootListId(rootListId);
     await playCurrentTrack();
   };
 
@@ -472,7 +488,7 @@ export function App() {
   };
 
   // Handle list change from sidebar
-  const handleListChange = async (listId) => {
+  const handleListChange = (listId) => {
     const sameList = listId === currentListId();
     setCurrentListId(listId);
     clearSelection();
@@ -481,12 +497,6 @@ export function App() {
     if (sameList && explorerRefetch) {
       explorerRefetch();
     }
-
-    // Update title. The Main Library is just another row in `lists`, so it
-    // resolves the same way every playlist does.
-    const lists = await window.electronAPI?.getLists?.();
-    const list = lists?.find((l) => l.id === listId);
-    setListTitle(list?.title || 'Library');
   };
 
   // Collapse / expand every folder in the explorer tree. Lives here (not in the

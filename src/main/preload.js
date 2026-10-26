@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateFolderExpanded: (data) => ipcRenderer.invoke('db:updateFolderExpanded', data),
   sortFolderContents: (listId, sortBy) => ipcRenderer.invoke('db:sortFolderContents', { listId, sortBy }),
   flattenFolder: (listId) => ipcRenderer.invoke('db:flattenFolder', listId),
+  getSongsInListDeep: (listId) => ipcRenderer.invoke('db:getSongsInListDeep', listId),
   getRootListId: (listId) => ipcRenderer.invoke('db:getRootListId', listId),
   deleteItemWithFiles: (itemId) => ipcRenderer.invoke('db:deleteItemWithFiles', itemId),
   getSongFilePathsForItems: (itemIds) => ipcRenderer.invoke('db:getSongFilePathsForItems', itemIds),

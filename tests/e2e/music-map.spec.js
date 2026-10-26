@@ -176,16 +176,38 @@ test.describe('Music map', () => {
     await expect(window.locator('.qa-map-tooltip')).toContainText(target.point.title);
   });
 
-  test('double-clicking a dot plays that song', async ({ window }) => {
+  test('double-clicking a dot plays that song, then the nearest one', async ({ window }) => {
     const { points } = await mapPoints(window);
     const target = loneliestDot(await dotPositions(window, points));
+    const distance = (point) => Math.hypot(point.x - target.point.x, point.y - target.point.y);
+    const others = points.filter((point) => point.songId !== target.point.songId);
+    const nearest = Math.min(...others.map(distance));
+    const nearestTitles = others.filter((point) => distance(point) - nearest < 1e-9).map((point) => point.title);
 
     await window.mouse.dblclick(target.x, target.y);
 
     const playPauseBtn = window.locator('#playPauseBtn');
+    const nowPlaying = window.locator('.player-info .song-title');
     await expect(playPauseBtn).toHaveClass(/playing/);
-    await expect(window.locator('.player-info .song-title')).toHaveText(target.point.title);
+    await expect(nowPlaying).toHaveText(target.point.title);
+    await window.locator('#nextBtn').click();
+    await expect(nowPlaying).not.toHaveText(target.point.title);
+    expect(nearestTitles).toContain(await nowPlaying.textContent());
     await playPauseBtn.click();
+  });
+
+  test('right-clicking a dot offers the song menu for it', async ({ window }) => {
+    const { points } = await mapPoints(window);
+    const target = loneliestDot(await dotPositions(window, points));
+
+    await window.mouse.click(target.x, target.y, { button: 'right' });
+
+    await expect(window.locator('.qa-find-similar')).toBeVisible();
+    await expect(window.locator('.qa-add-folder-after')).toHaveClass(/disabled/);
+    await window.locator('.qa-find-similar').click();
+    await expect(window.locator('.qa-similar-title')).toHaveText(new RegExp(`^Songs like "${target.point.title}"`));
+    await window.locator('.qa-nav-back').click();
+    await expect(window.locator('.qa-map-view')).toBeVisible();
   });
 
   test('shift-dragging a lasso selects the songs inside it and leaves the rest', async ({ window }) => {

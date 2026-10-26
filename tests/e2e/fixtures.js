@@ -8,6 +8,7 @@ const { startViteServer } = require('../../scripts/vite-server');
 let viteServer = null;
 let electronApp = null;
 let window = null;
+let testHome = null;
 const consoleMessages = [];
 const consoleErrors = [];
 
@@ -16,16 +17,9 @@ async function setupElectronApp() {
     return { electronApp, window, consoleMessages, consoleErrors };
   }
 
-  // Clean up test database and library before running tests.
-  // Must match the 'test' mode paths in src/main/database.js.
-  const testDbPath = path.join(os.homedir(), '.ludi', 'ludi-library-test.sqlite');
-  const testLibraryPath = path.join(os.homedir(), 'Music', 'Ludi Library Test');
-  if (fs.existsSync(testDbPath)) {
-    fs.unlinkSync(testDbPath);
-  }
-  if (fs.existsSync(testLibraryPath)) {
-    fs.rmSync(testLibraryPath, { recursive: true, force: true });
-  }
+  // The app keeps its database, library folder and browser profile under this
+  // throwaway directory in test mode (see testHome() in src/main/database.js).
+  testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-test-'));
 
   // The test suite gets its own dev server on its own port, reaping anything a
   // previous run left behind. See scripts/vite-server.js -- a killed test run
@@ -44,6 +38,7 @@ async function setupElectronApp() {
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      LUDI_TEST_HOME: testHome,
       VITE_DEV: 'true',
       VITE_PORT: vitePort
     }
@@ -64,19 +59,6 @@ async function setupElectronApp() {
     consoleErrors.push(`[pageerror] ${error.message}`);
   });
 
-  await window.waitForLoadState('domcontentloaded');
-  await window.waitForTimeout(500);
-
-  // A clean slate has to include the UI state the renderer persists, not just
-  // the database. Sidebar width and column visibility live in localStorage,
-  // which survives in the Electron profile forever -- so the run that resized
-  // the sidebar moved every LATER run's columns 30px right, far enough that the
-  // centre of a song row (where `row.click()` lands) stopped being dead space in
-  // the rating column and became a star. Clicking a star deliberately doesn't
-  // change the selection, so a dozen specs across tags, song-edit-panel and
-  // similarity started failing on a machine that had once run sidebar-resize.
-  await window.evaluate(() => localStorage.clear());
-  await window.reload();
   await window.waitForLoadState('domcontentloaded');
   await window.waitForTimeout(500);
 
@@ -103,6 +85,11 @@ async function teardownElectronApp() {
     viteServer.stop();
     await new Promise(resolve => setTimeout(resolve, 500));
     viteServer = null;
+  }
+
+  if (testHome) {
+    fs.rmSync(testHome, { recursive: true, force: true });
+    testHome = null;
   }
 }
 

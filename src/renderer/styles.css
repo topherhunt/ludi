@@ -205,14 +205,6 @@ body.resizing-sidebar {
   flex-direction: column;
 }
 
-/* The one tooltip inside the scroll region would be clipped by it, so it hangs
-   off the button's right edge inward instead of centred and overflowing. */
-.sidebar-scroll [data-tooltip]::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 /* Grows into whatever the sections below it don't use, so the dead space under
    the last playlist is still part of the tree and still clears the selection
    when you click it -- but never shrinks below its rows, so a long tag list
@@ -1039,6 +1031,34 @@ body.resizing-sidebar {
   -webkit-app-region: no-drag;
 }
 
+/* Back/forward. Their tooltips hang rightward, since centred they'd spill
+   over the sidebar. */
+.nav-buttons {
+  display: flex;
+  gap: 2px;
+}
+.nav-btn {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+.nav-btn:hover:not(:disabled) {
+  background-color: #2a2d2e;
+}
+.nav-btn:disabled {
+  color: #555;
+  cursor: default;
+}
+.nav-btn[data-tooltip]::after {
+  left: 0;
+  transform: none;
+  background-color: #000;
+}
+
 .explorer-header h1 {
   -webkit-app-region: no-drag;
   white-space: nowrap;
@@ -1516,6 +1536,25 @@ body.resizing-sidebar {
   gap: 6px;
 }
 
+/* A quiet text link, for a toggle flipped often enough to live in place. */
+.text-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #858585;
+  cursor: pointer;
+}
+.text-link:hover {
+  color: #ccc;
+  text-decoration: underline;
+}
+
+.song-edit-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 /* Saved searches: rows that read like playlists, because that's what they act
    like -- a named thing in the sidebar you click to fill the explorer. The
    magnifier is what says "this one is a question, not a list". */
@@ -1546,25 +1585,15 @@ body.resizing-sidebar {
   white-space: nowrap;
 }
 
-/* Groups. Rows are saved-search rows; only the heading (which carries the
-   regroup button) and the trailing count are their own. */
-.clusters-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* Groups list. Laid out like the facet browser; only these differ. */
+.groups-summary {
+  padding-top: 10px;
 }
-.clusters-empty {
-  color: #666;
-  font-size: 12px;
-  font-style: italic;
-  padding: 2px 6px;
-}
-.cluster-size {
-  margin-left: auto;
-  padding-left: 6px;
-  opacity: 0.6;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+.group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== Music map =====

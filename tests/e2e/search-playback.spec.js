@@ -59,7 +59,7 @@ test.describe('Playing from search results', () => {
     if (await window.locator('#playPauseBtn.playing').count()) await window.locator('#playPauseBtn').click();
     await window.evaluate(async ({ stamp, dirName }) => {
       const items = await window.electronAPI.getAllListItems();
-      const ours = items.filter((i) => (i.song_title || '').includes(stamp) || i.list_title === dirName);
+      const ours = items.filter((i) => (i.song_title || '').includes(stamp) || (i.list_title || '').startsWith(dirName));
       for (const item of ours) await window.electronAPI.deleteItemWithFiles(item.id);
     }, { stamp: String(STAMP), dirName: path.basename(DIR) });
     while (await window.evaluate(() => window.loopMode) !== 'all') {
@@ -135,6 +135,47 @@ test.describe('Playing from search results', () => {
 
     await window.locator('.search-input').click();
     await expect(menu).toHaveCount(0);
+  });
+
+  test('right-clicking a search folder acts on its hits and grays out the rest', async ({ window }) => {
+    await search(window, TERM, 3);
+    const folder = window.locator('.qa-search-folder').filter({ hasText: path.basename(DIR) });
+
+    await folder.click({ button: 'right' });
+    const menu = window.locator('.context-menu');
+    for (const hidden of ['.qa-sort-menu', '.qa-flatten', '.qa-delete-item']) {
+      await expect(menu.locator(hidden)).toHaveClass(/disabled/);
+    }
+    await menu.locator('.qa-play-folder').click();
+    await expect(nowPlaying(window)).toHaveText(HIT_A);
+    await next(window);
+    await expect(nowPlaying(window)).toHaveText(HIT_C);
+    await expect(window.locator('#nextBtn')).toBeDisabled();
+
+    await folder.click({ button: 'right' });
+    await menu.locator('.context-menu-item').filter({ hasText: 'Rename' }).click();
+    await window.fill('#renameInput', `${path.basename(DIR)}-renamed`);
+    await window.click('#renameOkBtn');
+    await expect(window.locator('.qa-search-folder')).toHaveText(`${path.basename(DIR)}-renamed`);
+  });
+
+  test('rating a hit redraws its stars, and a collapsed folder stays collapsed', async ({ window }) => {
+    await search(window, TERM, 3);
+    const stars = row(window, HIT_D).locator('.qa-star-rating');
+
+    await stars.locator('[data-star="4"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '4');
+    await row(window, HIT_D).click({ button: 'right' });
+    await window.locator('.qa-rate-menu').hover();
+    await window.locator('.qa-rate-clear').click();
+    await expect(stars).toHaveAttribute('data-rating', '');
+
+    // The results refresh in place rather than being rebuilt from scratch.
+    await window.locator('.qa-search-folder .chevron').click();
+    await expect(row(window, HIT_A)).toHaveCount(0);
+    await stars.locator('[data-star="2"]').click();
+    await expect(stars).toHaveAttribute('data-rating', '2');
+    await expect(row(window, HIT_A)).toHaveCount(0);
   });
 
   test('deleting a hit from the search menu drops it from the results', async ({ window }) => {

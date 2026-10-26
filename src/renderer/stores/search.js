@@ -1,11 +1,12 @@
-import { createSignal, createMemo, createRoot } from 'solid-js';
+import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import { getAllListItems } from '../utils/api.js';
 import { currentListId } from './navigation.js';
 import { parseQuery, evaluateSong, isInvalidQuery } from '../utils/searchParser.js';
 import { clearSimilar } from './similar.js';
-import { clearCluster } from './clusters.js';
+import { clearCluster, closeGroups } from './clusters.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
+import { libraryVersion } from './tags.js';
 import { buildRootResolver } from '../utils/listTree.js';
 import { buildNestedTree, songsInTreeOrder, findTreeFolder } from '../utils/searchTree.js';
 
@@ -22,6 +23,8 @@ const {
   setSearchRootListId,
   isSearching,
   searchTree,
+  collapsedFolders,
+  setCollapsedFolders,
 } = createRoot(() => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal(null); // null = not searching
@@ -32,6 +35,8 @@ const {
   const [searchRootListId, setSearchRootListId] = createSignal(null);
   const isSearching = createMemo(() => searchResults() !== null);
   const searchTree = createMemo(() => buildNestedTree(searchResults() || [], searchRootListId()));
+  // Kept here rather than in each folder row, which is rebuilt on every refresh.
+  const [collapsedFolders, setCollapsedFolders] = createSignal(new Set());
 
   return {
     searchQuery,
@@ -46,8 +51,14 @@ const {
     setSearchRootListId,
     isSearching,
     searchTree,
+    collapsedFolders,
+    setCollapsedFolders,
   };
 });
+
+// Bumped by every search, refresh and clear, so a slow load that has been
+// overtaken doesn't write its stale results (or reopen a cleared search).
+let searchGeneration = 0;
 
 /**
  * Run a search against the list currently being viewed (the Main Library or a
@@ -62,20 +73,33 @@ async function runSearch(queryString) {
     return;
   }
 
-  // A search, a similarity ranking, a group, the map and the facet browser are
-  // five different answers to "what should the explorer show", so starting one
-  // puts the others away. Only runSearch clears them, never clearSearch --
-  // showSimilarTo, showCluster, openMap and openFacets call clearSearch, and
-  // clearing in both directions would wipe each other out.
+  // Only one answer to "what should the explorer show" is on screen at a time,
+  // so starting a search puts the others away. Only runSearch clears them, never
+  // clearSearch -- every other view's opener calls clearSearch, and clearing in
+  // both directions would wipe each other out.
   clearSimilar();
   clearCluster();
+  closeGroups();
   closeMap();
   closeFacets();
 
-  const rootListId = currentListId();
   setSearchQuery(trimmed);
-  setSearchRootListId(rootListId);
+  setSearchRootListId(currentListId());
+  setCollapsedFolders(new Set());
+  await filterResults(trimmed, currentListId());
+}
 
+/** Re-run the current search against the library as it is now, keeping its view state. */
+async function refreshSearch() {
+  if (!isSearching()) return;
+  await filterResults(searchQuery(), searchRootListId());
+}
+
+// The results are a snapshot, so any library change (a rating, a tag, a delete) re-filters them.
+createRoot(() => createEffect(on(libraryVersion, refreshSearch, { defer: true })));
+
+async function filterResults(trimmed, rootListId) {
+  const generation = ++searchGeneration;
   if (isInvalidQuery(trimmed)) {
     setSearchError('invalid_syntax');
     setSearchResults([]);
@@ -85,6 +109,7 @@ async function runSearch(queryString) {
   setSearchError(null);
 
   const allItems = await getAllListItems();
+  if (generation !== searchGeneration) return;
 
   // map: list_id -> the list_items row for that folder (for walking the ancestor chain)
   const listIdToFolderItem = new Map();
@@ -165,6 +190,7 @@ async function runSearch(queryString) {
  * Clear search state and return to normal library view.
  */
 function clearSearch() {
+  searchGeneration++;
   setSearchResults(null);
   setSearchQuery('');
   setSearchError(null);
@@ -200,4 +226,6 @@ export {
   searchFolderSongs,
   runSearch,
   clearSearch,
+  collapsedFolders,
+  setCollapsedFolders,
 };

@@ -2,7 +2,8 @@ import { Show, onCleanup, createEffect } from 'solid-js';
 import { searchQuery, isSearching, searchViewMode, setSearchViewMode, runSearch, clearSearch } from '../stores/search.js';
 import { isShowingSimilar, similarSeeds, similarTotal, clearSimilar } from '../stores/similar.js';
 import { saveSearch } from '../stores/savedSearches.js';
-import { isShowingCluster, activeCluster, clusterSongs, clearCluster } from '../stores/clusters.js';
+import { isShowingCluster, activeCluster, clusterSongs, clearCluster, groupsOpen, clusters, closeGroups } from '../stores/clusters.js';
+import { goBack, goForward, backTarget, forwardTarget, viewLabel } from '../stores/viewHistory.js';
 import { mapOpen, mapPoints, closeMap } from '../stores/musicMap.js';
 import { facetsOpen, facetMatches, closeFacets } from '../stores/facets.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
@@ -19,7 +20,7 @@ export function ExplorerHeader(props) {
   const similarHeading = () => {
     const seeds = similarSeeds();
     const suffix = similarTotal() > 0 ? ` (${similarTotal()})` : '';
-    if (seeds.length === 1) return `Songs like "${seeds[0]}"${suffix}`;
+    if (seeds.length === 1) return `Songs like "${seeds[0].title}"${suffix}`;
     return `Songs like ${seeds.length} selected songs${suffix}`;
   };
 
@@ -97,6 +98,25 @@ export function ExplorerHeader(props) {
   return (
     <div class="explorer-header">
       <div class="explorer-header-left">
+        <div class="nav-buttons">
+          <button
+            class="nav-btn qa-nav-back"
+            disabled={!backTarget()}
+            data-tooltip={backTarget() ? `Back to ${viewLabel(backTarget())}` : undefined}
+            onClick={goBack}
+          >
+            <i class="bi bi-chevron-left" />
+          </button>
+          <button
+            class="nav-btn qa-nav-forward"
+            disabled={!forwardTarget()}
+            data-tooltip={forwardTarget() ? `Forward to ${viewLabel(forwardTarget())}` : undefined}
+            onClick={goForward}
+          >
+            <i class="bi bi-chevron-right" />
+          </button>
+        </div>
+
         <Show when={isShowingSimilar()}>
           <h1 id="currentListTitle" class="qa-similar-title">{similarHeading()}</h1>
           <button
@@ -128,6 +148,17 @@ export function ExplorerHeader(props) {
           </button>
         </Show>
 
+        <Show when={groupsOpen()}>
+          <h1 id="currentListTitle" class="qa-groups-title">Groups ({clusters().length})</h1>
+          <button
+            class="search-clear-btn qa-exit-groups"
+            onClick={() => closeGroups()}
+            title="Back to the library"
+          >
+            <i class="bi bi-x-lg" />
+          </button>
+        </Show>
+
         <Show when={mapOpen()}>
           <h1 id="currentListTitle" class="qa-map-title">Music Map ({mapPoints().length})</h1>
           <button
@@ -153,7 +184,7 @@ export function ExplorerHeader(props) {
         <Show
           when={isSearching()}
           fallback={
-            <Show when={!isShowingSimilar() && !isShowingCluster() && !mapOpen() && !facetsOpen()}>
+            <Show when={!isShowingSimilar() && !isShowingCluster() && !groupsOpen() && !mapOpen() && !facetsOpen()}>
               <h1 id="currentListTitle">{props.title || 'Main Library'}</h1>
             </Show>
           }

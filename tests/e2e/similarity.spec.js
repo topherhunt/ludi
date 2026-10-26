@@ -137,6 +137,7 @@ test.describe('Similar songs', () => {
 
   let cleanupItemIds = [];
   let tempDirs = [];
+  let seed = null; // { itemId, songId } of the ranked library's seed song
 
   test.afterAll(async () => {
     const { setupElectronApp } = require('./fixtures');
@@ -183,6 +184,7 @@ test.describe('Similar songs', () => {
     // The balancing song is imported last and never ranks, so it is not part of
     // the expected order.
     const [seedId, duplicateId] = songIds;
+    seed = { itemId: imported.itemIds[0], songId: seedId };
     const rankedIds = songIds.slice(2, 2 + RANKED_COUNT);
 
     await window.locator('.playlist-item').first().click();
@@ -212,6 +214,30 @@ test.describe('Similar songs', () => {
     await expect(showMore).toHaveCount(0);
   });
 
+  test('double-clicking a result queues the results shown, in rank order', async ({ window }) => {
+    const rows = window.locator('.qa-similar-view .tree-item-content');
+    const titles = await rows.locator('.tree-item-label').allTextContents();
+    const nowPlaying = window.locator('.player-info .song-title');
+
+    await rows.nth(RANKED_COUNT - 2).dblclick();
+    await expect(nowPlaying).toHaveText(titles[RANKED_COUNT - 2]);
+    await window.locator('#nextBtn').click();
+    await expect(nowPlaying).toHaveText(titles[RANKED_COUNT - 1]);
+    // Looping wraps to the best match, not on into the library.
+    await window.locator('#nextBtn').click();
+    await expect(nowPlaying).toHaveText(titles[0]);
+    await window.locator('#playPauseBtn').click();
+  });
+
+  test('right-clicking a result offers the song menu, positional actions grayed out', async ({ window }) => {
+    await window.locator('.qa-similar-view .tree-item-content').first().click({ button: 'right' });
+
+    await expect(window.locator('.qa-find-similar')).toBeVisible();
+    await expect(window.locator('.qa-add-folder-after')).toHaveClass(/disabled/);
+    await window.locator('.qa-similar-title').click();
+    await expect(window.locator('.qa-find-similar')).toHaveCount(0);
+  });
+
   test('seeds from the whole selection when several songs are picked', async ({ window }) => {
     // Reuses the library the previous test built and seeded.
     await window.locator('.qa-exit-similar').click();
@@ -238,6 +264,32 @@ test.describe('Similar songs', () => {
     expect(results).not.toContain(first);
     expect(results).not.toContain(second);
     await window.locator('.qa-exit-similar').click();
+  });
+
+  // Results are always Main Library songs, so the menu must not offer to
+  // "remove from playlist" a placement that is really the library's own.
+  test('results opened from a playlist offer Delete, not Remove from Playlist', async ({ window }) => {
+    const name = `Similar From ${Date.now()}`;
+    await window.click('#addLibraryBtn');
+    await window.click('#newPlaylistMenuItem');
+    await window.fill('#renameInput', name);
+    await window.click('#renameOkBtn');
+    const playlistRow = window.locator('.qa-playlist-item').filter({ hasText: name });
+    const playlistId = Number(await playlistRow.getAttribute('data-list-id'));
+    await window.evaluate(({ itemId, targetListId }) => (
+      window.electronAPI.copyItemsToList({ itemIds: [itemId], targetListId, skipSongIds: [] })
+    ), { itemId: seed.itemId, targetListId: playlistId });
+
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+    await playlistRow.click();
+    await findSimilarFrom(window, seed.songId);
+    await window.locator('.qa-similar-view .tree-item-content').first().click({ button: 'right' });
+    await expect(window.locator('.qa-delete-item')).toHaveText('Delete');
+
+    await window.locator('.qa-similar-title').click();
+    await playlistRow.click({ button: 'right' });
+    await window.click('.qa-playlist-delete');
+    await window.click('#modalYesBtn');
   });
 });
 

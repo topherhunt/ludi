@@ -1,7 +1,7 @@
-import { createResource, createMemo, Show } from 'solid-js';
+import { createResource, createMemo, createRenderEffect, Show } from 'solid-js';
 import { selectedItems } from '../stores/navigation.js';
-import { libraryVersion, bumpLibraryVersion } from '../stores/tags.js';
-import { isSearching, searchQuery, runSearch } from '../stores/search.js';
+import { libraryVersion, bumpLibraryVersion, showAiTags, toggleShowAiTags } from '../stores/tags.js';
+import { showSimilarTo } from '../stores/similar.js';
 import { getAllListItems, updateSong } from '../utils/api.js';
 import { formatTime } from '../utils/format.js';
 import { TagEditor } from './TagEditor.jsx';
@@ -51,6 +51,15 @@ function resolveSelectedSongs(allItems, selectedIds) {
   return Array.from(metaById.values());
 }
 
+// Every save refreshes the panel, which rewrites each field from the database;
+// the one being typed in is left alone, or a save landing mid-typing would wipe it.
+function bindValue(input, value) {
+  createRenderEffect(() => {
+    const next = value();
+    if (document.activeElement !== input) input.value = next;
+  });
+}
+
 export function SongEditPanel() {
   const [songs] = createResource(
     () => [Array.from(selectedItems()), libraryVersion()],
@@ -82,10 +91,15 @@ export function SongEditPanel() {
     return values.size === 1 ? songList()[0][field] : null;
   };
 
-  const refresh = () => {
-    bumpLibraryVersion();
-    if (isSearching()) runSearch(searchQuery());
-  };
+  const refresh = () => bumpLibraryVersion();
+
+  const hasAiTags = createMemo(() =>
+    songList().some(s => s.tags.some(tag => tag.source === 'auto'))
+  );
+
+  // Seeds from every song the panel is editing, folder contents included.
+  const findSimilar = () =>
+    showSimilarTo(songList().map(s => ({ songId: s.id, title: s.title })));
 
   const commitField = async (field, rawValue) => {
     const value = field === 'track_number'
@@ -127,7 +141,7 @@ export function SongEditPanel() {
               class="song-edit-input qa-edit-title"
               type="text"
               spellcheck={false}
-              value={songList()[0].title}
+              ref={(el) => bindValue(el, () => songList()[0].title)}
               onChange={commitOnChange('title')}
               onKeyDown={blurOnEnter}
             />
@@ -138,7 +152,7 @@ export function SongEditPanel() {
               class="song-edit-input qa-edit-track"
               type="text"
               spellcheck={false}
-              value={songList()[0].track_number ?? ''}
+              ref={(el) => bindValue(el, () => songList()[0].track_number ?? '')}
               onChange={commitOnChange('track_number')}
               onKeyDown={blurOnEnter}
             />
@@ -152,7 +166,7 @@ export function SongEditPanel() {
             classList={{ 'is-multiple': sharedField('artist').isMultiple }}
             type="text"
             spellcheck={false}
-            value={sharedField('artist').value}
+            ref={(el) => bindValue(el, () => sharedField('artist').value)}
             placeholder={sharedField('artist').isMultiple ? '<multiple>' : ''}
             onChange={commitOnChange('artist')}
             onKeyDown={blurOnEnter}
@@ -165,7 +179,7 @@ export function SongEditPanel() {
             classList={{ 'is-multiple': sharedField('album').isMultiple }}
             type="text"
             spellcheck={false}
-            value={sharedField('album').value}
+            ref={(el) => bindValue(el, () => sharedField('album').value)}
             placeholder={sharedField('album').isMultiple ? '<multiple>' : ''}
             onChange={commitOnChange('album')}
             onKeyDown={blurOnEnter}
@@ -175,6 +189,16 @@ export function SongEditPanel() {
         <div class="song-edit-field song-edit-field-tags">
           <span class="song-edit-label">Tags</span>
           <TagEditor songs={songList} />
+        </div>
+        <div class="song-edit-links">
+          <Show when={hasAiTags()}>
+            <span class="text-link qa-toggle-ai-tags" onClick={toggleShowAiTags}>
+              {showAiTags() ? 'Hide AI tags' : 'Show AI tags'}
+            </span>
+          </Show>
+          <span class="text-link qa-panel-find-similar" onClick={findSimilar}>
+            {single() ? 'Find similar songs' : `Find songs like these ${count()}`}
+          </span>
         </div>
       </div>
     </Show>

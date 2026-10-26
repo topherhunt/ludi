@@ -10,7 +10,7 @@ const os = require('os');
  * rather than produced by the model -- running it for real would take minutes
  * and prove something analysis.spec.js already proves. What this covers is
  * everything above it: calibration against a whole library, tag creation,
- * assignment, and the gear that marks a machine-made tag in the UI.
+ * assignment, and where the analyzer's tags are (and aren't) shown.
  *
  * The library is deliberately flat (every song scoring the same on everything)
  * with two songs pushed out on one label each, so the expected tags are known.
@@ -90,13 +90,21 @@ async function deleteFixtureSongs(electronApp, itemIds) {
   }, { modulePath: DATABASE_MODULE, ids: itemIds });
 }
 
-/** The pills on one song's row, as [name, isAuto] pairs. */
-const pillsOnRow = (window, songId) =>
-  window.locator(`.tree-item-content[data-song-id="${songId}"] .col-tags .tag-pill`)
-    .evaluateAll((pills) => pills.map((pill) => [
-      pill.dataset.tagName,
-      pill.querySelector('.qa-tag-auto') !== null,
-    ]));
+// Pills as [name, hasGear] pairs. Read without auto-waiting, so poll them.
+const pillsIn = (locator) => locator.evaluateAll((pills) => pills.map((pill) => [
+  pill.dataset.tagName,
+  pill.querySelector('.qa-tag-auto') !== null,
+]));
+const rowPills = (window, songId) =>
+  pillsIn(window.locator(`.tree-item-content[data-song-id="${songId}"] .col-tags .tag-pill`));
+const panelPills = (window) => pillsIn(window.locator('.qa-tag-editor-pills .tag-pill'));
+const sidebarChip = (window, name) => window.locator(`.qa-tags-section .tag-pill[data-tag-name="${name}"]`);
+
+async function selectSong(window, songId) {
+  await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+  await window.locator(`.tree-item-content[data-song-id="${songId}"]`).click();
+  await expect(window.locator('.qa-song-edit-panel')).toBeVisible();
+}
 
 test.describe('Auto tags', () => {
   test.describe.configure({ timeout: 90000 });
@@ -138,54 +146,98 @@ test.describe('Auto tags', () => {
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('tags only the songs that stand out, and marks each tag as machine-made', async ({ window }) => {
+  test.afterEach(async ({ window }) => {
+    await window.evaluate(() => localStorage.removeItem('ludi-show-ai-tags'));
+  });
+
+  test('tags only the songs that stand out, and keeps them off song rows', async ({ window }) => {
     const result = await window.evaluate(() => window.electronAPI.recalculateAutoTags());
     expect(result.skipped).toBeUndefined();
     expect(result.songs).toBeGreaterThanOrEqual(LIBRARY_SIZE);
     expect(result.assignments).toBe(3);
 
-    await window.locator('.playlist-item').first().click();
-    await expect(window.locator(`.tree-item-content[data-song-id="${songIds[0]}"]`)).toBeVisible();
+    await selectSong(window, songIds[0]);
+    for (const songId of songIds) expect(await rowPills(window, songId)).toEqual([]);
 
-    // Every pill the analyzer put there carries the gear.
-    expect(await pillsOnRow(window, songIds[0])).toEqual(
-      expect.arrayContaining([['jazz', true], ['acoustic', true]])
-    );
-    expect(await pillsOnRow(window, songIds[1])).toEqual([['instrumental', true]]);
+    // The panel hides them too until asked, then marks each with the gear.
+    expect(await panelPills(window)).toEqual([]);
+    const toggle = window.locator('.qa-song-edit-panel .qa-toggle-ai-tags');
+    await toggle.click();
+    await expect.poll(() => panelPills(window)).toEqual(expect.arrayContaining([['jazz', true], ['acoustic', true]]));
+    await expect(toggle).toHaveText('Hide AI tags');
 
-    // The other 18 are indistinguishable from each other, so they get nothing.
-    for (const songId of songIds.slice(2)) {
-      expect(await pillsOnRow(window, songId)).toEqual([]);
-    }
+    await selectSong(window, songIds[1]);
+    await expect.poll(() => panelPills(window)).toEqual([['instrumental', true]]);
+    // A song the analyzer left alone has no AI tags to show, so no link.
+    await selectSong(window, songIds[2]);
+    await expect(window.locator('.qa-song-edit-panel .qa-toggle-ai-tags')).toHaveCount(0);
+    await selectSong(window, songIds[0]);
+    await toggle.click();
   });
 
-  test('leaves a hand-applied tag on the same song unmarked', async ({ window }) => {
-    await window.locator('.playlist-item').first().click();
-    const row = window.locator(`.tree-item-content[data-song-id="${songIds[0]}"]`);
-    await row.click();
-    await expect(window.locator('.qa-song-edit-panel')).toBeVisible();
-
+  test('a hand-applied tag shows on the row and in the panel, without a gear', async ({ window }) => {
+    await selectSong(window, songIds[0]);
     const input = window.locator('.qa-tag-input');
     await input.click();
     await input.fill('favourite');
     await window.locator('.qa-tag-create').click();
 
-    const pills = window.locator(`.tree-item-content[data-song-id="${songIds[0]}"] .col-tags .tag-pill`);
-    await expect(pills.filter({ hasText: 'favourite' })).toHaveCount(1);
+    await expect.poll(() => rowPills(window, songIds[0])).toEqual([['favourite', false]]);
+    await expect.poll(() => panelPills(window)).toEqual([['favourite', false]]);
+  });
 
-    // The gear says "a machine made this tag", so it must not appear on a tag
-    // the user typed -- otherwise it means nothing.
-    expect(await pillsOnRow(window, songIds[0])).toEqual(
-      expect.arrayContaining([['jazz', true], ['acoustic', true], ['favourite', false]])
-    );
+  test('the sidebar lists your tags with hand-tagged counts until AI tags are shown', async ({ window }) => {
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+    await expect(sidebarChip(window, 'favourite').locator('.qa-tag-count')).toHaveText('1');
+    await expect(sidebarChip(window, 'jazz')).toHaveCount(0);
+
+    const toggle = window.locator('.qa-tags-section .qa-toggle-ai-tags');
+    await toggle.click();
+    await expect(sidebarChip(window, 'jazz').locator('.qa-tag-auto')).toHaveCount(1);
+    await expect(sidebarChip(window, 'favourite').locator('.qa-tag-auto')).toHaveCount(0);
+    expect(await window.evaluate(() => localStorage.getItem('ludi-show-ai-tags'))).toBe('true');
+
+    await toggle.click();
+    await expect(sidebarChip(window, 'jazz')).toHaveCount(0);
+  });
+
+  test('suggestions offer only your tags; typing an AI tag\'s name applies it by hand', async ({ window }) => {
+    await selectSong(window, songIds[1]);
+    const input = window.locator('.qa-tag-input');
+    await input.click();
+    const options = window.locator('.qa-tag-option');
+    await expect(options.filter({ hasText: 'favourite' })).toHaveCount(1);
+    await expect(options.filter({ hasText: 'jazz' })).toHaveCount(0);
+
+    await input.fill('jazz');
+    await expect(options).toHaveText(['jazz']);
+    await expect(window.locator('.qa-tag-create')).toHaveCount(0);
+    await input.press('Enter');
+
+    await expect.poll(() => rowPills(window, songIds[1])).toEqual([['jazz', false]]);
+    const jazzTags = await window.evaluate(async () =>
+      (await window.electronAPI.getAllTags()).filter((tag) => tag.name === 'jazz').length);
+    expect(jazzTags).toBe(1);
+    // Now yours, but only song 1 carries it by hand: song 0's is still the analyzer's.
+    await expect(sidebarChip(window, 'jazz').locator('.qa-tag-count')).toHaveText('1');
+    await expect(sidebarChip(window, 'jazz').locator('.qa-tag-auto')).toHaveCount(0);
+    await selectSong(window, songIds[0]);
+    await expect.poll(() => panelPills(window)).toEqual([['favourite', false]]);
   });
 
   test('re-running the analysis leaves hand-applied tags alone', async ({ window }) => {
     await window.evaluate(() => window.electronAPI.recalculateAutoTags());
-    await window.locator('.playlist-item').first().click();
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
 
-    const pills = await pillsOnRow(window, songIds[0]);
-    expect(pills).toContainEqual(['favourite', false]);
-    expect(pills).toContainEqual(['jazz', true]);
+    await expect.poll(() => rowPills(window, songIds[0])).toEqual([['favourite', false]]);
+    await expect.poll(() => rowPills(window, songIds[1])).toEqual([['jazz', false]]);
+  });
+
+  test('the edit panel finds songs like the ones being edited', async ({ window }) => {
+    await selectSong(window, songIds[2]);
+    const title = await window.locator(`.tree-item-content[data-song-id="${songIds[2]}"] .tree-item-label`).textContent();
+    await window.locator('.qa-panel-find-similar').click();
+    await expect(window.locator('.qa-similar-title')).toContainText(title);
+    await window.locator('.qa-exit-similar').click();
   });
 });

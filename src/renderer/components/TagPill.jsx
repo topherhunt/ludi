@@ -3,9 +3,10 @@ import { For, Show } from 'solid-js';
 /**
  * A single rounded tag pill with a border in the tag's assigned color.
  *
- * A tag the analyzer invented (tag.is_auto) gets a small gear in its top-left
- * corner. Otherwise it looks and behaves exactly like a hand-made tag, which is
- * the point: an auto tag is a real tag you can rename, recolor, or remove.
+ * A tag marked is_auto gets a small gear in its top-left corner: the analyzer's
+ * rather than yours. Callers decide what that means where they draw it (the
+ * sidebar: a tag you neither made nor applied; the edit panel: applied only by
+ * the analyzer). Otherwise it looks and behaves exactly like a hand-made tag.
  *
  * Props:
  *   tag        - { id, name, color, is_auto }
@@ -42,11 +43,15 @@ export function TagPill(props) {
   );
 }
 
-/** Renders a read-only list of tag pills (used in the song-list Tags column). */
+/**
+ * Read-only pills for the song-list Tags column. Rows show only the tags you
+ * applied, so none gets a gear, even one the analyzer first created; its own are
+ * in the sidebar and edit panel, behind "Show AI tags".
+ */
 export function TagPillList(props) {
   return (
-    <For each={props.tags || []}>
-      {(tag) => <TagPill tag={tag} />}
+    <For each={(props.tags || []).filter(tag => tag.source !== 'auto')}>
+      {(tag) => <TagPill tag={{ ...tag, is_auto: 0 }} />}
     </For>
   );
 }

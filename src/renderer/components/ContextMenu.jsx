@@ -1,5 +1,5 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { selectedItems, currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { selectedItems } from '../stores/navigation.js';
 
 /**
  * Context menu for tree items
@@ -35,10 +35,13 @@ export function ContextMenu(props) {
   // on the selection, a click outside it acts on the one row.
   const isSeedingFromSelection = () =>
     isMultiSelect() && selectedItems().has(props.item?.id);
-  // Search results show songs pulled out of their folders, so actions that
-  // place things relative to a row's position in its folder would land
-  // somewhere the user can't see. They stay listed, grayed out.
-  const placesByPosition = () => props.inSearch;
+  // Results views show songs pulled out of their folders, so actions that place
+  // things relative to a row's position in its folder would land somewhere the
+  // user can't see. They stay listed, grayed out.
+  const placesByPosition = () => props.rowsOutOfPlace;
+  // A folder there shows only its matching songs, so actions on everything
+  // inside it would touch songs the user can't see.
+  const actsOnHiddenSongs = () => isFolder() && props.rowsOutOfPlace;
 
   return (
     <div
@@ -53,7 +56,9 @@ export function ContextMenu(props) {
       <Show when={isFolder()}>
         <div
           class="context-menu-item"
+          classList={{ disabled: actsOnHiddenSongs() }}
           onClick={() => {
+            if (actsOnHiddenSongs()) return;
             const listId = props.item.list_id;
             props.onClose?.();
             props.onAddFolderInside?.(listId);
@@ -99,7 +104,7 @@ export function ContextMenu(props) {
 
         {/* Play This Folder */}
         <div
-          class="context-menu-item"
+          class="context-menu-item qa-play-folder"
           onClick={() => {
             const listId = props.item.list_id;
             props.onClose?.();
@@ -114,7 +119,9 @@ export function ContextMenu(props) {
         {/* Collapse All */}
         <div
           class="context-menu-item"
+          classList={{ disabled: actsOnHiddenSongs() }}
           onClick={() => {
+            if (actsOnHiddenSongs()) return;
             props.onClose?.();
             props.onCollapseAll?.();
           }}
@@ -125,7 +132,9 @@ export function ContextMenu(props) {
         {/* Expand All */}
         <div
           class="context-menu-item"
+          classList={{ disabled: actsOnHiddenSongs() }}
           onClick={() => {
+            if (actsOnHiddenSongs()) return;
             props.onClose?.();
             props.onExpandAll?.();
           }}
@@ -136,36 +145,40 @@ export function ContextMenu(props) {
         <div class="context-menu-separator" />
 
         {/* Sort by... submenu */}
-        <div class="context-menu-item has-submenu">
+        <div class="context-menu-item has-submenu qa-sort-menu" classList={{ disabled: actsOnHiddenSongs() }}>
           Sort by...
-          <div class="context-submenu">
-            <div
-              class="context-menu-item"
-              onClick={() => {
-                const listId = props.item.list_id;
-                props.onClose?.();
-                props.onSort?.(listId, 'artist');
-              }}
-            >
-              Artist, album, track #, title
+          <Show when={!actsOnHiddenSongs()}>
+            <div class="context-submenu">
+              <div
+                class="context-menu-item"
+                onClick={() => {
+                  const listId = props.item.list_id;
+                  props.onClose?.();
+                  props.onSort?.(listId, 'artist');
+                }}
+              >
+                Artist, album, track #, title
+              </div>
+              <div
+                class="context-menu-item"
+                onClick={() => {
+                  const listId = props.item.list_id;
+                  props.onClose?.();
+                  props.onSort?.(listId, 'title');
+                }}
+              >
+                Title (alphabetical)
+              </div>
             </div>
-            <div
-              class="context-menu-item"
-              onClick={() => {
-                const listId = props.item.list_id;
-                props.onClose?.();
-                props.onSort?.(listId, 'title');
-              }}
-            >
-              Title (alphabetical)
-            </div>
-          </div>
+          </Show>
         </div>
 
         {/* Flatten */}
         <div
-          class="context-menu-item"
+          class="context-menu-item qa-flatten"
+          classList={{ disabled: actsOnHiddenSongs() }}
           onClick={() => {
+            if (actsOnHiddenSongs()) return;
             const listId = props.item.list_id;
             props.onClose?.();
             props.onFlatten?.(listId);
@@ -298,14 +311,16 @@ export function ContextMenu(props) {
 
       {/* Delete. In a playlist this only removes the placement, so say so. */}
       <div
-        class="context-menu-item"
+        class="context-menu-item qa-delete-item"
+        classList={{ disabled: actsOnHiddenSongs() }}
         onClick={() => {
+          if (actsOnHiddenSongs()) return;
           const item = props.item;
           props.onClose?.();
           props.onDelete?.(item);
         }}
       >
-        {currentListId() === MAIN_LIBRARY_ID ? 'Delete' : 'Remove from Playlist'}
+        {props.removesFromPlaylist ? 'Remove from Playlist' : 'Delete'}
       </div>
     </div>
   );

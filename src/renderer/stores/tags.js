@@ -6,16 +6,34 @@ import { randomAvailableColor } from '../utils/tagColors.js';
 // position); `libraryVersion` is a bump-counter that song-list views depend on,
 // and is the single "the library changed, reload" signal: tag and metadata
 // edits, playlist copies, imports, moves and deletes all bump it.
+const SHOW_AI_TAGS_KEY = 'ludi-show-ai-tags';
+
 const {
   tags,
   setTags,
   libraryVersion,
   setLibraryVersion,
+  showAiTags,
+  setShowAiTags,
 } = createRoot(() => {
   const [tags, setTags] = createSignal([]);
   const [libraryVersion, setLibraryVersion] = createSignal(0);
-  return { tags, setTags, libraryVersion, setLibraryVersion };
+  // Whether the sidebar and the edit panel include tags only the analyzer
+  // applied. Song rows never do.
+  const [showAiTags, setShowAiTags] = createSignal(localStorage.getItem(SHOW_AI_TAGS_KEY) === 'true');
+  return { tags, setTags, libraryVersion, setLibraryVersion, showAiTags, setShowAiTags };
 });
+
+function toggleShowAiTags() {
+  const next = !showAiTags();
+  localStorage.setItem(SHOW_AI_TAGS_KEY, String(next));
+  setShowAiTags(next);
+}
+
+/** You created the tag, or applied it to at least one song by hand. */
+function isYourTag(tag) {
+  return !tag.is_auto || tag.manual_count > 0;
+}
 
 /** Reload the tag list from the database. */
 async function refreshTags() {
@@ -47,6 +65,9 @@ async function createTagWithColor(name) {
 export {
   tags,
   libraryVersion,
+  showAiTags,
+  toggleShowAiTags,
+  isYourTag,
   refreshTags,
   bumpLibraryVersion,
   findTagByName,

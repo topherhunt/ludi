@@ -613,39 +613,14 @@ export async function getSongPath(songId) {
 }
 
 /**
- * Get all songs in a list (recursively including subfolders).
+ * Get all songs in a list (recursively including subfolders), in display order.
  * `item_id` identifies the placement, and is what playback keys off -- the same
  * song can appear more than once in a playlist, so `id` alone is ambiguous.
  * @param {number} listId
- * @returns {Promise<Array<{ item_id: number, id: number, title: string, artist: string, file_path: string }>>}
+ * @returns {Promise<Array<{ item_id: number, id: number, title: string, artist: string, album: string, duration_seconds: number }>>}
  */
 export async function getSongsInList(listId) {
-  const items = await getListItems(listId);
-  const songs = [];
-
-  for (const item of items) {
-    if (item.list_id !== null) {
-      // This is a folder, recurse into it
-      const subSongs = await getSongsInList(item.list_id);
-      songs.push(...subSongs);
-    } else if (item.song_id !== null) {
-      // This is a song
-      const song = await getSong(item.song_id);
-      if (song) {
-        songs.push({
-          item_id: item.id,
-          id: song.id,
-          title: song.title,
-          artist: song.artist,
-          album: song.album,
-          file_path: song.file_path,
-          duration_seconds: song.duration_seconds,
-        });
-      }
-    }
-  }
-
-  return songs;
+  return window.electronAPI.getSongsInListDeep(listId);
 }
 
 /**

@@ -1,6 +1,13 @@
 import { createSignal, createMemo, Show, For } from 'solid-js';
 import { TagPill } from './TagPill.jsx';
-import { tags, createTagWithColor, bumpLibraryVersion } from '../stores/tags.js';
+import {
+  tags,
+  createTagWithColor,
+  bumpLibraryVersion,
+  refreshTags,
+  showAiTags,
+  isYourTag,
+} from '../stores/tags.js';
 import { addTagToSongs, removeTagFromSongs } from '../utils/api.js';
 import { isSearching, searchQuery, runSearch } from '../stores/search.js';
 
@@ -9,7 +16,11 @@ import { isSearching, searchQuery, runSearch } from '../stores/search.js';
  *
  * Props:
  *   songs - accessor returning the array of selected song metas
- *           (each { id, tags: [{id,name,color,position}] })
+ *           (each { id, tags: [{id,name,color,position,source}] })
+ *
+ * Tags only the analyzer applied are left out unless "Show AI tags" is on, and
+ * the autocomplete offers only your own tags -- though typing an analyzer tag's
+ * exact name offers it too, so applying it by hand reuses it.
  *
  * Applied tags render as pills in position order. A pill is solid-bordered when
  * every selected song has the tag, dashed when only some do. Click a pill to
@@ -28,26 +39,34 @@ export function TagEditor(props) {
   const songIds = () => props.songs().map(s => s.id);
   const songCount = () => props.songs().length;
 
+  const shownTagsOf = (song) =>
+    (song.tags || []).filter(tag => showAiTags() || tag.source !== 'auto');
+
   // tagId -> number of selected songs that have it
   const tagCounts = createMemo(() => {
     const counts = new Map();
     for (const song of props.songs()) {
-      for (const tag of (song.tags || [])) {
+      for (const tag of shownTagsOf(song)) {
         counts.set(tag.id, (counts.get(tag.id) || 0) + 1);
       }
     }
     return counts;
   });
 
-  // Unique applied tags, sorted by position
+  // Unique applied tags, sorted by position. The gear marks a tag no selected
+  // song carries by hand.
   const appliedTags = createMemo(() => {
     const byId = new Map();
+    const manualIds = new Set();
     for (const song of props.songs()) {
-      for (const tag of (song.tags || [])) {
+      for (const tag of shownTagsOf(song)) {
         if (!byId.has(tag.id)) byId.set(tag.id, tag);
+        if (tag.source === 'manual') manualIds.add(tag.id);
       }
     }
-    return Array.from(byId.values()).sort((a, b) => a.position - b.position);
+    return Array.from(byId.values())
+      .map(tag => ({ ...tag, is_auto: !manualIds.has(tag.id) }))
+      .sort((a, b) => a.position - b.position);
   });
 
   const isAppliedToAll = (tagId) => tagCounts().get(tagId) === songCount();
@@ -56,13 +75,18 @@ export function TagEditor(props) {
     new Set(appliedTags().filter(t => isAppliedToAll(t.id)).map(t => t.id))
   );
 
-  // Autocomplete suggestions: tags not already on every selected song, filtered
-  // by the typed text.
+  // Autocomplete suggestions: your tags not already on every selected song,
+  // filtered by the typed text, plus any tag whose name was typed exactly.
   const suggestions = createMemo(() => {
     const t = text().trim().toLowerCase();
     const excluded = appliedToAllIds();
     let list = tags().filter(tag => !excluded.has(tag.id));
-    if (t) list = list.filter(tag => tag.name.toLowerCase().includes(t));
+    if (t) {
+      list = list.filter(tag => tag.name.toLowerCase().includes(t)
+        && (isYourTag(tag) || tag.name.toLowerCase() === t));
+    } else {
+      list = list.filter(isYourTag);
+    }
     return list;
   });
 
@@ -75,8 +99,10 @@ export function TagEditor(props) {
     inputFocused() && (suggestions().length > 0 || showCreate())
   );
 
-  // Refresh song-list views after a membership change.
+  // Refresh song-list views, and which tags count as yours, after a membership
+  // change.
   const refresh = () => {
+    refreshTags();
     bumpLibraryVersion();
     if (isSearching()) runSearch(searchQuery());
   };

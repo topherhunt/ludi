@@ -2,7 +2,7 @@ import { createSignal, createRoot } from 'solid-js';
 import * as api from '../utils/api.js';
 import { clearSearch } from './search.js';
 import { clearSimilar } from './similar.js';
-import { clearCluster } from './clusters.js';
+import { clearCluster, closeGroups } from './clusters.js';
 import { closeFacets } from './facets.js';
 
 /**
@@ -61,12 +61,11 @@ async function loadMapPoints() {
 
 /** Open the map, replacing whatever the explorer was showing. */
 async function openMap() {
-  // The map, a search, a similarity ranking, a group and the facet browser are
-  // five answers to "what should the explorer show", so opening one puts the
-  // others away.
+  // Only one answer to "what should the explorer show" is on screen at a time.
   clearSearch();
   clearSimilar();
   clearCluster();
+  closeGroups();
   closeFacets();
   setMapOpen(true);
   await loadMapPoints();
@@ -74,6 +73,17 @@ async function openMap() {
 
 function closeMap() {
   setMapOpen(false);
+}
+
+/**
+ * Every song on the map, the one at `itemId` first and then outward by distance
+ * -- what plays after a dot you double-click is whatever sounds closest to it.
+ */
+function mapPointsNearestTo(itemId) {
+  const origin = mapPoints().find(point => point.itemId === itemId);
+  if (!origin) throw new Error(`Item ${itemId} is not on the map`);
+  const distance = point => (point.x - origin.x) ** 2 + (point.y - origin.y) ** 2;
+  return [...mapPoints()].sort((a, b) => distance(a) - distance(b));
 }
 
 /**
@@ -99,5 +109,6 @@ export {
   mapBuilding,
   openMap,
   closeMap,
+  mapPointsNearestTo,
   rebuildMap,
 };

@@ -1,4 +1,7 @@
 const { test, expect } = require('./fixtures');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
 test.describe('Window close behavior', () => {
   test('closing the window hides it instead of destroying it (playback keeps running)', async ({ electronApp }) => {
@@ -37,5 +40,16 @@ test.describe('Test mode stays out of the way', () => {
     expect(state.dockVisible).toBe(false);
     expect(state.mediaShortcuts).toEqual([]);
     expect(state.disabledFeatures).toContain('HardwareMediaKeyHandling');
+  });
+
+  test('the database, library folder and browser profile all live in the run\'s temp dir', async ({ electronApp, window }) => {
+    const { testHome, userData } = await electronApp.evaluate(({ app }) => ({
+      testHome: process.env.LUDI_TEST_HOME, userData: app.getPath('userData'),
+    }));
+    const settings = await window.evaluate(() => window.electronAPI.getSettings());
+    expect(testHome.startsWith(os.tmpdir())).toBe(true);
+    expect(userData.startsWith(testHome)).toBe(true);
+    expect(settings.library_path.startsWith(testHome)).toBe(true);
+    expect(fs.existsSync(path.join(testHome, 'ludi-library-test.sqlite'))).toBe(true);
   });
 });

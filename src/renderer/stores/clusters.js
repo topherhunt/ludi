@@ -26,11 +26,15 @@ const {
   clustering,
   setClustering,
   isShowingCluster,
+  groupsOpen,
+  setGroupsOpen,
 } = createRoot(() => {
   const [clusters, setClusters] = createSignal([]);
   const [activeCluster, setActiveCluster] = createSignal(null); // { id, name, size } | null
   const [clusterSongs, setClusterSongs] = createSignal([]);
   const [clustering, setClustering] = createSignal(false);
+  // The list of every group, shown in the explorer.
+  const [groupsOpen, setGroupsOpen] = createSignal(false);
 
   const isShowingCluster = createMemo(() => activeCluster() !== null);
 
@@ -44,6 +48,8 @@ const {
     clustering,
     setClustering,
     isShowingCluster,
+    groupsOpen,
+    setGroupsOpen,
   };
 });
 
@@ -70,13 +76,27 @@ async function regenerateClusters() {
   }
 }
 
-/** Show one group's songs in the explorer. */
-async function showCluster(cluster) {
-  // A group, a search, a similarity ranking, the map and the facet browser are
-  // five answers to "what should the explorer show", so opening one puts the
-  // others away.
+/** Show the list of groups in the explorer. */
+async function openGroups() {
+  // Only one answer to "what should the explorer show" is on screen at a time.
   clearSearch();
   clearSimilar();
+  clearCluster();
+  closeMap();
+  closeFacets();
+  setGroupsOpen(true);
+  await refreshClusters();
+}
+
+function closeGroups() {
+  setGroupsOpen(false);
+}
+
+/** Show one group's songs in the explorer. */
+async function showCluster(cluster) {
+  clearSearch();
+  clearSimilar();
+  closeGroups();
   closeMap();
   closeFacets();
   setActiveCluster(cluster);
@@ -102,6 +122,9 @@ export {
   clusterSongs,
   clustering,
   isShowingCluster,
+  groupsOpen,
+  openGroups,
+  closeGroups,
   refreshClusters,
   regenerateClusters,
   showCluster,

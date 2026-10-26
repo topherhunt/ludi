@@ -148,7 +148,8 @@ test.describe('Song groups', () => {
   });
 
   test('keeps songs that sound alike together and songs that do not apart', async ({ window, electronApp }) => {
-    await window.locator('.qa-recluster').click();
+    await window.locator('.qa-open-groups').click();
+    await window.locator('.qa-groups-view .qa-recluster').click();
     await dismissAlert(window);
 
     const assigned = await clusterIdsOf(electronApp, songIds);
@@ -162,7 +163,8 @@ test.describe('Song groups', () => {
     expect(new Set(clusterOfGroup).size).toBe(GROUPS);
   });
 
-  test('lists each group in the sidebar with the number of songs in it', async ({ window }) => {
+  test('lists each group in the main panel with the number of songs in it', async ({ window }) => {
+    await expect(window.locator('.qa-groups-title')).toHaveText(`Groups (${GROUPS})`);
     for (const clusterId of clusterOfGroup) {
       const row = clusterRow(window, clusterId);
       await expect(row).toBeVisible();
@@ -178,16 +180,41 @@ test.describe('Song groups', () => {
     await expect(window.locator('.qa-cluster-title')).toContainText(`(${PER_GROUP})`);
   });
 
-  test('renaming a group renames it in the sidebar and in the header', async ({ window }) => {
+  test('Back from a group returns to the groups list', async ({ window }) => {
+    await expect(window.locator('.qa-nav-back')).toHaveAttribute('data-tooltip', 'Back to Groups');
+    await window.locator('.qa-nav-back').click();
+    await expect(window.locator('.qa-groups-view')).toBeVisible();
+    await expect(clusterRow(window, clusterOfGroup[1])).toBeVisible();
+  });
+
+  test('renaming a group renames it in the list and in the header', async ({ window }) => {
     const row = clusterRow(window, clusterOfGroup[1]);
     await row.click({ button: 'right' });
     await window.locator('.qa-cluster-rename').click();
     await window.fill('#renameInput', RENAMED);
     await window.click('#renameOkBtn');
-
     await expect(row).toContainText(RENAMED);
+
+    await row.click();
     await expect(window.locator('.qa-cluster-title')).toHaveText(`${RENAMED} (${PER_GROUP})`);
     expect((await viewedSongIds(window)).sort()).toEqual(groupSongIds(1).sort());
+  });
+
+  test('double-clicking a song in a group queues just the group', async ({ window }) => {
+    const rows = window.locator('.qa-cluster-view .tree-item-content');
+    const titles = await rows.locator('.tree-item-label').allTextContents();
+    const nowPlaying = window.locator('.player-info .song-title');
+
+    await rows.nth(PER_GROUP - 1).dblclick();
+    await expect(nowPlaying).toHaveText(titles[PER_GROUP - 1]);
+    // Looping wraps to the group's first song, not on into the library.
+    await window.locator('#nextBtn').click();
+    await expect(nowPlaying).toHaveText(titles[0]);
+    await window.locator('#playPauseBtn').click();
+
+    await rows.first().click({ button: 'right' });
+    await expect(window.locator('.qa-find-similar')).toBeVisible();
+    await window.locator('.qa-cluster-title').click();
   });
 
   test('saving a group as a playlist puts its songs in a real playlist', async ({ window }) => {

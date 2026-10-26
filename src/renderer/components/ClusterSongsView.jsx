@@ -42,7 +42,7 @@ export function ClusterSongsView(props) {
       >
         <ul class="explorer-tree" id="explorerTree">
           <For each={clusterSongs()}>
-            {(song) => <SearchSongRow song={song} depth={0} />}
+            {(song) => <SearchSongRow song={song} depth={0} onContextMenu={props.onContextMenu} />}
           </For>
         </ul>
       </Show>

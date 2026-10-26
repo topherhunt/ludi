@@ -76,8 +76,8 @@ test.describe('Shuffle', () => {
     await folderRow.locator('.tree-item-icon.chevron').click();
     await expect(rowOf(window, songIds[0])).toBeVisible({ timeout: 2000 });
 
-    // Play the folder from its first song: the queue is the folder's 4 songs.
-    await rowOf(window, songIds[0]).dblclick();
+    // Play the folder itself, so the queue is its 4 songs (two toggles leave it expanded).
+    await folderRow.dblclick();
     await expect(window.locator('#playPauseBtn')).toHaveClass(/playing/);
     await expect(rowOf(window, songIds[0])).toHaveClass(/current-song/);
 

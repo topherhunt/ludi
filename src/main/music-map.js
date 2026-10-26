@@ -58,6 +58,8 @@ function getMapPoints() {
       clusterId: row.cluster_id,
       title: song.title,
       artist: song.artist,
+      album: song.album,
+      durationSeconds: song.duration_seconds,
     });
   }
 

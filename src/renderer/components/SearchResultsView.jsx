@@ -1,5 +1,5 @@
-import { For, Show, createSignal, createMemo } from 'solid-js';
-import { searchResults, searchError, searchViewMode, searchTree } from '../stores/search.js';
+import { For, Show, createMemo } from 'solid-js';
+import { searchResults, searchError, searchViewMode, searchTree, collapsedFolders, setCollapsedFolders } from '../stores/search.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { formatTime } from '../utils/format.js';
@@ -148,7 +148,27 @@ export function SearchSongRow(props) {
 }
 
 function SearchFolderRow(props) {
-  const [expanded, setExpanded] = createSignal(true);
+  const expanded = () => !collapsedFolders().has(props.node.list_id);
+  const toggleExpanded = () => {
+    const next = new Set(collapsedFolders());
+    if (expanded()) next.add(props.node.list_id);
+    else next.delete(props.node.list_id);
+    setCollapsedFolders(next);
+  };
+
+  // A virtual folder has no placement of its own (id null); the menu treats it
+  // as the hits inside it.
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    props.onContextMenu(e.clientX, e.clientY, {
+      id: null,
+      list_id: props.node.list_id,
+      list_title: props.node.title,
+      song_id: null,
+      parent_list_id: null,
+      position: null,
+    });
+  };
 
   return (
     <li class="tree-item">
@@ -159,9 +179,10 @@ function SearchFolderRow(props) {
         style={{ 'grid-template-columns': '1fr' }}
         onClick={(e) => {
           if (!e.target.closest('.tree-item-icon.chevron')) {
-            setExpanded(v => !v);
+            toggleExpanded();
           }
         }}
+        onContextMenu={handleContextMenu}
       >
         <span
           class="col-title"
@@ -169,7 +190,7 @@ function SearchFolderRow(props) {
         >
           <span
             class={'tree-item-icon chevron' + (expanded() ? ' expanded' : '')}
-            onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+            onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
           >
             <i class="bi bi-caret-right-fill" />
           </span>

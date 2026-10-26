@@ -50,7 +50,7 @@ export function SimilarSongsView(props) {
       <Show when={(similarResults() || []).length > 0}>
         <ul class="explorer-tree" id="explorerTree">
           <For each={similarResults()}>
-            {(song) => <SearchSongRow song={song} depth={0} similarity={song.similarity} />}
+            {(song) => <SearchSongRow song={song} depth={0} onContextMenu={props.onContextMenu} similarity={song.similarity} />}
           </For>
         </ul>
 

@@ -208,6 +208,19 @@ export function MusicMapView(props) {
     if (hit) props.onPlaySong?.(hit.itemId, hit.parentListId);
   };
 
+  // The same song menu the lists offer, for the dot under the pointer.
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    const hit = nearestPoint(mapPoints(), canvasPoint(e), view(), size());
+    if (!hit) return;
+    props.onContextMenu(e.clientX, e.clientY, {
+      id: hit.itemId,
+      list_id: null,
+      song_id: hit.songId,
+      parent_list_id: hit.parentListId,
+    });
+  };
+
   // ---- Actions ----
 
   const handleRebuild = async () => {
@@ -255,6 +268,7 @@ export function MusicMapView(props) {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onDblClick={handleDblClick}
+          onContextMenu={handleContextMenu}
         />
 
         <Show when={hovered()}>

@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createRoot } from 'solid-js';
 import { findSimilarSongs } from '../utils/api.js';
 import { clearSearch } from './search.js';
-import { clearCluster } from './clusters.js';
+import { clearCluster, closeGroups } from './clusters.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
 
@@ -30,8 +30,8 @@ const {
   hasMoreSimilar,
 } = createRoot(() => {
   const [similarResults, setSimilarResults] = createSignal(null); // null = not in this view
-  // The songs the search was seeded from, for the header. Titles only -- the
-  // seeds themselves are excluded from the results.
+  // The songs the search was seeded from ({ songId, title }), for the header and
+  // for replaying the search from history. They're excluded from the results.
   const [similarSeeds, setSimilarSeeds] = createSignal([]);
   const [similarTotal, setSimilarTotal] = createSignal(0);
   const [similarLoading, setSimilarLoading] = createSignal(false);
@@ -57,30 +57,26 @@ const {
   };
 });
 
-let seedSongIds = [];
-
 /**
  * Show songs similar to the given ones, replacing whatever the explorer was
  * showing.
  * @param {Array<{ songId: number, title: string }>} seeds
  */
 async function showSimilarTo(seeds) {
-  seedSongIds = seeds.map(seed => seed.songId);
-  setSimilarSeeds(seeds.map(seed => seed.title));
+  setSimilarSeeds(seeds);
   setSimilarResults([]);
   setSimilarTotal(0);
   setSimilarNotice(null);
   setSimilarLoading(true);
 
-  // Similarity, search, groups, the map and the facet browser are five different
-  // answers to "what should the explorer show", so only one can be on screen at
-  // a time.
+  // Only one answer to "what should the explorer show" is on screen at a time.
   clearSearch();
   clearCluster();
+  closeGroups();
   closeMap();
   closeFacets();
 
-  const response = await findSimilarSongs(seedSongIds, { limit: PAGE_SIZE, offset: 0 });
+  const response = await findSimilarSongs(seeds.map(seed => seed.songId), { limit: PAGE_SIZE, offset: 0 });
   setSimilarResults(response.results);
   setSimilarTotal(response.total);
   setSimilarNotice(noticeFor(response, seeds.length));
@@ -92,7 +88,7 @@ async function showMoreSimilar() {
   if (similarLoading() || !hasMoreSimilar()) return;
   setSimilarLoading(true);
 
-  const response = await findSimilarSongs(seedSongIds, {
+  const response = await findSimilarSongs(similarSeeds().map(seed => seed.songId), {
     limit: PAGE_SIZE,
     offset: (similarResults() || []).length,
   });
@@ -118,7 +114,6 @@ function noticeFor(response, seedCount) {
 }
 
 function clearSimilar() {
-  seedSongIds = [];
   setSimilarResults(null);
   setSimilarSeeds([]);
   setSimilarTotal(0);

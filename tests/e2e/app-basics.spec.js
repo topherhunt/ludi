@@ -34,8 +34,12 @@ test.describe('App Basics', () => {
   });
 
   test('should display explorer tree structure', async ({ window }) => {
-    const explorerTree = await window.locator('.explorer-tree');
-    await expect(explorerTree).toBeVisible();
+    // Attached rather than visible: each run starts with an empty library, and an
+    // empty list has no height.
+    const explorerTree = window.locator('.explorer-tree');
+    await expect(explorerTree).toBeAttached();
+    await expect(explorerTree).toHaveAttribute('data-list-id', '0');
+    await expect(explorerTree.locator('.loading')).toHaveCount(0);
   });
 
   test('should have no console errors', async ({ consoleErrors }) => {
