@@ -41,6 +41,7 @@ import {
   loopMode,
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
+import { isSearching, searchRootListId, searchResultsInDisplayOrder, searchFolderSongs } from './stores/search.js';
 import { getSongsInList, getSong, getRootListId, recordSongPlay } from './utils/api.js';
 
 // How long playback may be stopped before we let macOS suspend the app again.
@@ -340,9 +341,34 @@ export function App() {
     await playCurrentTrack();
   };
 
+  // Queue search hits as they stand right now. The queue is a snapshot: editing
+  // the search afterwards changes what's shown, not what's playing.
+  const playSearchHits = async (hits, itemId) => {
+    const songs = hits.map((hit) => ({
+      item_id: hit.item_id,
+      id: hit.song_id,
+      title: hit.title,
+      artist: hit.artist,
+      album: hit.album,
+      duration_seconds: hit.duration_seconds,
+    }));
+    const songIndex = itemId === null ? 0 : songs.findIndex((s) => s.item_id === itemId);
+    if (songIndex === -1) throw new Error(`Item ${itemId} is not in the search results`);
+
+    setCurrentPlaylist(songs, songIndex, searchRootListId());
+    setPlayingRootListId(searchRootListId());
+    await playCurrentTrack();
+  };
+
+  // A virtual folder in the nested search view plays just its own hits.
+  const handlePlaySearchFolder = (listId) => playSearchHits(searchFolderSongs(listId), null);
+
   // Handle play song in context. Identified by its list_items id, not its song
-  // id -- the same song can appear more than once in one playlist.
+  // id -- the same song can appear more than once in one playlist. While a
+  // search is showing, the context is the results, not the song's folder.
   const handlePlaySong = async (itemId, parentListId) => {
+    if (isSearching()) return playSearchHits(searchResultsInDisplayOrder(), itemId);
+
     // Get all songs in the parent list to build playlist
     const songs = await getSongsInList(parentListId);
     if (songs.length === 0) return;
@@ -516,6 +542,7 @@ export function App() {
         listTitle={listTitle()}
         onPlayFolder={handlePlayFolder}
         onPlaySong={handlePlaySong}
+        onPlaySearchFolder={handlePlaySearchFolder}
         onSeek={handleSeek}
         onCollapseAll={handleCollapseAll}
         onExpandAll={handleExpandAll}

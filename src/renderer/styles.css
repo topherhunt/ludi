@@ -774,6 +774,15 @@ body.resizing-sidebar {
   background-color: #094771;
 }
 
+.context-menu-item.disabled {
+  color: #777;
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background-color: transparent;
+}
+
 /* Leading glyph on a menu item; fixed width so the labels stay aligned. */
 .context-menu-icon {
   display: inline-block;

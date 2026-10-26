@@ -21,6 +21,13 @@ const isDev = process.env.VITE_DEV === 'true';
 // Test runs keep every window hidden, the app out of the Dock and the audio muted,
 // so a suite running in the background never steals focus or makes noise.
 const isTest = process.env.NODE_ENV === 'test';
+
+// Chromium hands playing media to macOS Now Playing, which routes the keyboard's
+// media keys to it. A test run would take over the user's media keys and show up
+// in Control Center; the renderer's MediaSession API still works without it.
+if (isTest) {
+  app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling');
+}
 // The launcher passes the port it started Vite on via VITE_PORT, so we never
 // load a stray dev server that happens to be listening somewhere else. See
 // scripts/vite-server.js for the ports and why they aren't 5173.
@@ -109,8 +116,9 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Register media keys
-  registerMediaKeys();
+  // Global shortcuts are system-wide, so a test run would swallow the user's
+  // media keys.
+  if (!isTest) registerMediaKeys();
 }
 
 function registerMediaKeys() {
@@ -580,7 +588,10 @@ ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {
         continue;
       }
 
-      await shell.trashItem(filePath);
+      // Test runs delete outright -- every run would otherwise fill the user's
+      // real Trash with test audio.
+      if (isTest) await fsp.rm(filePath);
+      else await shell.trashItem(filePath);
       console.log('Moved audio file to Trash:', filePath);
       trashedCount++;
 

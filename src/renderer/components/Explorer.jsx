@@ -19,7 +19,7 @@ import {
   getSong,
 } from '../utils/api.js';
 import { selectedItems, clearSelection } from '../stores/navigation.js';
-import { isSearching, runSearch } from '../stores/search.js';
+import { isSearching, runSearch, searchQuery } from '../stores/search.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
 import { SearchResultsView } from './SearchResultsView.jsx';
@@ -68,9 +68,10 @@ export function Explorer(props) {
     setContextMenu(null);
   };
 
-  // Show context menu
+  // Show context menu. Remembers whether it was opened on search results, whose
+  // rows are scattered across folders the user can't see.
   const handleContextMenu = (x, y, item) => {
-    setContextMenu({ x, y, item });
+    setContextMenu({ x, y, item, inSearch: isSearching() });
   };
 
   // Add folder inside another folder
@@ -322,6 +323,7 @@ export function Explorer(props) {
       }
       clearSelection();
       refetchTree?.();
+      if (isSearching()) runSearch(searchQuery());
       hideConfirmModal();
     });
   };
@@ -430,7 +432,11 @@ export function Explorer(props) {
           <ClusterSongsView onPlaySong={props.onPlaySong} />
         </Match>
         <Match when={isSearching()}>
-          <SearchResultsView onPlaySong={props.onPlaySong} />
+          <SearchResultsView
+            onPlaySong={props.onPlaySong}
+            onPlaySearchFolder={props.onPlaySearchFolder}
+            onContextMenu={handleContextMenu}
+          />
         </Match>
       </Switch>
 
@@ -440,6 +446,7 @@ export function Explorer(props) {
           x={contextMenu().x}
           y={contextMenu().y}
           item={contextMenu().item}
+          inSearch={contextMenu().inSearch}
           onClose={closeContextMenu}
           onAddFolderInside={handleAddFolderInside}
           onAddFolderAfter={handleAddFolderAfter}

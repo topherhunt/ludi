@@ -35,6 +35,10 @@ export function ContextMenu(props) {
   // on the selection, a click outside it acts on the one row.
   const isSeedingFromSelection = () =>
     isMultiSelect() && selectedItems().has(props.item?.id);
+  // Search results show songs pulled out of their folders, so actions that
+  // place things relative to a row's position in its folder would land
+  // somewhere the user can't see. They stay listed, grayed out.
+  const placesByPosition = () => props.inSearch;
 
   return (
     <div
@@ -61,8 +65,10 @@ export function ContextMenu(props) {
 
       {/* Add Folder After */}
       <div
-        class="context-menu-item"
+        class="context-menu-item qa-add-folder-after"
+        classList={{ disabled: placesByPosition() }}
         onClick={() => {
+          if (placesByPosition()) return;
           // Capture values before closing (props.item becomes undefined after onClose)
           const parentListId = props.item.parent_list_id;
           const position = props.item.position + 1;
@@ -76,8 +82,10 @@ export function ContextMenu(props) {
       {/* Move into New Folder (when items selected) */}
       <Show when={hasSelection()}>
         <div
-          class="context-menu-item"
+          class="context-menu-item qa-move-into-new-folder"
+          classList={{ disabled: placesByPosition() }}
           onClick={() => {
+            if (placesByPosition()) return;
             props.onClose?.();
             props.onMoveIntoNewFolder?.();
           }}

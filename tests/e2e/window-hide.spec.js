@@ -23,15 +23,19 @@ test.describe('Window close behavior', () => {
 });
 
 test.describe('Test mode stays out of the way', () => {
-  test('windows are hidden, audio is muted and the app has no Dock icon', async ({ electronApp }) => {
-    const state = await electronApp.evaluate(({ app, BrowserWindow }) => ({
+  test('windows are hidden, audio is muted, media keys are left alone and the app has no Dock icon', async ({ electronApp }) => {
+    const state = await electronApp.evaluate(({ app, BrowserWindow, globalShortcut }) => ({
       windows: BrowserWindow.getAllWindows().map((w) => ({ visible: w.isVisible(), muted: w.webContents.isAudioMuted(), url: w.webContents.getURL() })),
       dockVisible: process.platform === 'darwin' ? app.dock.isVisible() : false,
+      mediaShortcuts: ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack'].filter((k) => globalShortcut.isRegistered(k)),
+      disabledFeatures: app.commandLine.getSwitchValue('disable-features'),
     }));
 
     const main = state.windows.find((w) => w.url.includes('index.html'));
     expect(main.muted).toBe(true);
     expect(state.windows.filter((w) => w.visible)).toEqual([]);
     expect(state.dockVisible).toBe(false);
+    expect(state.mediaShortcuts).toEqual([]);
+    expect(state.disabledFeatures).toContain('HardwareMediaKeyHandling');
   });
 });

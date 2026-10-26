@@ -33,12 +33,21 @@ test.describe('Song context menu', () => {
     await expect(finderItem).toBeVisible();
     await expect(copyItem).toBeVisible();
 
-    // "Copy file path" writes the absolute path; read it back from the main process.
+    // "Copy file path" writes the absolute path. Record the write in the main
+    // process instead of letting it clobber the user's real clipboard.
     // (We don't click "Show in Finder" -- it would pop real Finder windows during tests.)
+    await electronApp.evaluate(({ clipboard }) => {
+      global.__copied = [];
+      global.__realWriteText = clipboard.writeText;
+      clipboard.writeText = (text) => { global.__copied.push(text); };
+    });
     await copyItem.click();
     await window.waitForTimeout(150);
-    const clip = await electronApp.evaluate(({ clipboard }) => clipboard.readText());
-    expect(clip).toBe(absPath);
+    const copied = await electronApp.evaluate(({ clipboard }) => {
+      clipboard.writeText = global.__realWriteText;
+      return global.__copied;
+    });
+    expect(copied).toEqual([absPath]);
 
     // Cleanup
     await songRow.click();

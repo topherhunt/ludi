@@ -7,6 +7,7 @@ import { clearCluster } from './clusters.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
 import { buildRootResolver } from '../utils/listTree.js';
+import { buildNestedTree, songsInTreeOrder, findTreeFolder } from '../utils/searchTree.js';
 
 const {
   searchQuery,
@@ -20,6 +21,7 @@ const {
   searchRootListId,
   setSearchRootListId,
   isSearching,
+  searchTree,
 } = createRoot(() => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal(null); // null = not searching
@@ -29,6 +31,7 @@ const {
   // list you were viewing when you searched.
   const [searchRootListId, setSearchRootListId] = createSignal(null);
   const isSearching = createMemo(() => searchResults() !== null);
+  const searchTree = createMemo(() => buildNestedTree(searchResults() || [], searchRootListId()));
 
   return {
     searchQuery,
@@ -42,6 +45,7 @@ const {
     searchRootListId,
     setSearchRootListId,
     isSearching,
+    searchTree,
   };
 });
 
@@ -167,6 +171,21 @@ function clearSearch() {
   setSearchRootListId(null);
 }
 
+/**
+ * The results top to bottom as the current view mode shows them -- the order a
+ * play queue started from the results follows.
+ */
+function searchResultsInDisplayOrder() {
+  return searchViewMode() === 'nested' ? songsInTreeOrder(searchTree()) : searchResults();
+}
+
+/** The results inside one virtual folder of the nested view, in display order. */
+function searchFolderSongs(listId) {
+  const folder = findTreeFolder(searchTree(), listId);
+  if (!folder) throw new Error(`No search folder ${listId} in the current results`);
+  return songsInTreeOrder(folder.children);
+}
+
 export {
   searchQuery,
   setSearchQuery,
@@ -176,6 +195,9 @@ export {
   setSearchViewMode,
   searchRootListId,
   isSearching,
+  searchTree,
+  searchResultsInDisplayOrder,
+  searchFolderSongs,
   runSearch,
   clearSearch,
 };

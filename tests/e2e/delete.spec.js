@@ -43,6 +43,41 @@ test.describe('Delete', () => {
     expect(fs.existsSync(absPath)).toBe(false);
   });
 
+  test('deleting a selection that spans nested folders removes every song file inside them', async ({ window }) => {
+    const outer = path.join(os.tmpdir(), `ludi-nested-delete-${STAMP}`);
+    fs.mkdirSync(path.join(outer, 'inner'), { recursive: true });
+    fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), path.join(outer, `top-${STAMP}.m4a`));
+    fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), path.join(outer, 'inner', `deep-${STAMP}.m4a`));
+    await window.evaluate((fp) => window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 }), outer);
+    fs.rmSync(outer, { recursive: true, force: true });
+
+    const absPaths = await window.evaluate(async (stamp) => {
+      const items = await window.electronAPI.getAllListItems();
+      const songs = items.filter((i) => (i.song_title || '').includes(stamp));
+      return Promise.all(songs.map((i) => window.electronAPI.getSong(i.song_id).then((s) => s.file_path)));
+    }, String(STAMP));
+    expect(absPaths).toHaveLength(2);
+    absPaths.forEach((p) => expect(fs.existsSync(p)).toBe(true));
+
+    // Select everything under the outer folder -- both folders and both songs.
+    await window.locator('.playlist-item').first().click();
+    const outerRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: path.basename(outer) });
+    const innerRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'inner' });
+    // Imported folders arrive collapsed.
+    await outerRow.locator('.chevron').click();
+    await innerRow.locator('.chevron').click();
+    await outerRow.click();
+    await innerRow.click({ modifiers: ['Meta'] });
+    await window.locator('.tree-item-content').filter({ hasText: `top-${STAMP}` }).click({ modifiers: ['Meta'] });
+    await window.locator('.tree-item-content').filter({ hasText: `deep-${STAMP}` }).click({ modifiers: ['Meta'] });
+    await expect(window.locator('.tree-item-content.selected')).toHaveCount(4);
+
+    await window.keyboard.press('Backspace');
+    await window.click('#modalYesBtn');
+    await expect(outerRow).toHaveCount(0, { timeout: 2000 });
+    await expect.poll(() => absPaths.filter((p) => fs.existsSync(p))).toEqual([]);
+  });
+
   // A file deleted or renamed behind the app's back used to be undeletable: the
   // failed load left the watchdog running, so every few seconds the recovery
   // retried the dead track and threw another "File Not Found" alert on screen --
