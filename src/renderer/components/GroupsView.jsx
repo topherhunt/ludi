@@ -2,6 +2,7 @@ import { For, Show, createSignal, onMount, onCleanup } from 'solid-js';
 import { clusters, clustering, regenerateClusters, showCluster, renameCluster } from '../stores/clusters.js';
 import { clearSelection } from '../stores/navigation.js';
 import { showRenameModal, showAlert } from '../stores/modals.js';
+import { FloatingMenu } from './FloatingMenu.jsx';
 
 /**
  * Every auto-generated group, with the button that regroups the library.
@@ -88,11 +89,11 @@ export function GroupsView() {
       </div>
 
       <Show when={menu()}>
-        <div class="context-menu cluster-context-menu" style={{ left: `${menu().x}px`, top: `${menu().y}px` }}>
+        <FloatingMenu class="context-menu cluster-context-menu" x={menu().x} y={menu().y}>
           <div class="context-menu-item qa-cluster-rename" onClick={() => handleRename(menu().cluster)}>
             <i class="bi bi-pencil context-menu-icon"></i>Rename
           </div>
-        </div>
+        </FloatingMenu>
       </Show>
     </div>
   );

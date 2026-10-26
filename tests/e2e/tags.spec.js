@@ -205,9 +205,7 @@ test.describe('Tags', () => {
       const el = document.querySelector('.qa-tags-section [data-tag-name="edgetag"]');
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
     }, { x: viewport.w - 20, y: viewport.h - 20 });
-    // The menu itself opens at the cursor and is mostly off-screen here, so the
-    // item is clicked by dispatch rather than by hit-testing a real mouse click.
-    await window.locator('.qa-tag-change-color').dispatchEvent('click');
+    await window.locator('.qa-tag-change-color').click();
 
     const popover = window.locator('.tag-color-popover');
     await expect(popover).toBeVisible();

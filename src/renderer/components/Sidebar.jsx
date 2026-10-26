@@ -36,6 +36,7 @@ import { SidebarPlaylistRow } from './SidebarPlaylistRow.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { SongEditPanel } from './SongEditPanel.jsx';
 import { AnalysisProgress } from './AnalysisProgress.jsx';
+import { FloatingMenu } from './FloatingMenu.jsx';
 
 /**
  * Sidebar component with playlist list
@@ -49,7 +50,6 @@ export function Sidebar(props) {
   const [playlistMenu, setPlaylistMenu] = createSignal(null); // { x, y, list } | null
   const [savedSearchMenu, setSavedSearchMenu] = createSignal(null); // { x, y, saved } | null
   let playlistListRef;
-  let colorPopoverRef;
 
   // Fetch lists from database. Keyed on the library version so a playlist made
   // somewhere else -- saving a group, for instance -- appears here too.
@@ -144,20 +144,6 @@ export function Sidebar(props) {
     setTagMenu(null);
     setColorPicker({ x, y, tag });
   };
-
-  // The popover opens at the cursor, so right-clicking a tag low in the window
-  // would push it past the bottom edge -- and nothing scrolls to bring it back.
-  // Measure it once it's in the DOM and pull it back inside the viewport.
-  const VIEWPORT_MARGIN = 8;
-  createEffect(() => {
-    const picker = colorPicker();
-    if (!picker || !colorPopoverRef) return;
-    const { width, height } = colorPopoverRef.getBoundingClientRect();
-    const maxLeft = window.innerWidth - width - VIEWPORT_MARGIN;
-    const maxTop = window.innerHeight - height - VIEWPORT_MARGIN;
-    colorPopoverRef.style.left = `${Math.max(VIEWPORT_MARGIN, Math.min(picker.x, maxLeft))}px`;
-    colorPopoverRef.style.top = `${Math.max(VIEWPORT_MARGIN, Math.min(picker.y, maxTop))}px`;
-  });
 
   const handlePickColor = async (tag, color) => {
     setColorPicker(null);
@@ -560,10 +546,7 @@ export function Sidebar(props) {
 
       {/* Playlist right-click context menu. The Main Library can only be played. */}
       <Show when={playlistMenu()}>
-        <div
-          class="context-menu playlist-context-menu"
-          style={{ left: `${playlistMenu().x}px`, top: `${playlistMenu().y}px` }}
-        >
+        <FloatingMenu class="context-menu playlist-context-menu" x={playlistMenu().x} y={playlistMenu().y}>
           <div
             class="context-menu-item qa-playlist-play"
             onClick={() => {
@@ -582,30 +565,24 @@ export function Sidebar(props) {
               <i class="bi bi-trash context-menu-icon"></i>Delete
             </div>
           </Show>
-        </div>
+        </FloatingMenu>
       </Show>
 
       {/* Saved search right-click context menu */}
       <Show when={savedSearchMenu()}>
-        <div
-          class="context-menu saved-search-context-menu"
-          style={{ left: `${savedSearchMenu().x}px`, top: `${savedSearchMenu().y}px` }}
-        >
+        <FloatingMenu class="context-menu saved-search-context-menu" x={savedSearchMenu().x} y={savedSearchMenu().y}>
           <div class="context-menu-item qa-saved-search-rename" onClick={() => handleRenameSavedSearch(savedSearchMenu().saved)}>
             <i class="bi bi-pencil context-menu-icon"></i>Rename
           </div>
           <div class="context-menu-item qa-saved-search-delete" onClick={() => handleDeleteSavedSearch(savedSearchMenu().saved)}>
             <i class="bi bi-trash context-menu-icon"></i>Delete
           </div>
-        </div>
+        </FloatingMenu>
       </Show>
 
       {/* Tag right-click context menu */}
       <Show when={tagMenu()}>
-        <div
-          class="context-menu tag-context-menu"
-          style={{ left: `${tagMenu().x}px`, top: `${tagMenu().y}px` }}
-        >
+        <FloatingMenu class="context-menu tag-context-menu" x={tagMenu().x} y={tagMenu().y}>
           <div class="context-menu-item qa-tag-rename" onClick={() => handleRenameTag(tagMenu().tag)}>
             Rename
           </div>
@@ -618,16 +595,12 @@ export function Sidebar(props) {
           <div class="context-menu-item qa-tag-delete" onClick={() => handleDeleteTag(tagMenu().tag)}>
             Delete Tag
           </div>
-        </div>
+        </FloatingMenu>
       </Show>
 
       {/* Color-swatch popover */}
       <Show when={colorPicker()}>
-        <div
-          ref={colorPopoverRef}
-          class="tag-color-popover"
-          style={{ left: `${colorPicker().x}px`, top: `${colorPicker().y}px` }}
-        >
+        <FloatingMenu class="tag-color-popover" x={colorPicker().x} y={colorPicker().y}>
           <div class="tag-color-popover-title qa-tag-color-title">Pick tag color</div>
           <div class="tag-color-grid">
             <For each={TAG_COLORS}>
@@ -640,7 +613,7 @@ export function Sidebar(props) {
               )}
             </For>
           </div>
-        </div>
+        </FloatingMenu>
       </Show>
     </aside>
   );

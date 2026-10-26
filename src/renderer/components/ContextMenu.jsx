@@ -1,5 +1,6 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { selectedItems } from '../stores/navigation.js';
+import { FloatingMenu } from './FloatingMenu.jsx';
 
 /**
  * Context menu for tree items
@@ -44,14 +45,7 @@ export function ContextMenu(props) {
   const actsOnHiddenSongs = () => isFolder() && props.rowsOutOfPlace;
 
   return (
-    <div
-      class="context-menu"
-      ref={menuRef}
-      style={{
-        left: `${props.x}px`,
-        top: `${props.y}px`,
-      }}
-    >
+    <FloatingMenu class="context-menu" ref={menuRef} x={props.x} y={props.y}>
       {/* Add Folder Inside (for folders only) */}
       <Show when={isFolder()}>
         <div
@@ -322,6 +316,6 @@ export function ContextMenu(props) {
       >
         {props.removesFromPlaylist ? 'Remove from Playlist' : 'Delete'}
       </div>
-    </div>
+    </FloatingMenu>
   );
 }

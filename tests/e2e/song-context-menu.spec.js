@@ -88,4 +88,34 @@ test.describe('Song context menu', () => {
     await window.waitForTimeout(100);
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  test('opened in the bottom-right corner, the menu and its submenus stay inside the window', async ({ window }) => {
+    const file = path.join(os.tmpdir(), `ludi-ctx-corner-${Date.now()}.mp3`);
+    fs.copyFileSync(testAudioPath, file);
+    const { imported, itemIds } = await window.evaluate(
+      (fp) => window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 }), file);
+    fs.rmSync(file, { force: true });
+
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+    const viewport = await window.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+    // A real MouseEvent: Playwright's dispatchEvent('contextmenu') carries no coordinates.
+    await window.locator(`.tree-item-content[data-song-id="${imported[0].songId}"]`).evaluate((row, { x, y }) => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }, { x: viewport.w - 5, y: viewport.h - 5 });
+    const insideWindow = async (locator) => {
+      const box = await locator.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.w);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.h);
+    };
+
+    await insideWindow(window.locator('.context-menu'));
+    await window.locator('.qa-rate-menu').hover();
+    await insideWindow(window.locator('.qa-rate-menu > .context-submenu'));
+
+    await window.locator('.search-input').click();
+    await expect(window.locator('.context-menu')).toHaveCount(0);
+    await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), itemIds[0]);
+  });
 });
