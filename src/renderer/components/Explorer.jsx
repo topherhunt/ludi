@@ -18,7 +18,7 @@ import {
   getItem,
   getSong,
 } from '../utils/api.js';
-import { selectedItems, clearSelection } from '../stores/navigation.js';
+import { selectedItems, clearSelection, selectItem } from '../stores/navigation.js';
 import { isSearching, runSearch, searchFolderSongs } from '../stores/search.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
@@ -78,8 +78,11 @@ export function Explorer(props) {
 
   // Show context menu. Remembers whether the rows are pulled out of folders the
   // user can't see (search and the analysis views), where positional actions
-  // would land somewhere invisible.
+  // would land somewhere invisible. Right-clicking outside the selection selects
+  // just that row, so the highlight shows what the menu acts on. (A search
+  // folder has no item id; its menu acts on the hits inside it.)
   const handleContextMenu = (x, y, item) => {
+    if (item.id !== null && !selectedItems().has(item.id)) selectItem(item.id);
     setContextMenu({
       x,
       y,

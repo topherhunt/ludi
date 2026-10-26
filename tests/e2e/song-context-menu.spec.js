@@ -118,4 +118,42 @@ test.describe('Song context menu', () => {
     await expect(window.locator('.context-menu')).toHaveCount(0);
     await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), itemIds[0]);
   });
+
+  test('right-clicking outside the selection selects just that song; inside it keeps the selection', async ({ window }) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-ctx-select-'));
+    const files = [0, 1, 2].map((i) => {
+      const file = path.join(dir, `ludi-ctx-select-${Date.now()}-${i}.mp3`);
+      fs.copyFileSync(testAudioPath, file);
+      return file;
+    });
+    const { imported, itemIds } = await window.evaluate(
+      (paths) => window.electronAPI.importFiles({ filePaths: paths, parentListId: 0, position: 0 }), files);
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    await window.locator('.qa-playlist-item[data-list-id="0"]').click();
+    const [a, b, c] = imported.map(({ songId }) => window.locator(`.tree-item-content[data-song-id="${songId}"]`));
+    const selectedCount = () => window.locator('.tree-item-content.selected').count();
+    const closeMenu = async () => {
+      await window.locator('.search-input').click();
+      await expect(window.locator('.context-menu')).toHaveCount(0);
+    };
+
+    await a.click();
+    await b.click({ modifiers: ['Meta'] });
+    await c.click({ button: 'right' });
+    await expect(c).toHaveClass(/selected/);
+    expect(await selectedCount()).toBe(1);
+    await closeMenu();
+
+    await a.click();
+    await b.click({ modifiers: ['Meta'] });
+    await a.click({ button: 'right' });
+    await expect(window.locator('.qa-rate-menu')).toContainText('Rate these 2');
+    expect(await selectedCount()).toBe(2);
+    await closeMenu();
+
+    await window.evaluate(async (ids) => {
+      for (const id of ids) await window.electronAPI.deleteItemWithFiles(id);
+    }, itemIds);
+  });
 });
