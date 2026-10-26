@@ -29,13 +29,13 @@ test.describe('Packaged app', () => {
   });
 
   test('launches from the signed bundle and renders the library UI', async () => {
-    // Own DB file so this never touches the shared test library the other specs reset.
-    const dbPath = path.join(os.tmpdir(), 'ludi-packaged-smoke.sqlite');
-    fs.rmSync(dbPath, { force: true });
+    // Own throwaway home so this never touches the shared test library the other specs reset.
+    const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-packaged-'));
+    const dbPath = path.join(testHome, 'ludi-library-test.sqlite');
 
     const app = await electron.launch({
       executablePath: path.join(APP_PATH, 'Contents', 'MacOS', 'Ludi'),
-      env: { ...process.env, NODE_ENV: 'test', LUDI_DB_PATH: dbPath },
+      env: { ...process.env, NODE_ENV: 'test', LUDI_TEST_HOME: testHome },
     });
 
     const window = await app.firstWindow({ timeout: 15000 });
@@ -48,6 +48,6 @@ test.describe('Packaged app', () => {
     expect(fs.existsSync(dbPath)).toBe(true);
 
     await app.close();
-    fs.rmSync(dbPath, { force: true });
+    fs.rmSync(testHome, { recursive: true, force: true });
   });
 });
