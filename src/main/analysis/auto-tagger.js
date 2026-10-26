@@ -16,7 +16,7 @@ const { selectMsdTags, selectAxisTags } = require('./tag-calibration');
 const MIN_SONGS_TO_CALIBRATE = 20;
 
 /**
- * Give an auto-created tag a stable color.
+ * Give a tag the main process creates (auto-tags, imported tags) a stable color.
  *
  * Deterministic rather than random so "jazz" is the same color every time the
  * tagger runs, and the same color in your library as in mine.

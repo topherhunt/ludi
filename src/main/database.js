@@ -838,6 +838,11 @@ function createTag(name, color) {
   return db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid);
 }
 
+// Name matching is case-insensitive, per the column's NOCASE collation.
+function getOrCreateTag(name, color) {
+  return db.prepare('SELECT * FROM tags WHERE name = ?').get(name) || createTag(name, color);
+}
+
 function renameTag(tagId, newName) {
   const now = new Date().toISOString();
   db.prepare('UPDATE tags SET name = ?, updated_at = ? WHERE id = ?').run(newName, now, tagId);
@@ -1634,6 +1639,7 @@ module.exports = {
   deleteSavedSearch,
   getAllTags,
   createTag,
+  getOrCreateTag,
   renameTag,
   setTagColor,
   deleteTag,

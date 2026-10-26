@@ -87,7 +87,7 @@ export function Settings() {
   const [analysis, setAnalysis] = createSignal({ total: 0, analyzed: 0, pending: 0, failed: 0, running: false });
   const [failures, setFailures] = createSignal([]);
 
-  // Swinsian ratings import. `busy` covers the read+match pass, which happens
+  // Swinsian ratings and tags import. `busy` covers the read+match pass, which happens
   // before anything is written.
   const [ratingImport, setRatingImport] = createSignal({ busy: false });
 
@@ -213,10 +213,10 @@ export function Settings() {
     }
     setRatingImport({ busy: false });
 
-    if (preview.songsToRate === 0) {
+    if (preview.songsToRate === 0 && preview.songsToTag === 0) {
       showAlert(
         '<i class="bi bi-star" style="margin-right: 8px;"></i>Nothing to Import',
-        `<p>Found ${preview.ratedTracks} rated track${preview.ratedTracks === 1 ? '' : 's'} in that library,`
+        `<p>Found ${preview.foundTracks} rated or tagged track${preview.foundTracks === 1 ? '' : 's'} in that library,`
         + ` but none of them matched a song in your Ludi library.</p>`
       );
       return;
@@ -229,28 +229,36 @@ export function Settings() {
       ? `<p><strong>${preview.overwrites}</strong> song${preview.overwrites === 1 ? '' : 's'}`
         + ` already ${preview.overwrites === 1 ? 'has' : 'have'} a different rating here and will be overwritten.</p>`
       : '';
-    // Titles come from a foreign database and land in innerHTML, so escape them.
+    // Titles and tag names come from a foreign database and land in innerHTML, so escape them.
+    const tagNote = preview.songsToTag > 0
+      ? `<p><strong>${preview.songsToTag}</strong> song${preview.songsToTag === 1 ? '' : 's'} here will be tagged`
+        + ` (existing tags are kept):</p>`
+        + `<div class="skipped-files-list"><ul>`
+        + preview.tagCounts.map(t => `<li>${escapeHtml(t.name)}: ${t.songs}</li>`).join('')
+        + `</ul></div>`
+      : '';
     const shown = preview.unmatched.slice(0, 200);
     const more = preview.unmatched.length - shown.length;
     const unmatchedNote = preview.unmatched.length > 0
-      ? `<p>${preview.unmatched.length} rated track${preview.unmatched.length === 1 ? '' : 's'} had no match here:</p>`
+      ? `<p>${preview.unmatched.length} track${preview.unmatched.length === 1 ? '' : 's'} had no match here:</p>`
         + `<div class="skipped-files-list"><ul>${shown.map(t => `<li>${escapeHtml(t)}</li>`).join('')}`
         + (more > 0 ? `<li>...and ${more} more</li>` : '')
         + `</ul></div>`
       : '';
 
     showConfirmModal(
-      'Import Star Ratings',
-      `<p>Found <strong>${preview.ratedTracks}</strong> rated tracks. `
-      + `<strong>${preview.songsToRate}</strong> song${preview.songsToRate === 1 ? '' : 's'} here will be rated`
-      + ` (${preview.matchedByFilename} matched by filename, ${preview.matchedByTitle} by title).</p>`
-      + scaleNote + overwriteNote + unmatchedNote
+      'Import Ratings and Tags',
+      `<p>Found <strong>${preview.foundTracks}</strong> rated or tagged tracks`
+      + ` (${preview.matchedByFilename} matched by filename, ${preview.matchedByTitle} by title). `
+      + `<strong>${preview.songsToRate}</strong> song${preview.songsToRate === 1 ? '' : 's'} here will be rated.</p>`
+      + scaleNote + overwriteNote + tagNote + unmatchedNote
       + `<p>Import them?</p>`,
       async () => {
         const result = await window.electronAPI.applySwinsianRatings(dbPath);
         showAlert(
-          '<i class="bi bi-star-fill" style="margin-right: 8px;"></i>Ratings Imported',
-          `<p>Rated <strong>${result.songsRated}</strong> song${result.songsRated === 1 ? '' : 's'}.</p>`
+          '<i class="bi bi-star-fill" style="margin-right: 8px;"></i>Ratings and Tags Imported',
+          `<p>Rated <strong>${result.songsRated}</strong> song${result.songsRated === 1 ? '' : 's'}`
+          + ` and tagged <strong>${result.songsTagged}</strong>.</p>`
         );
       }
     );
@@ -461,11 +469,12 @@ export function Settings() {
         </div>
 
         <div class="setting-item">
-          <label class="setting-label">Import star ratings</label>
+          <label class="setting-label">Import star ratings and tags</label>
           <div class="setting-description">
-            Read the star ratings out of a Swinsian library and apply them to matching
-            songs here. Songs are matched on filename first, then title. Nothing is
-            written until you've seen what it would change.
+            Read the star ratings, and the space-separated tags in the Grouping field,
+            out of a Swinsian library and apply them to matching songs here. Songs are
+            matched on filename first, then title. Tags are only added, never removed.
+            Nothing is written until you've seen what it would change.
           </div>
           <div class="button-row">
             <button

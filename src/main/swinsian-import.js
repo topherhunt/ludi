@@ -1,8 +1,9 @@
 /**
- * Import star ratings from a Swinsian library into Ludi.
+ * Import star ratings, and the space-separated tags in the `grouping` field,
+ * from a Swinsian library into Ludi.
  *
- * Ratings are the one part of a music library that can't be recomputed -- they
- * are years of accumulated judgement -- so this reads the foreign database
+ * Ratings and tags can't be recomputed -- they are years of accumulated
+ * judgement -- so this reads the foreign database
  * defensively rather than trusting a remembered schema:
  *
  *  - the track table is located by looking for one that actually has `path` and
@@ -10,7 +11,8 @@
  *  - the rating scale is inferred from the data (Swinsian and iTunes have both
  *    used 0-5 and 0-100 over the years), instead of assuming one and silently
  *    turning every 100 into an out-of-range number;
- *  - nothing is written until the caller has seen a preview of the counts.
+ *  - nothing is written until the caller has seen a preview of the counts;
+ *  - tags are only ever added, never removed, so re-running the import is safe.
  *
  * The foreign database is opened read-only. Ludi never writes to it.
  */
@@ -53,11 +55,16 @@ function toStars(rawRating, scaleMax) {
 
 const normalize = (s) => (s || '').trim().toLowerCase();
 
+/** Split a `grouping` value like "med-e instrumental" into its tag names. */
+function parseGrouping(grouping) {
+  return (grouping || '').split(/\s+/).filter(Boolean);
+}
+
 /**
- * Read every rated track out of a Swinsian library file.
- * @returns {{ tracks: Array<{stars: number, basename: string, title: string}>, scaleMax: number, tableName: string }}
+ * Read every track that has a rating or grouping tags out of a Swinsian library file.
+ * @returns {{ tracks: Array<{stars: number|null, tags: string[], basename: string, title: string, label: string}>, scaleMax: number, tableName: string }}
  */
-function readRatedTracks(swinsianDbPath) {
+function readTracks(swinsianDbPath) {
   const foreign = new Database(swinsianDbPath, { readonly: true, fileMustExist: true });
   try {
     const table = findTrackTable(foreign);
@@ -69,18 +76,23 @@ function readRatedTracks(swinsianDbPath) {
 
     const hasTitle = table.columns.includes('title');
     const titleSelect = hasTitle ? 'title' : `'' AS title`;
+    const hasGrouping = table.columns.includes('grouping');
+    const groupingSelect = hasGrouping ? 'grouping' : `'' AS grouping`;
+    const groupingWhere = hasGrouping ? `OR (grouping IS NOT NULL AND TRIM(grouping) != '')` : '';
     const rows = foreign
-      .prepare(`SELECT path, rating, ${titleSelect} FROM "${table.name}" WHERE rating IS NOT NULL AND rating > 0`)
+      .prepare(`SELECT path, rating, ${titleSelect}, ${groupingSelect} FROM "${table.name}"
+                WHERE (rating IS NOT NULL AND rating > 0) ${groupingWhere}`)
       .all();
 
     // The scale comes from the file itself, not from an assumption about which
     // Swinsian version wrote it.
-    const scaleMax = rows.reduce((max, row) => Math.max(max, row.rating), 0);
+    const scaleMax = rows.reduce((max, row) => Math.max(max, row.rating || 0), 0);
 
     // `basename`/`title` are normalized for matching; `label` keeps the original
     // spelling so the unmatched report reads the way the library does.
     const tracks = rows.map(row => ({
-      stars: toStars(row.rating, scaleMax),
+      stars: row.rating > 0 ? toStars(row.rating, scaleMax) : null,
+      tags: parseGrouping(row.grouping),
       basename: normalize(path.basename(row.path || '')),
       title: normalize(row.title),
       label: row.title || path.basename(row.path || ''),
@@ -93,7 +105,7 @@ function readRatedTracks(swinsianDbPath) {
 }
 
 /**
- * Match rated foreign tracks against Ludi's songs.
+ * Match foreign tracks against Ludi's songs.
  *
  * Filename first, then title: the files were copied into Ludi's library so
  * their names survived, while titles are more likely to collide across a
@@ -116,9 +128,10 @@ function matchTracks(tracks, ludiSongs) {
     addTo(byTitle, normalize(song.title), song);
   }
 
-  // songId -> stars. A song reached by two foreign tracks keeps the first
-  // (filename) match, which is the more trustworthy of the two.
+  // songId -> stars, and songId -> tag names. A song reached by two foreign
+  // tracks keeps the first (filename) match, which is the more trustworthy of the two.
   const ratings = new Map();
+  const tags = new Map();
   let matchedByFilename = 0;
   let matchedByTitle = 0;
   const unmatched = [];
@@ -133,8 +146,15 @@ function matchTracks(tracks, ludiSongs) {
     else matchedByTitle++;
 
     for (const song of hits) {
-      if (!ratings.has(song.id)) ratings.set(song.id, track.stars);
+      if (track.stars !== null && !ratings.has(song.id)) ratings.set(song.id, track.stars);
+      if (track.tags.length > 0 && !tags.has(song.id)) tags.set(song.id, track.tags);
     }
+  }
+
+  // tag name -> how many songs it will be applied to.
+  const tagCounts = new Map();
+  for (const names of tags.values()) {
+    for (const name of names) tagCounts.set(name, (tagCounts.get(name) || 0) + 1);
   }
 
   const overwrites = ludiSongs.filter(
@@ -145,9 +165,13 @@ function matchTracks(tracks, ludiSongs) {
 
   return {
     ratings,
+    tags,
     matchedByFilename,
     matchedByTitle,
     songsToRate: ratings.size,
+    songsToTag: tags.size,
+    tagCounts: Array.from(tagCounts, ([name, songs]) => ({ name, songs }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     overwrites,
     unmatched,
   };
@@ -158,28 +182,30 @@ function matchTracks(tracks, ludiSongs) {
  * writing anything.
  */
 function previewImport(swinsianDbPath, ludiSongs) {
-  const { tracks, scaleMax, tableName } = readRatedTracks(swinsianDbPath);
+  const { tracks, scaleMax, tableName } = readTracks(swinsianDbPath);
   const match = matchTracks(tracks, ludiSongs);
 
   return {
     tableName,
     scaleMax,
-    ratedTracks: tracks.length,
+    foundTracks: tracks.length,
     matchedByFilename: match.matchedByFilename,
     matchedByTitle: match.matchedByTitle,
     songsToRate: match.songsToRate,
+    songsToTag: match.songsToTag,
+    tagCounts: match.tagCounts,
     overwrites: match.overwrites,
     unmatched: match.unmatched,
   };
 }
 
 /**
- * Resolve a Swinsian library into the song-id -> stars writes to apply.
- * @returns {{ writes: Array<{songIds: number[], rating: number}>, songsRated: number }}
+ * Resolve a Swinsian library into the rating and tag writes to apply.
+ * @returns {{ writes: Array<{songIds: number[], rating: number}>, tagWrites: Array<{name: string, songIds: number[]}>, songsRated: number, songsTagged: number }}
  */
 function resolveImport(swinsianDbPath, ludiSongs) {
-  const { tracks } = readRatedTracks(swinsianDbPath);
-  const { ratings } = matchTracks(tracks, ludiSongs);
+  const { tracks } = readTracks(swinsianDbPath);
+  const { ratings, tags } = matchTracks(tracks, ludiSongs);
 
   // Group by rating so the write side runs five statements, not one per song.
   const byRating = new Map();
@@ -188,10 +214,20 @@ function resolveImport(swinsianDbPath, ludiSongs) {
     byRating.get(stars).push(songId);
   }
 
+  const byTag = new Map();
+  for (const [songId, names] of tags) {
+    for (const name of names) {
+      if (!byTag.has(name)) byTag.set(name, []);
+      byTag.get(name).push(songId);
+    }
+  }
+
   return {
     writes: Array.from(byRating, ([rating, songIds]) => ({ rating, songIds })),
+    tagWrites: Array.from(byTag, ([name, songIds]) => ({ name, songIds })),
     songsRated: ratings.size,
+    songsTagged: tags.size,
   };
 }
 
-module.exports = { previewImport, resolveImport, matchTracks, toStars, MAX_RATING };
+module.exports = { previewImport, resolveImport, matchTracks, toStars, parseGrouping, MAX_RATING };

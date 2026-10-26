@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { toStars, matchTracks } from '../../src/main/swinsian-import.js';
+import { toStars, matchTracks, parseGrouping } from '../../src/main/swinsian-import.js';
 
 const song = (id, file_path, title, rating = null) => ({ id, file_path, title, artist: '', rating });
-const track = (basename, title, stars) => ({ basename, title, stars });
+const track = (basename, title, stars, tags = []) => ({ basename, title, stars, tags });
 
 describe('toStars', () => {
   it('passes a 1-5 column through unchanged', () => {
@@ -20,6 +20,15 @@ describe('toStars', () => {
   it('clamps into 1-5 rather than emitting an invalid rating', () => {
     expect(toStars(0, 100)).toBe(1);
     expect(toStars(9, 5)).toBe(5);
+  });
+});
+
+describe('parseGrouping', () => {
+  it('splits on any run of whitespace and drops empties', () => {
+    expect(parseGrouping('med-e instrumental')).toEqual(['med-e', 'instrumental']);
+    expect(parseGrouping('  low-e   lyric ')).toEqual(['low-e', 'lyric']);
+    expect(parseGrouping('')).toEqual([]);
+    expect(parseGrouping(null)).toEqual([]);
   });
 });
 
@@ -59,6 +68,24 @@ describe('matchTracks', () => {
     expect(ratings.get(1)).toBe(3);
     expect(ratings.get(4)).toBe(3);
     expect(songsToRate).toBe(2);
+  });
+
+  it('tags a matched song even when the track is unrated, without rating it', () => {
+    const { ratings, tags, songsToRate, songsToTag, tagCounts } =
+      matchTracks([track('so-what.mp3', '', null, ['low-e', 'instrumental'])], songs);
+    expect(ratings.has(2)).toBe(false);
+    expect(songsToRate).toBe(0);
+    expect(tags.get(2)).toEqual(['low-e', 'instrumental']);
+    expect(songsToTag).toBe(1);
+    expect(tagCounts).toEqual([{ name: 'instrumental', songs: 1 }, { name: 'low-e', songs: 1 }]);
+  });
+
+  it('counts each tag across every song it will land on', () => {
+    const { tagCounts } = matchTracks(
+      [track('blue-moon.mp3', '', 5, ['high-e', 'lyric']), track('so-what.mp3', '', 3, ['high-e'])],
+      songs
+    );
+    expect(tagCounts).toEqual([{ name: 'high-e', songs: 2 }, { name: 'lyric', songs: 1 }]);
   });
 
   it('reports unmatched tracks instead of dropping them silently', () => {

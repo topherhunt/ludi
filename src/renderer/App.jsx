@@ -181,10 +181,12 @@ export function App() {
     onCleanup(() => cleanup?.());
   });
 
-  // Refresh the tree when songs are ingested from the Settings window scan
+  // Refresh the tree and tag list when the Settings window changes the library
+  // (a scan ingests songs; the Swinsian import can create tags)
   onMount(() => {
     window.electronAPI?.onLibraryChanged?.(() => {
       explorerRefetch?.();
+      refreshTags();
     });
   });
 

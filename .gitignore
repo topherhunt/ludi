@@ -29,3 +29,5 @@ npm-debug.log*
 
 test-results/
 .last-test-pass.json
+
+reference/

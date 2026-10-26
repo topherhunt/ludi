@@ -9,7 +9,7 @@ const analysis = require('./analysis');
 const similarity = require('./similarity');
 const clusters = require('./clusters');
 const musicMap = require('./music-map');
-const { recalculateAutoTags } = require('./analysis/auto-tagger');
+const { recalculateAutoTags, colorForTagName } = require('./analysis/auto-tagger');
 const { BUNDLE_SCHEME_PRIVILEGES, registerBundleProtocol } = require('./bundle-protocol');
 const swinsianImport = require('./swinsian-import');
 
@@ -598,13 +598,13 @@ ipcMain.handle('db:recordSongPlay', (event, songId) => {
   return db.recordSongPlay(songId);
 });
 
-// ---- Star-rating import from a Swinsian library --------------------------
+// ---- Rating and tag import from a Swinsian library -----------------------
 
 ipcMain.handle('ratings:chooseSwinsianLibrary', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     title: 'Select Swinsian Library',
-    message: 'Choose the Swinsian library file to read star ratings from.',
+    message: 'Choose the Swinsian library file to read star ratings and tags from.',
     filters: [{ name: 'Swinsian library', extensions: ['sqlite', 'db', 'swinsianlibrary'] }],
   });
 
@@ -619,17 +619,21 @@ ipcMain.handle('ratings:previewSwinsian', (event, swinsianDbPath) => {
 });
 
 ipcMain.handle('ratings:applySwinsian', (event, swinsianDbPath) => {
-  const { writes, songsRated } = swinsianImport.resolveImport(swinsianDbPath, db.getSongsForRatingMatch());
+  const { writes, tagWrites, songsRated, songsTagged } =
+    swinsianImport.resolveImport(swinsianDbPath, db.getSongsForRatingMatch());
   for (const { rating, songIds } of writes) {
     db.setSongRating(songIds, rating);
   }
+  for (const { name, songIds } of tagWrites) {
+    db.addTagToSongs(db.getOrCreateTag(name, colorForTagName(name)).id, songIds);
+  }
 
   // The import runs from the Settings window, so the main window has to be told
-  // its stars just changed.
-  if (songsRated > 0 && mainWindow) {
+  // its stars and tags just changed.
+  if ((songsRated > 0 || songsTagged > 0) && mainWindow) {
     mainWindow.webContents.send('library-changed');
   }
-  return { songsRated };
+  return { songsRated, songsTagged };
 });
 
 ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {

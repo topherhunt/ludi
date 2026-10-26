@@ -4,12 +4,12 @@ const fs = require('fs');
 const os = require('os');
 
 /**
- * The Swinsian ratings import, driven through the Settings window.
+ * The Swinsian ratings and tags import, driven through the Settings window.
  *
  * There is no real Swinsian library to test against, so this builds one: a
  * SQLite file whose track table is named and shaped the way the importer has to
  * discover rather than assume (an unfamiliar table name, an iTunes-style 0-100
- * rating column). The native file picker is the one thing stubbed -- everything
+ * rating column, space-separated tags in `grouping`). The native file picker is the one thing stubbed -- everything
  * downstream of it is the real IPC, the real reader and the real write path.
  */
 
@@ -42,12 +42,15 @@ async function openSettings(electronApp) {
   return settings;
 }
 
-test.describe('Swinsian ratings import', () => {
+test.describe('Swinsian ratings and tags import', () => {
   const stamp = Date.now();
   const audioFiles = [];
   let itemIds = [];
   let songIds = [];
   let swinsianDbPath = null;
+  // Stamped so they can't collide with tags another spec on this worker made.
+  const energyTag = `med-e-${stamp}`;
+  const vocalTag = `lyric-${stamp}`;
 
   test.beforeAll(async ({ window, electronApp }) => {
     for (let i = 0; i < 2; i++) {
@@ -64,22 +67,27 @@ test.describe('Swinsian ratings import', () => {
     songIds = imported.imported.map(s => s.songId);
     itemIds = imported.itemIds;
 
-    // A stand-in Swinsian library. Only the first song is rated, at 80/100 --
-    // four stars once the importer works out the scale.
+    // A stand-in Swinsian library. The first song is rated 80/100 (four stars
+    // once the importer works out the scale) and tagged; the second is tagged
+    // but unrated, which must still be imported.
     swinsianDbPath = path.join(os.tmpdir(), `ludi-swinsian-${stamp}.sqlite`);
-    await electronApp.evaluate(async (unused, { sqliteModule, dbPath, rated, unmatchedName }) => {
+    await electronApp.evaluate(async (unused, { sqliteModule, dbPath, rated, tagged, unmatchedName, energyTag, vocalTag }) => {
       const Database = process.mainModule.require(sqliteModule);
       const foreign = new Database(dbPath);
-      foreign.exec(`CREATE TABLE track (id INTEGER PRIMARY KEY, path TEXT, title TEXT, rating INTEGER)`);
-      const insert = foreign.prepare('INSERT INTO track (path, title, rating) VALUES (?, ?, ?)');
-      insert.run(`/Users/someone/Swinsian/${rated}`, 'Rated Fixture', 80);
-      insert.run(`/Users/someone/Swinsian/${unmatchedName}`, 'Not In Ludi', 100);
+      foreign.exec(`CREATE TABLE track (id INTEGER PRIMARY KEY, path TEXT, title TEXT, rating INTEGER, grouping TEXT)`);
+      const insert = foreign.prepare('INSERT INTO track (path, title, rating, grouping) VALUES (?, ?, ?, ?)');
+      insert.run(`/Users/someone/Swinsian/${rated}`, 'Rated Fixture', 80, `${energyTag} ${vocalTag}`);
+      insert.run(`/Users/someone/Swinsian/${tagged}`, 'Tagged Fixture', 0, energyTag);
+      insert.run(`/Users/someone/Swinsian/${unmatchedName}`, 'Not In Ludi', 100, '');
       foreign.close();
     }, {
       sqliteModule: BETTER_SQLITE_MODULE,
       dbPath: swinsianDbPath,
       rated: path.basename(audioFiles[0]),
+      tagged: path.basename(audioFiles[1]),
       unmatchedName: `ludi-swinsian-absent-${stamp}.m4a`,
+      energyTag,
+      vocalTag,
     });
 
     // Stub only the native picker; the import itself runs for real.
@@ -105,26 +113,33 @@ test.describe('Swinsian ratings import', () => {
 
     // The preview names what it found, what it matched, and what it could not.
     const modal = settings.locator('.modal-content');
-    await expect(modal).toContainText('Found 2 rated tracks', { timeout: 5000 });
+    await expect(modal).toContainText('Found 3 rated or tagged tracks', { timeout: 5000 });
+    await expect(modal).toContainText('2 matched by filename, 0 by title');
     await expect(modal).toContainText('1 song here will be rated');
-    await expect(modal).toContainText('1 matched by filename, 0 by title');
     await expect(modal).toContainText('ratings run 0-100');
-    await expect(modal).toContainText('1 rated track had no match here');
+    await expect(modal).toContainText('2 songs here will be tagged');
+    await expect(modal).toContainText(`${energyTag}: 2`);
+    await expect(modal).toContainText(`${vocalTag}: 1`);
+    await expect(modal).toContainText('1 track had no match here');
     await expect(modal).toContainText('Not In Ludi');
 
     // Declining leaves the library untouched.
     await settings.locator('.modal-btn-secondary').filter({ hasText: 'No' }).click();
-    const beforeRatings = await electronApp.evaluate((unused, { modulePath, ids }) => {
+    const before = await electronApp.evaluate((unused, { modulePath, ids }) => {
       const db = process.mainModule.require(modulePath);
-      return db.getSongsForRatingMatch().filter(s => ids.includes(s.id)).map(s => s.rating);
+      const tagNames = db.getSongTagNames();
+      return {
+        ratings: db.getSongsForRatingMatch().filter(s => ids.includes(s.id)).map(s => s.rating),
+        tagged: ids.filter(id => tagNames.has(id)),
+      };
     }, { modulePath: DATABASE_MODULE, ids: songIds });
-    expect(beforeRatings).toEqual([null, null]);
+    expect(before).toEqual({ ratings: [null, null], tagged: [] });
 
     // Approving writes the 80/100 through as four stars, and only for the match.
     await settings.locator('.qa-import-ratings').click();
-    await expect(settings.locator('.modal-content')).toContainText('Found 2 rated tracks', { timeout: 5000 });
+    await expect(settings.locator('.modal-content')).toContainText('Found 3 rated or tagged tracks', { timeout: 5000 });
     await settings.locator('#modalYesBtn').click();
-    await expect(settings.locator('.modal-content')).toContainText('Rated 1 song', { timeout: 5000 });
+    await expect(settings.locator('.modal-content')).toContainText('Rated 1 song and tagged 2', { timeout: 5000 });
 
     const afterRatings = await electronApp.evaluate((unused, { modulePath, ids }) => {
       const db = process.mainModule.require(modulePath);
@@ -135,9 +150,16 @@ test.describe('Swinsian ratings import', () => {
 
     await settings.close();
 
-    // The main window is told to reload, so the stars show up without a restart.
+    // The main window is told to reload, so the stars and tags show up without a restart.
     await window.locator('.playlist-item').first().click();
     const ratedRow = window.locator(`.tree-item-content[data-song-id="${songIds[0]}"]`);
+    const taggedRow = window.locator(`.tree-item-content[data-song-id="${songIds[1]}"]`);
     await expect(ratedRow.locator('.qa-star-rating')).toHaveAttribute('data-rating', '4', { timeout: 5000 });
+    await expect(ratedRow.locator(`.col-tags [data-tag-name="${energyTag}"]`)).toBeVisible();
+    await expect(ratedRow.locator(`.col-tags [data-tag-name="${vocalTag}"]`)).toBeVisible();
+    await expect(taggedRow.locator(`.col-tags [data-tag-name="${energyTag}"]`)).toBeVisible();
+    await expect(taggedRow.locator(`.col-tags [data-tag-name="${vocalTag}"]`)).toHaveCount(0);
+    // ...and the new tags join the sidebar's tag list.
+    await expect(window.locator(`.qa-tags-section [data-tag-name="${energyTag}"]`)).toBeVisible();
   });
 });
