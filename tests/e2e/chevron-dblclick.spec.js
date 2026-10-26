@@ -32,7 +32,7 @@ test.describe('Chevron double-click', () => {
     // Sanity: double-clicking the folder label still starts playback (proves the
     // row's dblclick handler is intact and only the caret is exempt).
     await folderRow.locator('.tree-item-label').dblclick();
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 3000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
 
     // Pause + cleanup
     await playPauseBtn.click();

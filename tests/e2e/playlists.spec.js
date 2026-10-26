@@ -388,7 +388,7 @@ test.describe('Playlists', () => {
     const nowPlaying = window.locator('#currentSongTitle');
 
     await playlistRow(window, name).dblclick();
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
     await expect(nowPlaying).toHaveText(song.title);
     await playPauseBtn.click();
 
@@ -400,7 +400,7 @@ test.describe('Playlists', () => {
     expect(firstInLibrary).toBe(second.title);
 
     await mainLibraryRow(window).dblclick();
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
     await expect(nowPlaying).toHaveText(second.title);
     await playPauseBtn.click();
 
@@ -462,7 +462,7 @@ test.describe('Playlists', () => {
     const playPauseBtn = window.locator('#playPauseBtn');
 
     await playlistRow(window, name).dblclick();
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
     await expect(marker(playlistRow(window, name))).toHaveClass(/bi-play-fill/);
     await expect(marker(mainLibraryRow(window))).toHaveCount(0);
 
@@ -473,7 +473,7 @@ test.describe('Playlists', () => {
 
     // Playing the Main Library moves the marker there.
     await mainLibraryRow(window).dblclick();
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
     await expect(marker(mainLibraryRow(window))).toHaveClass(/bi-play-fill/);
     await expect(marker(playlistRow(window, name))).toHaveCount(0);
     await playPauseBtn.click();
@@ -518,7 +518,7 @@ test.describe('Playlists', () => {
     await nestedSong.dblclick();
 
     const playPauseBtn = window.locator('#playPauseBtn');
-    await expect(playPauseBtn).toHaveClass(/playing/, { timeout: 2000 });
+    await expect(playPauseBtn).toHaveClass(/playing/);
     await expect(playlistRow(window, name).locator('.qa-playlist-playing')).toHaveClass(/bi-play-fill/);
     await expect(mainLibraryRow(window).locator('.qa-playlist-playing')).toHaveCount(0);
     await playPauseBtn.click();

@@ -2,10 +2,9 @@ const { test: base, _electron: electron } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { startViteServer } = require('../../scripts/vite-server');
 
-// Shared state across all tests
-let viteServer = null;
+// One app per worker, shared by every test that worker runs. Workers run in
+// parallel, each with its own test home, so no two apps share a database.
 let electronApp = null;
 let window = null;
 let testHome = null;
@@ -21,16 +20,9 @@ async function setupElectronApp() {
   // throwaway directory in test mode (see testHome() in src/main/database.js).
   testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-test-'));
 
-  // The test suite gets its own dev server on its own port, reaping anything a
-  // previous run left behind. See scripts/vite-server.js -- a killed test run
-  // used to leak a fully functional Vite server every time.
-  viteServer = await startViteServer({
-    role: 'test',
-    onOutput: (text) => console.log('[Vite]:', text),
-  });
-  // Vite reports "ready" a beat before it will serve the first module.
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  const vitePort = String(viteServer.port);
+  // Started once for the whole run by global-setup.js.
+  const vitePort = process.env.VITE_PORT;
+  if (!vitePort) throw new Error('VITE_PORT is unset -- tests/e2e/global-setup.js should have set it');
 
   // Launch Electron in dev mode
   electronApp = await electron.launch({
@@ -81,12 +73,6 @@ async function teardownElectronApp() {
     window = null;
   }
 
-  if (viteServer) {
-    viteServer.stop();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    viteServer = null;
-  }
-
   if (testHome) {
     fs.rmSync(testHome, { recursive: true, force: true });
     testHome = null;
@@ -95,6 +81,12 @@ async function teardownElectronApp() {
 
 // Create the extended test with fixtures
 const test = base.extend({
+  // Closes this worker's app and deletes its test home once the worker is done.
+  workerTeardown: [async ({}, use) => {
+    await use();
+    await teardownElectronApp();
+  }, { scope: 'worker', auto: true }],
+
   // Fixture that provides the shared Electron app
   electronApp: async ({}, use) => {
     const { electronApp } = await setupElectronApp();
@@ -125,7 +117,6 @@ module.exports = {
   test,
   expect: require('@playwright/test').expect,
   setupElectronApp,
-  teardownElectronApp,
   // Export path for test audio files
   testAudioDir: path.join(__dirname, '../test-audiofiles'),
 };

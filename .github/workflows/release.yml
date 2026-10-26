@@ -27,9 +27,9 @@ jobs:
 
       - run: npm ci
 
-      # Ad-hoc signs the app and fails the build if the signature doesn't seal the
-      # bundle -- see scripts/verify-signature.js. No signing secrets are needed.
-      - run: npm run release
+      # The runner has no "Ludi Signing" cert, so this signs ad-hoc; it still fails the
+      # build if the signature doesn't seal the bundle -- see scripts/verify-signature.js.
+      - run: npm run release -- -c.mac.identity=-
 
       - uses: actions/upload-artifact@v5
         with:

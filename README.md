@@ -33,15 +33,11 @@ Requires an Apple Silicon Mac (M1 or later) running macOS 12 or later. There is 
 
 1. Download `Ludi-<version>-arm64.dmg` from the [Releases page](https://github.com/topherhunt/ludi/releases).
 2. Open the `.dmg` and drag **Ludi** into your Applications folder.
-3. The first time you open it, **Control-click (or right-click) Ludi in Applications and choose Open**, then confirm in the dialog. Double-clicking it the normal way will be blocked.
+3. **Allow it to open.** Ludi is signed with a self-signed certificate rather than a paid Apple Developer ID, so it isn't notarized and the first launch is blocked with a message that Apple could not verify it. Double-click Ludi, click **Done** on the warning, then open **System Settings › Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the message about Ludi. Confirm with your password or Touch ID, then click **Open**.
 
-Step 3 is a one-time thing. Ludi is code signed, but with an ad-hoc signature rather than a paid Apple Developer ID certificate, which means it isn't notarized by Apple -- so macOS asks you to confirm you meant to open it. After the first launch it opens normally.
+   Alternatively, in Terminal: `xattr -dr com.apple.quarantine /Applications/Ludi.app`, then open it normally.
 
-If macOS refuses to open it at all, clear the quarantine flag that Safari attaches to downloads:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Ludi.app
-```
+**Updating:** download the new `.dmg`, replace the app in Applications, and allow it to open as in step 3 (each new download is blocked once). Releases after 0.6.0 are all signed with the same certificate, so permissions you've granted (such as Accessibility, for the media keys) carry over. The first update from 0.6.0 or earlier asks for them once more; if the media keys stop working after an update anyway, remove Ludi from **Privacy & Security › Accessibility** with the **−** button and add it again.
 
 Ludi keeps your music in `~/Music/Ludi Library` and its database in `~/.ludi/`.
 
@@ -110,7 +106,9 @@ bash scripts/release.sh
 
 It refuses unless you're on a clean `main` that matches `origin/main`, `package.json` holds the latest released version, and the full e2e suite passed within the last hour (`tests/e2e/pass-stamp-reporter.js` records each passing run). It asks for the new version, runs the unit tests, then commits the version bump as "Cut vX.Y.Z" and pushes it. If a later step fails, rerunning with that commit at HEAD resumes. It then builds the `.dmg`, tests the packaged app, and asks before publishing it with `gh release create`, which also creates the tag. The release notes are a link comparing the previous tag with this one. The GitHub Actions workflow is manual-only, for checking that the build works on a clean runner.
 
-`npm run release` ad-hoc signs the app (`build.mac.identity: "-"`), then verifies the signature via the `afterSign` hook in `scripts/verify-signature.js`, which fails the build rather than shipping a bundle macOS will reject. This matters: without an explicit identity, electron-builder finds no Developer ID cert, silently skips signing, and leaves the stock Electron linker signature attached to a bundle it then rewrites. macOS reads that as tampering and tells the user the app is "damaged and can't be opened" -- with no way to override, which is strictly worse than being unsigned. `tests/e2e/packaged-app.spec.js` covers both halves: that the signature seals the bundle, and that the signed app actually launches.
+`npm run release` signs the app with the self-signed "Ludi Signing" certificate (`build.mac.identity`), so every release has the same code identity and macOS keeps users' permission grants across updates. Create the cert once with `bash scripts/make-signing-cert.sh` (writes to your login keychain), and back it up by exporting it from Keychain Access as a `.p12`: releases signed with a different cert make every user re-grant permissions. Without the cert, `npm run release` fails (`forceCodeSigning`); the CI workflow signs ad-hoc with `-c.mac.identity=-` instead.
+
+The `afterSign` hook in `scripts/verify-signature.js` then verifies the signature, failing the build rather than shipping a bundle macOS will reject. This matters: if electron-builder skips signing, it leaves the stock Electron linker signature attached to a bundle it then rewrites. macOS reads that as tampering and tells the user the app is "damaged and can't be opened" -- with no way to override, which is strictly worse than being unsigned. `tests/e2e/packaged-app.spec.js` checks that the signature seals the bundle, that it comes from the "Ludi Signing" cert, and that the signed app actually launches.
 
 ### Data locations
 

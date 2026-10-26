@@ -28,6 +28,19 @@ test.describe('Packaged app', () => {
     expect(output).not.toContain('Sealed Resources=none');
   });
 
+  test('is signed with the stable "Ludi Signing" cert, so permission grants survive updates', () => {
+    // macOS keys Accessibility grants to the designated requirement. Ad-hoc pins it to
+    // this build's hash; a cert pins it to the cert, which every release shares.
+    const requirement = spawnSync('codesign', ['-d', '-r-', APP_PATH], { encoding: 'utf8' });
+    const output = requirement.stdout + requirement.stderr;
+    expect(output).toContain('identifier "com.topherhunt.ludi"');
+    expect(output).toContain('certificate leaf');
+    expect(output).not.toContain('cdhash');
+
+    const details = spawnSync('codesign', ['-dvvv', APP_PATH], { encoding: 'utf8' });
+    expect(details.stdout + details.stderr).toContain('Authority=Ludi Signing');
+  });
+
   test('launches from the signed bundle and renders the library UI', async () => {
     // Own throwaway home so this never touches the shared test library the other specs reset.
     const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ludi-packaged-'));

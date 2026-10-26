@@ -16,6 +16,7 @@
 ## Testing
 
 - Design tests so they never take longer than 1s. If a feature ABSOLUTELY requires a test to run longer than 1s, please bring it up with me and we'll figure out a solution.
+- **The e2e suite runs spec files in parallel on 5 workers** (~35s total). Each worker has its own app and test home (`tests/e2e/fixtures.js`), reused by every spec that worker picks up, in no fixed order. A spec must create the data it needs rather than rely on another spec's leftovers; tests within a file still run in order. A flake that only shows up in the full run is usually an explicit timeout too tight for the parallel load.
 - Follow existing test patterns: short, readable, clearly labeled.
 - **Test blocks should be as compact and readable as possible** - focus on the test flow, not boilerplate
 - **E2E tests for user flows, unit tests for pure logic.** Unit tests can't catch integration bugs (API mismatches between modules, wiring errors). For features like "double-click to play", write E2E tests that exercise the full code path and verify the end state (e.g., play button shows playing, song title appears).

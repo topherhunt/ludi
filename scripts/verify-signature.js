@@ -1,15 +1,15 @@
 // Build-time gate: prove the packaged .app carries a valid, complete code signature.
 //
-// WHY: without `mac.identity` set, electron-builder finds no Developer ID cert on this
-// machine and skips signing entirely. The app is NOT left unsigned -- it keeps the stock
-// Electron executable's linker-signed ad-hoc signature, while electron-builder goes on to
-// rewrite Info.plist (bundle id, name) and add Resources around it. macOS then sees a
-// signature describing a bundle that no longer exists and reports the app as "damaged and
-// can't be opened", with no "Open Anyway" escape -- strictly worse than being unsigned.
+// WHY: if electron-builder skips signing, the app is NOT left unsigned -- it keeps the
+// stock Electron executable's linker-signed ad-hoc signature, while electron-builder goes
+// on to rewrite Info.plist (bundle id, name) and add Resources around it. macOS then sees
+// a signature describing a bundle that no longer exists and reports the app as "damaged
+// and can't be opened", with no "Open Anyway" escape -- strictly worse than being unsigned.
 //
-// `mac.identity: "-"` makes electron-builder ad-hoc sign the whole bundle, which seals the
-// resources and binds Info.plist. This hook fails the build if that ever stops happening,
-// so the breakage surfaces here rather than in someone's Downloads folder.
+// `mac.identity` (the "Ludi Signing" cert, or "-" for ad-hoc in CI) makes electron-builder
+// sign the whole bundle, which seals the resources and binds Info.plist. This hook fails
+// the build if that ever stops happening, so the breakage surfaces here rather than in
+// someone's Downloads folder.
 
 const { execFileSync, spawnSync } = require('child_process');
 const path = require('path');
