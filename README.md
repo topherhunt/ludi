@@ -45,7 +45,7 @@ xattr -dr com.apple.quarantine /Applications/Ludi.app
 
 Ludi keeps your music in `~/Music/Ludi Library` and its database in `~/.ludi/`.
 
-See [CHANGELOG.md](CHANGELOG.md) for what's changed in each version.
+Each release on the [Releases page](https://github.com/topherhunt/ludi/releases) links to the commits since the one before it.
 
 ## License
 
@@ -102,13 +102,13 @@ The pass reports the essentia heap size with every result, which is how the pool
 
 ### Releasing
 
-Bump the version (`npm version X.Y.Z --no-git-tag-version`), add its `CHANGELOG.md` section, commit, and push. Run `npm test` and, within the hour, run:
+Don't bump the version yourself; just commit and push. Run `npm test` and, within the hour, run:
 
 ```bash
 bash scripts/release.sh
 ```
 
-It refuses unless you're on a clean `main` that matches `origin/main`, the version is unreleased and has a changelog section, and the full e2e suite passed within the last hour (`tests/e2e/pass-stamp-reporter.js` records each passing run). It then runs the unit tests, builds the `.dmg`, tests the packaged app, and asks before publishing it with `gh release create`, which also creates the tag. The GitHub Actions workflow is manual-only, for checking that the build works on a clean runner.
+It refuses unless you're on a clean `main` that matches `origin/main`, `package.json` holds the latest released version, and the full e2e suite passed within the last hour (`tests/e2e/pass-stamp-reporter.js` records each passing run). It asks for the new version, runs the unit tests, then commits the version bump as "Cut vX.Y.Z" and pushes it. If a later step fails, rerunning with that commit at HEAD resumes. It then builds the `.dmg`, tests the packaged app, and asks before publishing it with `gh release create`, which also creates the tag. The release notes are a link comparing the previous tag with this one. The GitHub Actions workflow is manual-only, for checking that the build works on a clean runner.
 
 `npm run release` ad-hoc signs the app (`build.mac.identity: "-"`), then verifies the signature via the `afterSign` hook in `scripts/verify-signature.js`, which fails the build rather than shipping a bundle macOS will reject. This matters: without an explicit identity, electron-builder finds no Developer ID cert, silently skips signing, and leaves the stock Electron linker signature attached to a bundle it then rewrites. macOS reads that as tampering and tells the user the app is "damaged and can't be opened" -- with no way to override, which is strictly worse than being unsigned. `tests/e2e/packaged-app.spec.js` covers both halves: that the signature seals the bundle, and that the signed app actually launches.
 
