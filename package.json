@@ -1,7 +1,7 @@
 {
   "name": "ludi-music",
   "productName": "Ludi",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Fast, intuitive, lightweight MacOS music library & player",
   "main": "src/main/main.js",
   "scripts": {
@@ -41,7 +41,9 @@
       "target": "dmg",
       "category": "public.app-category.music",
       "identity": "Ludi Signing",
-      "electronLanguages": ["en"]
+      "electronLanguages": [
+        "en"
+      ]
     }
   },
   "devDependencies": {
