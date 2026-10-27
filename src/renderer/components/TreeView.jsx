@@ -1,3 +1,5 @@
+// DEPRECATED (folders): unused since SongListView replaced the folder tree.
+// TODO: delete with the rest of the folder code (see TASKS.md).
 import { For, Show, createSignal, createEffect, on, onMount, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { currentListId, selectedItems, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';

@@ -100,7 +100,9 @@ test.describe('Tags', () => {
     await expect(window.locator(SONG_ROW)).toHaveCount(songCountBefore);
   });
 
-  test('arrow keys during pill selection navigate pills without expanding/collapsing the selected folder', async ({ window }) => {
+  // DEPRECATED (folders): song lists no longer show folder rows. TODO: delete
+  // with the rest of the folder code (see TASKS.md).
+  test.skip('arrow keys during pill selection navigate pills without expanding/collapsing the selected folder', async ({ window }) => {
     await gotoLibrary(window);
     // Build a collapsed folder that contains a song, so the edit panel resolves it.
     const folderId = await window.evaluate(async () => {
@@ -138,7 +140,7 @@ test.describe('Tags', () => {
 
     await expect(window.locator('#currentListTitle')).toHaveText('Search Results in Main Library');
     await expect(window.locator('.search-input')).toHaveValue('tag=chill');
-    await expect(window.locator('.qa-search-song').first()).toBeVisible();
+    await expect(window.locator('.qa-song-row').first()).toBeVisible();
 
     // The clicked chip shows the active-filter glow while it is the sole filter...
     await expect(chip).toHaveClass(/tag-pill-active/);
@@ -282,11 +284,20 @@ test.describe('Tags', () => {
     await gotoLibrary(window);
     const row = window.locator(SONG_ROW).first();
     await expect(row).toBeVisible();
+    // The default columns fill the default window, so hide two to leave room.
+    const chooser = window.locator('.qa-column-chooser');
+    const toggle = async (key) => chooser.locator(`.qa-column-option[data-column="${key}"]`).click();
+    await window.locator('.col-header.col-title').click({ button: 'right' });
+    await toggle('genre');
+    await toggle('date_added');
     const lastTrackPx = await row.evaluate(el => {
       const tracks = getComputedStyle(el).gridTemplateColumns.split(' ');
       return parseFloat(tracks[tracks.length - 1]);
     });
-    // Old behavior was a fixed 100px; it should now stretch well beyond that.
+    await toggle('genre');
+    await toggle('date_added');
+    await window.keyboard.press('Escape');
+    // A fixed track would sit at 100px; the stretching one takes the spare width.
     expect(lastTrackPx).toBeGreaterThan(130);
   });
 

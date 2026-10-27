@@ -328,6 +328,17 @@ function createTables() {
     db.exec(`ALTER TABLE songs ADD COLUMN last_played_at TEXT`);
   }
 
+  // Migration - genre (an ID3 tag, written back to the file) and date_added (a
+  // local 'YYYY-MM-DD' that lives only here and is meant to be hand-edited).
+  // Existing songs start with the day they entered the database.
+  if (!songColumns.some(col => col.name === 'genre')) {
+    db.exec(`ALTER TABLE songs ADD COLUMN genre TEXT`);
+  }
+  if (!songColumns.some(col => col.name === 'date_added')) {
+    db.exec(`ALTER TABLE songs ADD COLUMN date_added TEXT`);
+    db.exec(`UPDATE songs SET date_added = substr(inserted_at, 1, 10)`);
+  }
+
   // Drop the unique index if it was previously created (we want to allow duplicates for playlists)
   db.exec(`DROP INDEX IF EXISTS idx_list_items_unique_song_in_list`);
 }
@@ -359,6 +370,10 @@ function getListItems(listId) {
       s.duration_seconds,
       s.track_number,
       s.rating,
+      s.play_count,
+      s.last_played_at,
+      s.genre,
+      s.date_added,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -386,6 +401,8 @@ function getAllListItems() {
       s.rating,
       s.play_count,
       s.last_played_at,
+      s.genre,
+      s.date_added,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -421,6 +438,10 @@ function getSongsWithPlacements(songIds) {
       s.duration_seconds,
       s.track_number,
       s.rating,
+      s.play_count,
+      s.last_played_at,
+      s.genre,
+      s.date_added,
       (SELECT json_group_array(json_object(
                 'id', t.id, 'name', t.name, 'color', t.color, 'position', t.position,
                 'is_auto', t.is_auto, 'source', st.source))
@@ -556,13 +577,20 @@ function addFolder(parentListId, position, title) {
   })();
 }
 
-function addSong(filePath, title, artist, album, durationSeconds, trackNumber = null) {
+// Today in the local timezone, as 'YYYY-MM-DD' -- the day a song is "added" is
+// the day on the user's calendar, not in UTC.
+function localDateString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function addSong(filePath, title, artist, album, durationSeconds, trackNumber = null, genre = null) {
   const now = new Date().toISOString();
 
   const result = db.prepare(`
-    INSERT INTO songs (title, artist, album, file_path, duration_seconds, track_number, inserted_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(title, artist, album, filePath, durationSeconds, trackNumber, now, now);
+    INSERT INTO songs (title, artist, album, file_path, duration_seconds, track_number, genre, date_added, inserted_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(title, artist, album, filePath, durationSeconds, trackNumber, genre, localDateString(), now, now);
 
   return result.lastInsertRowid;
 }
@@ -899,9 +927,12 @@ function removeTagFromSongs(tagId, songIds) {
 // Update editable song metadata. Only the provided fields are changed. The
 // db:updateSong handler in main.js writes them into the audio file first.
 function updateSong(songId, fields) {
-  const allowed = ['title', 'artist', 'album', 'track_number'];
+  const allowed = ['title', 'artist', 'album', 'track_number', 'genre', 'date_added'];
   const keys = Object.keys(fields).filter(k => allowed.includes(k));
   if (keys.length === 0) return;
+  if ('date_added' in fields && !/^\d{4}-\d{2}-\d{2}$/.test(fields.date_added)) {
+    throw new Error(`Invalid date_added: ${fields.date_added} (expected YYYY-MM-DD)`);
+  }
   const now = new Date().toISOString();
   const setClause = keys.map(k => `${k} = ?`).join(', ');
   const values = keys.map(k => fields[k]);
@@ -947,8 +978,20 @@ function recordSongPlay(songId) {
 }
 
 /** Every song's id, rating and library-relative path -- the matching table an external ratings import runs against. */
-function getSongsForRatingMatch() {
-  return db.prepare('SELECT id, title, artist, file_path, rating FROM songs').all();
+function getSongsForSwinsianMatch() {
+  return db.prepare('SELECT id, title, artist, file_path, rating, genre, date_added FROM songs').all();
+}
+
+// Bulk date_added writes for the Swinsian import: [[songId, 'YYYY-MM-DD'], ...].
+function setSongDatesAdded(pairs) {
+  const now = new Date().toISOString();
+  return db.transaction(() => {
+    const stmt = db.prepare('UPDATE songs SET date_added = ?, updated_at = ? WHERE id = ?');
+    for (const [songId, day] of pairs) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error(`Invalid date_added: ${day} (expected YYYY-MM-DD)`);
+      stmt.run(day, now, songId);
+    }
+  })();
 }
 
 function getSettings() {
@@ -1648,7 +1691,8 @@ module.exports = {
   updateSong,
   setSongRating,
   recordSongPlay,
-  getSongsForRatingMatch,
+  getSongsForSwinsianMatch,
+  setSongDatesAdded,
   getSettings,
   updateSetting,
   getDbPath,

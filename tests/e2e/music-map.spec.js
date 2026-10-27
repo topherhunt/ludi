@@ -203,7 +203,7 @@ test.describe('Music map', () => {
     await window.mouse.click(target.x, target.y, { button: 'right' });
 
     await expect(window.locator('.qa-find-similar')).toBeVisible();
-    await expect(window.locator('.qa-add-folder-after')).toHaveClass(/disabled/);
+    await expect(window.locator('.qa-add-folder-after')).toHaveCount(0);
     await window.locator('.qa-find-similar').click();
     await expect(window.locator('.qa-similar-title')).toHaveText(new RegExp(`^Songs like "${target.point.title}"`));
     await window.locator('.qa-nav-back').click();

@@ -8,12 +8,8 @@ export { ColumnHeaders } from './ColumnHeaders.jsx';
 export { ContextMenu } from './ContextMenu.jsx';
 export { StarRating } from './StarRating.jsx';
 
-// Tree components
-export { TreeItem } from './TreeItem.jsx';
-export { TreeView } from './TreeView.jsx';
-
 // Main panels
 export { Explorer } from './Explorer.jsx';
+export { SongListView } from './SongListView.jsx';
 export { Settings } from './Settings.jsx';
-export { SearchResultsView } from './SearchResultsView.jsx';
 export { AdvancedSearchModal } from './AdvancedSearchModal.jsx';

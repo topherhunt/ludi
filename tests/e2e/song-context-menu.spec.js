@@ -58,35 +58,32 @@ test.describe('Song context menu', () => {
     fs.rmSync(uniqueFile, { force: true });
   });
 
-  test('does not offer those actions for folders', async ({ window }) => {
-    const tempDir = path.join(os.tmpdir(), `ludi-ctx-folder-${Date.now()}`);
-    fs.mkdirSync(tempDir, { recursive: true });
-    fs.copyFileSync(testAudioPath, path.join(tempDir, 'song.mp3'));
+  test('does not offer those actions for album groups', async ({ window }) => {
+    const album = `CtxAlbum ${Date.now()}`;
+    const files = [0, 1].map((i) => path.join(os.tmpdir(), `ludi-ctx-group-${Date.now()}-${i}.mp3`));
+    files.forEach((f) => fs.copyFileSync(testAudioPath, f));
+    const itemIds = await window.evaluate(async ({ filePaths, album }) => {
+      const { itemIds } = await window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 });
+      for (const item of await window.electronAPI.getListItems(0)) {
+        if (itemIds.includes(item.id)) await window.electronAPI.updateSong({ songId: item.song_id, fields: { album } });
+      }
+      window.__ludiResetListViews({ 'list:0': { groupBy: 'album', sort: [{ field: 'album', dir: 'asc' }] } });
+      return itemIds;
+    }, { filePaths: files, album });
+    files.forEach((f) => fs.rmSync(f, { force: true }));
 
-    const mainLibraryItem = window.locator('.playlist-item').first();
-    await mainLibraryItem.click();
-    await window.waitForTimeout(100);
-    await window.evaluate((fp) => window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 }), tempDir);
-    await mainLibraryItem.click();
-    await window.waitForTimeout(200);
+    await window.locator('.playlist-item').first().click();
+    const groupRow = window.locator('.qa-group-row').filter({ hasText: album });
+    await groupRow.click({ button: 'right' });
 
-    const folderName = path.basename(tempDir);
-    const folderRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: folderName });
-    await expect(folderRow).toBeVisible({ timeout: 2000 });
-    await folderRow.click({ button: 'right' });
-    await window.waitForTimeout(50);
-
-    await expect(window.locator('.context-menu')).toBeVisible();
+    await expect(window.locator('.qa-play-group')).toBeVisible();
     await expect(window.locator('.context-menu-item').filter({ hasText: 'Copy file path' })).toHaveCount(0);
     await expect(window.locator('.context-menu-item').filter({ hasText: 'Show in Finder' })).toHaveCount(0);
 
-    // Cleanup (left-click closes the menu and selects the folder)
-    await folderRow.click();
-    await window.keyboard.press('Backspace');
-    await window.waitForTimeout(100);
-    await window.click('#modalYesBtn');
-    await window.waitForTimeout(100);
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await window.keyboard.press('Escape');
+    await window.evaluate(async (ids) => {
+      for (const id of ids) await window.electronAPI.deleteItemWithFiles(id);
+    }, itemIds);
   });
 
   test('opened in the bottom-right corner, the menu and its submenus stay inside the window', async ({ window }) => {

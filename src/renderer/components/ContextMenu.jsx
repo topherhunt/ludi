@@ -2,8 +2,13 @@ import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { selectedItems } from '../stores/navigation.js';
 import { FloatingMenu } from './FloatingMenu.jsx';
 
+// DEPRECATED (folders): song lists no longer show folders, so every
+// folder-only action below stays hidden. TODO: delete them with the rest of the
+// folder code (see TASKS.md).
+const SHOW_FOLDER_ACTIONS = false;
+
 /**
- * Context menu for tree items
+ * Context menu for song rows and group rows
  */
 export function ContextMenu(props) {
   let menuRef;
@@ -26,7 +31,9 @@ export function ContextMenu(props) {
     document.removeEventListener('click', handleClickOutside);
   });
 
-  const isFolder = () => props.item?.list_id !== null;
+  // A group row (album, artist...) stands for the songs inside it.
+  const isGroup = () => props.item.groupKey !== undefined;
+  const isFolder = () => SHOW_FOLDER_ACTIONS && props.item.list_id !== null;
   const hasSelection = () => selectedItems().size > 0;
   const isMultiSelect = () => selectedItems().size > 1;
   // Count selected folders via their rendered rows (selection is set before right-click).
@@ -46,6 +53,40 @@ export function ContextMenu(props) {
 
   return (
     <FloatingMenu class="context-menu" ref={menuRef} x={props.x} y={props.y}>
+      <Show when={isGroup()}>
+        <div
+          class="context-menu-item qa-play-group"
+          onClick={() => {
+            const groupKey = props.item.groupKey;
+            props.onClose?.();
+            props.onPlayGroup?.(groupKey);
+          }}
+        >
+          Play This Group
+        </div>
+
+        <div class="context-menu-separator" />
+
+        <div
+          class="context-menu-item qa-group-collapse-all"
+          onClick={() => {
+            props.onClose?.();
+            props.onCollapseAll?.();
+          }}
+        >
+          Collapse All
+        </div>
+        <div
+          class="context-menu-item qa-group-expand-all"
+          onClick={() => {
+            props.onClose?.();
+            props.onExpandAll?.();
+          }}
+        >
+          Expand All
+        </div>
+      </Show>
+
       {/* Add Folder Inside (for folders only) */}
       <Show when={isFolder()}>
         <div
@@ -63,6 +104,7 @@ export function ContextMenu(props) {
       </Show>
 
       {/* Add Folder After */}
+      <Show when={SHOW_FOLDER_ACTIONS}>
       <div
         class="context-menu-item qa-add-folder-after"
         classList={{ disabled: placesByPosition() }}
@@ -77,9 +119,10 @@ export function ContextMenu(props) {
       >
         Add Folder After
       </div>
+      </Show>
 
       {/* Move into New Folder (when items selected) */}
-      <Show when={hasSelection()}>
+      <Show when={SHOW_FOLDER_ACTIONS && hasSelection()}>
         <div
           class="context-menu-item qa-move-into-new-folder"
           classList={{ disabled: placesByPosition() }}
@@ -139,7 +182,7 @@ export function ContextMenu(props) {
         <div class="context-menu-separator" />
 
         {/* Sort by... submenu */}
-        <div class="context-menu-item has-submenu qa-sort-menu" classList={{ disabled: actsOnHiddenSongs() }}>
+        <div class="context-menu-item has-submenu qa-folder-sort-menu" classList={{ disabled: actsOnHiddenSongs() }}>
           Sort by...
           <Show when={!actsOnHiddenSongs()}>
             <div class="context-submenu">
@@ -182,10 +225,8 @@ export function ContextMenu(props) {
         </div>
       </Show>
 
-      <div class="context-menu-separator" />
-
       {/* Batch rename when multiple items (incl. >=1 folder) are selected */}
-      <Show when={isMultiSelect() && selectedFolderCount() > 0}>
+      <Show when={SHOW_FOLDER_ACTIONS && isMultiSelect() && selectedFolderCount() > 0}>
         <div
           class="context-menu-item"
           onClick={() => {
@@ -212,9 +253,7 @@ export function ContextMenu(props) {
       </Show>
 
       {/* Song-only actions */}
-      <Show when={!isFolder()}>
-        <div class="context-menu-separator" />
-
+      <Show when={!isFolder() && !isGroup()}>
         {/* Seeded from the whole selection when the click landed inside it --
             the label says which, so there's no guessing what you'll get. */}
         <div

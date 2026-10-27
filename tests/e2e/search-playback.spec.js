@@ -7,26 +7,30 @@ const TONE = path.join(testAudioDir, 'test-tone.m4a');
 const STAMP = Date.now();
 
 // The tone carries no ID3 title, so each copy's filename becomes its title.
-// One folder holds two hits with a non-match between them; a third hit sits
-// outside the folder. The search shows the folder (two hits) plus the loose one.
+// One album holds two hits with a non-match between them; a third hit has no
+// album. Grouped by album, the search shows the album (two hits) plus the loose one.
 const TERM = `ludiplay${STAMP}`;
-const DIR = path.join(os.tmpdir(), `ludi-search-play-${STAMP}`);
+const ALBUM = `Album ${STAMP}`;
 const HIT_A = `a-${TERM}`;
 const SKIP = `b-skip-${STAMP}`;
 const HIT_C = `c-${TERM}`;
 const HIT_D = `d-${TERM}`;
+const SEARCH_GROUP = '.qa-group-row';
 
 const nowPlaying = (window) => window.locator('.player-info .song-title');
-const row = (window, title) => window.locator('.qa-search-song').filter({ hasText: title });
+const row = (window, title) => window.locator('.qa-song-row').filter({ hasText: title });
 
 async function search(window, query, expectedRows) {
+  await window.evaluate(() => window.__ludiResetListViews({
+    'list:0': { groupBy: 'album', sort: [{ field: 'album', dir: 'asc' }] },
+  }));
   await window.keyboard.press('Escape');
   await window.locator('.qa-playlist-item[data-list-id="0"]').click();
   await window.waitForTimeout(150);
   const input = window.locator('.search-input');
   await input.fill(query);
   await input.press('Enter');
-  await expect(window.locator('.qa-search-song')).toHaveCount(expectedRows, { timeout: 2000 });
+  await expect(window.locator('.qa-song-row')).toHaveCount(expectedRows, { timeout: 2000 });
 }
 
 async function next(window) {
@@ -36,16 +40,18 @@ async function next(window) {
 
 test.describe('Playing from search results', () => {
   test.beforeAll(async ({ window }) => {
-    fs.mkdirSync(DIR, { recursive: true });
-    for (const name of [HIT_A, SKIP, HIT_C]) fs.copyFileSync(TONE, path.join(DIR, `${name}.m4a`));
-    const loose = path.join(os.tmpdir(), `${HIT_D}.m4a`);
-    fs.copyFileSync(TONE, loose);
+    const files = [HIT_A, SKIP, HIT_C, HIT_D].map((name) => path.join(os.tmpdir(), `${name}.m4a`));
+    files.forEach((p) => fs.copyFileSync(TONE, p));
 
-    await window.evaluate(async (paths) => {
-      await window.electronAPI.importFiles({ filePaths: paths, parentListId: 0, position: 0 });
-    }, [DIR, loose]);
-    fs.rmSync(DIR, { recursive: true, force: true });
-    fs.rmSync(loose, { force: true });
+    await window.evaluate(async ({ filePaths, titles, album }) => {
+      await window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 });
+      const items = await window.electronAPI.getListItems(0);
+      for (const title of titles) {
+        const item = items.find((it) => it.song_title === title);
+        await window.electronAPI.updateSong({ songId: item.song_id, fields: { album } });
+      }
+    }, { filePaths: files, titles: [HIT_A, SKIP, HIT_C], album: ALBUM });
+    files.forEach((p) => fs.rmSync(p, { force: true }));
 
     // Loop off, so running off the end of the queue shows where the queue ends.
     await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 1; });
@@ -57,11 +63,11 @@ test.describe('Playing from search results', () => {
 
   test.afterAll(async ({ window }) => {
     if (await window.locator('#playPauseBtn.playing').count()) await window.locator('#playPauseBtn').click();
-    await window.evaluate(async ({ stamp, dirName }) => {
+    await window.evaluate(async (stamp) => {
       const items = await window.electronAPI.getAllListItems();
-      const ours = items.filter((i) => (i.song_title || '').includes(stamp) || (i.list_title || '').startsWith(dirName));
+      const ours = items.filter((i) => (i.song_title || '').includes(stamp));
       for (const item of ours) await window.electronAPI.deleteItemWithFiles(item.id);
-    }, { stamp: String(STAMP), dirName: path.basename(DIR) });
+    }, String(STAMP));
     while (await window.evaluate(() => window.loopMode) !== 'all') {
       await window.locator('#loopBtn').click();
       await window.waitForTimeout(5);
@@ -69,16 +75,16 @@ test.describe('Playing from search results', () => {
     await window.evaluate(() => { delete window.__ludiRepeatOneWindowMs; });
   });
 
-  test('double-clicking a hit queues the search results, not the folder it lives in', async ({ window }) => {
+  test('double-clicking a hit queues the search results, not the album it is on', async ({ window }) => {
     await search(window, TERM, 3);
 
     await row(window, HIT_A).dblclick();
     await expect(nowPlaying(window)).toHaveText(HIT_A);
 
-    // The non-match between them in the folder is skipped...
+    // The non-match between them on the album is skipped...
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_C);
-    // ...and the loose hit outside the folder comes next.
+    // ...and the loose hit outside the album comes next.
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_D);
     await expect(window.locator('#nextBtn')).toBeDisabled();
@@ -104,21 +110,20 @@ test.describe('Playing from search results', () => {
     await expect(nowPlaying(window)).toHaveText(HIT_C);
   });
 
-  test('double-clicking a search folder plays just the hits inside it', async ({ window }) => {
+  test('double-clicking an album group plays just the hits inside it', async ({ window }) => {
     await search(window, TERM, 3);
 
-    const folder = window.locator('.qa-search-folder').filter({ hasText: path.basename(DIR) });
-    await folder.dblclick();
+    await window.locator(SEARCH_GROUP).filter({ hasText: ALBUM }).dblclick();
     await expect(nowPlaying(window)).toHaveText(HIT_A);
     await expect(row(window, HIT_C)).toBeVisible(); // two toggles leave it expanded
 
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_C);
-    // The loose hit is outside the folder, so the queue ends here.
+    // The loose hit is outside the album, so the queue ends here.
     await expect(window.locator('#nextBtn')).toBeDisabled();
   });
 
-  test('right-clicking a hit opens the song menu with folder-placement actions grayed out', async ({ window }) => {
+  test('right-clicking a hit opens the song menu without folder-placement actions', async ({ window }) => {
     await search(window, TERM, 3);
 
     await row(window, HIT_A).click({ button: 'right' });
@@ -127,39 +132,24 @@ test.describe('Playing from search results', () => {
     await expect(menu.locator('.qa-find-similar')).toBeVisible();
     await expect(menu.locator('.qa-rate-menu')).toBeVisible();
     await expect(menu.locator('.qa-copy-files-to')).toBeVisible();
-    await expect(menu.locator('.qa-add-folder-after')).toHaveClass(/disabled/);
-
-    // A grayed-out item does nothing, not even close the menu.
-    await menu.locator('.qa-add-folder-after').click();
-    await expect(menu).toBeVisible();
+    await expect(menu.locator('.qa-add-folder-after')).toHaveCount(0);
 
     await window.locator('.search-input').click();
     await expect(menu).toHaveCount(0);
   });
 
-  test('right-clicking a search folder acts on its hits and grays out the rest', async ({ window }) => {
+  test('right-clicking an album group plays its hits', async ({ window }) => {
     await search(window, TERM, 3);
-    const folder = window.locator('.qa-search-folder').filter({ hasText: path.basename(DIR) });
 
-    await folder.click({ button: 'right' });
-    const menu = window.locator('.context-menu');
-    for (const hidden of ['.qa-sort-menu', '.qa-flatten', '.qa-delete-item']) {
-      await expect(menu.locator(hidden)).toHaveClass(/disabled/);
-    }
-    await menu.locator('.qa-play-folder').click();
+    await window.locator(SEARCH_GROUP).filter({ hasText: ALBUM }).click({ button: 'right' });
+    await window.locator('.context-menu .qa-play-group').click();
     await expect(nowPlaying(window)).toHaveText(HIT_A);
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_C);
     await expect(window.locator('#nextBtn')).toBeDisabled();
-
-    await folder.click({ button: 'right' });
-    await menu.locator('.context-menu-item').filter({ hasText: 'Rename' }).click();
-    await window.fill('#renameInput', `${path.basename(DIR)}-renamed`);
-    await window.click('#renameOkBtn');
-    await expect(window.locator('.qa-search-folder')).toHaveText(`${path.basename(DIR)}-renamed`);
   });
 
-  test('rating a hit redraws its stars, and a collapsed folder stays collapsed', async ({ window }) => {
+  test('rating a hit redraws its stars, and a collapsed group stays collapsed', async ({ window }) => {
     await search(window, TERM, 3);
     const stars = row(window, HIT_D).locator('.qa-star-rating');
 
@@ -171,7 +161,7 @@ test.describe('Playing from search results', () => {
     await expect(stars).toHaveAttribute('data-rating', '');
 
     // The results refresh in place rather than being rebuilt from scratch.
-    await window.locator('.qa-search-folder .chevron').click();
+    await window.locator(`${SEARCH_GROUP} .chevron`).click();
     await expect(row(window, HIT_A)).toHaveCount(0);
     await stars.locator('[data-star="2"]').click();
     await expect(stars).toHaveAttribute('data-rating', '2');
@@ -184,10 +174,10 @@ test.describe('Playing from search results', () => {
 
     await stars.locator('[data-star="5"]').click();
     await expect(stars).toHaveAttribute('data-rating', '5');
-    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row')).toHaveCount(2);
 
     await window.locator('.search-input').press('Enter');
-    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(window.locator('.qa-song-row')).toHaveCount(1);
     await expect(row(window, HIT_A)).toHaveCount(0);
   });
 
@@ -198,7 +188,7 @@ test.describe('Playing from search results', () => {
     await window.locator('.context-menu-item').filter({ hasText: 'Delete' }).click();
     await window.click('#modalYesBtn');
 
-    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row')).toHaveCount(2);
     await expect(row(window, HIT_D)).toHaveCount(0);
   });
 });

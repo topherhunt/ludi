@@ -1,3 +1,5 @@
+// DEPRECATED (folders): song lists no longer show folders, so nothing can select
+// one to rename. TODO: delete with the rest of the folder code (see TASKS.md).
 import { Show, createSignal, createEffect, onCleanup } from 'solid-js';
 
 /**

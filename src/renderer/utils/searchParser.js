@@ -6,6 +6,7 @@
  *   title=value    -- title contains value
  *   artist=value   -- artist contains value
  *   album=value    -- album contains value
+ *   genre=value    -- genre contains value (`genre=none` for no genre)
  *   any=value      -- title/album/artist contains value
  *   track=7        -- track_number equals 7 (integer comparison)
  *   tag=name       -- song has a tag named exactly `name` (case-insensitive)
@@ -14,6 +15,7 @@
  *   rating=none    -- song has never been rated (`rating=any` for the converse)
  *   plays>=5       -- played at least 5 times (`plays=0` for never played)
  *   lastplayed>=2026-01-01 -- last played on or after that day (also > < <= =)
+ *   added>=2026-01-01      -- added to the library on or after that day (same operators)
  *   A AND B        -- both must match
  *   A OR B         -- either must match
  *   NOT A          -- A must not match (also `-A` shorthand, e.g. -tag=fav)
@@ -21,12 +23,12 @@
  *   "quoted value" -- multi-word value (use in field or plain text)
  */
 
-const FIELDS = ['title', 'artist', 'album', 'any', 'track', 'tag', 'rating', 'plays', 'lastplayed'];
+const FIELDS = ['title', 'artist', 'album', 'genre', 'any', 'track', 'tag', 'rating', 'plays', 'lastplayed', 'added'];
 
 // Fields that hold a number or a date and so accept the ordering operators.
 // Restricting them keeps `artist>=x` from parsing into something with no
 // sensible meaning.
-const ORDERED_FIELDS = ['track', 'rating', 'plays', 'lastplayed'];
+const ORDERED_FIELDS = ['track', 'rating', 'plays', 'lastplayed', 'added'];
 
 const FIELD_OP_RE = new RegExp(`^(${FIELDS.join('|')})(>=|<=|>|<|=)`, 'i');
 
@@ -259,14 +261,14 @@ function compareDate(actual, op, rawValue) {
 /**
  * Evaluate a parsed AST against a song's data.
  * @param {object|null} ast
- * @param {{ title: string, artist: string, album: string, track_number: number|null, rating: number|null, play_count: number, last_played_at: string|null, ancestorFolderNames: string[], tags: string[] }} songData
+ * @param {{ title: string, artist: string, album: string, genre: string, track_number: number|null, rating: number|null, play_count: number, last_played_at: string|null, date_added: string, ancestorFolderNames: string[], tags: string[] }} songData
  * @returns {boolean}
  */
 export function evaluateSong(ast, songData) {
   if (!ast) return false;
 
-  const { title, artist, album, track_number, rating, play_count, last_played_at,
-          ancestorFolderNames, tags } = songData;
+  const { title, artist, album, genre, track_number, rating, play_count, last_played_at,
+          date_added, ancestorFolderNames, tags } = songData;
 
   switch (ast.type) {
     case 'OR':
@@ -295,6 +297,9 @@ export function evaluateSong(ast, songData) {
         case 'title':  return contains(title, value);
         case 'artist': return contains(artist, value);
         case 'album':  return contains(album, value);
+        case 'genre':
+          if (value.toLowerCase() === 'none') return !genre;
+          return contains(genre, value);
         case 'any':
           return contains(title, value) || contains(artist, value) || contains(album, value);
         case 'track':
@@ -311,6 +316,8 @@ export function evaluateSong(ast, songData) {
           return compareNumeric(play_count, op, value);
         case 'lastplayed':
           return compareDate(last_played_at, op, value);
+        case 'added':
+          return compareDate(date_added, op, value);
         case 'tag':
           // Exact (case-insensitive) tag-name match. `tags` is an array of the
           // song's tag names.

@@ -364,7 +364,8 @@ export function Sidebar(props) {
     });
   });
 
-  // Handle new folder
+  // DEPRECATED (folders): the new folder is created but song lists don't show
+  // folders. TODO: delete this and the menu item (see TASKS.md).
   const handleNewFolder = () => {
     closeDropdown();
     props.onNewFolder?.();

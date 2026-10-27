@@ -141,7 +141,10 @@ export function useKeyboard(options) {
       return;
     }
 
-    // Left/Right arrows for folder expand/collapse or seeking
+    // Left/Right arrows for folder expand/collapse or seeking.
+    // DEPRECATED (folders): no row is a folder any more, so only the seek branch
+    // runs, here and in the Enter/Space handler below. TODO: delete the folder
+    // branches (see TASKS.md).
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toStars, matchTracks, parseGrouping } from '../../src/main/swinsian-import.js';
+import { toStars, matchTracks, parseGrouping, trackDay, matchDetails } from '../../src/main/swinsian-import.js';
 
 const song = (id, file_path, title, rating = null) => ({ id, file_path, title, artist: '', rating });
 const track = (basename, title, stars, tags = []) => ({ basename, title, stars, tags });
@@ -112,5 +112,44 @@ describe('matchTracks', () => {
     );
     expect(songsToRate).toBe(3);
     expect(overwrites).toBe(1); // only song 1 (2 stars -> 5)
+  });
+});
+
+// Swinsian's timestamps for noon local time on a day, in seconds since 2001-01-01 UTC.
+const coreData = (day) => new Date(`${day}T12:00:00`).getTime() / 1000 - 978307200;
+
+describe('trackDay', () => {
+  it('takes the earlier of the date added and the file creation date', () => {
+    expect(trackDay({ dateadded: coreData('2019-12-10'), datecreated: coreData('2011-04-02') })).toBe('2011-04-02');
+    expect(trackDay({ dateadded: coreData('2015-01-01'), datecreated: coreData('2020-06-30') })).toBe('2015-01-01');
+  });
+
+  it('ignores a zeroed timestamp at the Unix epoch, and missing ones', () => {
+    expect(trackDay({ dateadded: coreData('2019-12-10'), datecreated: -978307200 })).toBe('2019-12-10');
+    expect(trackDay({ dateadded: null, datecreated: null })).toBeNull();
+  });
+});
+
+describe('matchDetails', () => {
+  const detailSong = (id, file_path, genre, date_added) => ({ id, file_path, title: '', genre, date_added });
+  const detail = (basename, day, genre) => ({ basename, title: '', label: basename, day, genre });
+
+  it('dates every matched song whose date differs, and fills only missing genres', () => {
+    const songs = [
+      detailSong(1, 'a.mp3', null, '2026-06-01'),
+      detailSong(2, 'b.mp3', 'Jazz', '2026-06-01'),
+      detailSong(3, 'c.mp3', null, '2012-03-03'),
+    ];
+    const result = matchDetails(
+      [detail('a.mp3', '2011-01-01', 'Rock'), detail('b.mp3', '2012-02-02', 'Pop'), detail('c.mp3', '2012-03-03', 'Rock'),
+        detail('gone.mp3', '2013-01-01', 'Folk')],
+      songs
+    );
+    expect([...result.dates]).toEqual([[1, '2011-01-01'], [2, '2012-02-02']]);
+    expect([...result.genres]).toEqual([[1, 'Rock'], [3, 'Rock']]);
+    expect(result.matched).toBe(3);
+    expect(result.unmatched).toEqual(['gone.mp3']);
+    expect(result.yearCounts).toEqual([{ value: '2011', songs: 1 }, { value: '2012', songs: 1 }]);
+    expect(result.genreCounts).toEqual([{ value: 'Rock', songs: 2 }]);
   });
 });

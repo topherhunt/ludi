@@ -3,44 +3,37 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const MP3 = path.join(testAudioDir, '02 Jump Into My Mouth and Breathe in the Stardust.mp3');
+const TONE = path.join(testAudioDir, 'test-tone.m4a');
 
 test.describe('Sidebar collapse/expand all', () => {
-  test('the sidebar icon buttons collapse and expand explorer folders', async ({ window }) => {
-    const tempDir = path.join(os.tmpdir(), `ludi-collapse-${Date.now()}`);
-    fs.mkdirSync(tempDir, { recursive: true });
-    fs.copyFileSync(MP3, path.join(tempDir, 'inside.mp3'));
+  test('the sidebar icon buttons collapse and expand the list groups', async ({ window }) => {
+    const stamp = Date.now();
+    const album = `Collapse ${stamp}`;
+    const files = [0, 1].map((i) => path.join(os.tmpdir(), `ludi-collapse-${stamp}-${i}.m4a`));
+    files.forEach((f) => fs.copyFileSync(TONE, f));
+    const itemIds = await window.evaluate(async ({ filePaths, album }) => {
+      const { itemIds } = await window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 });
+      for (const item of await window.electronAPI.getListItems(0)) {
+        if (itemIds.includes(item.id)) await window.electronAPI.updateSong({ songId: item.song_id, fields: { album } });
+      }
+      window.__ludiResetListViews({ 'list:0': { groupBy: 'album', sort: [{ field: 'album', dir: 'asc' }] } });
+      return itemIds;
+    }, { filePaths: files, album });
+    files.forEach((f) => fs.rmSync(f, { force: true }));
 
-    const mainLibraryItem = window.locator('.playlist-item').first();
-    await mainLibraryItem.click();
-    await window.waitForTimeout(100);
-    await window.evaluate((fp) => window.electronAPI.importFiles({ filePaths: [fp], parentListId: 0, position: 0 }), tempDir);
-    await mainLibraryItem.click();
-    await window.waitForTimeout(200);
+    await window.keyboard.press('Escape');
+    await window.locator('.playlist-item').first().click();
+    const chevron = window.locator('.qa-group-row').filter({ hasText: album }).locator('.chevron');
+    await expect(chevron).toBeVisible({ timeout: 2000 });
 
-    const folderName = path.basename(tempDir);
-    const folderRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: folderName });
-    await expect(folderRow).toBeVisible({ timeout: 2000 });
-    const chevron = folderRow.locator('.tree-item-icon.chevron');
-
-    // The buttons live in the sidebar header.
-    await expect(window.locator('.qa-collapse-all')).toBeVisible();
-    await expect(window.locator('.qa-expand-all')).toBeVisible();
-
-    // Expand all -> the folder is expanded.
     await window.locator('.qa-expand-all').click();
-    await expect(chevron).toHaveClass(/expanded/, { timeout: 2000 });
+    await expect(chevron).toHaveClass(/expanded/);
 
-    // Collapse all -> the folder is collapsed again.
     await window.locator('.qa-collapse-all').click();
-    await expect(chevron).not.toHaveClass(/expanded/, { timeout: 2000 });
+    await expect(chevron).not.toHaveClass(/expanded/);
 
-    // Cleanup
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    await folderRow.click();
-    await window.keyboard.press('Backspace');
-    await window.waitForTimeout(100);
-    await window.click('#modalYesBtn');
-    await window.waitForTimeout(100);
+    await window.evaluate(async (ids) => {
+      for (const id of ids) await window.electronAPI.deleteItemWithFiles(id);
+    }, itemIds);
   });
 });

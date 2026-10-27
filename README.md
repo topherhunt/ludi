@@ -2,16 +2,17 @@
 
 A fast, lightweight music library and player for macOS.
 
-Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nested folders you arrange yourself, like a Finder window -- expand a folder to see what's inside, drag things around to reorganize. That tree is virtual: it lives in Ludi's database and has nothing to do with where the audio files actually sit on disk, so you can reorganize freely without moving a single file.
+Your library and playlists live in Ludi's database and have nothing to do with where the audio files actually sit on disk, so you can reorganize freely without moving a single file.
 
 ## Features
 
-- **Folder-tree library.** Nest folders as deep as you like, drag and drop to reorder or reparent, sort a folder alphabetically, or flatten it. Right-click a folder to play the whole thing.
+- **Group and sort any list.** Every song list -- the library, a playlist, search results, similar songs, an auto-playlist -- can be grouped by album, artist then album, year added then album, or genre then album, and sorted by any stack of fields (date added, album, artist, title, genre, rating, plays, last played), each A-Z or Z-A. Groups sort by their earliest value, or latest when descending, and a group of one song is shown as the song itself. Double-click a group to play just its songs. Each list remembers its own grouping and sort across restarts; the library starts grouped by album, and playlists start in playlist order, which is the only order you can drag songs into.
 - **Playlists.** Reference-only song lists in the sidebar -- adding a song to a playlist copies the reference, never the file, and never moves it out of your library.
 - **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; the chips are scoped to whatever you're looking at and carry a count, and clicking them stacks up as filters.
 - **Star ratings.** A 1-5 star column in the song list. Click a star to rate, click the same star again to clear it, or press `1`-`5` (and `0` to clear) to rate everything you have selected. Ratings are searchable -- `rating>=4`, `rating=none` -- and available as a condition in the advanced-search composer. Settings can import the ratings out of an existing Swinsian library -- along with the space-separated tags in its Grouping field -- showing you what it would match before writing anything.
 - **Listening history.** Every song carries a play count and a last-played date, both searchable -- `plays>=5`, `plays=0` for everything you have never got to, `lastplayed>=2026-01-01` -- and both offered as conditions in the advanced-search composer. A play is counted once you have actually listened to half the track (30 seconds is enough for anything longer), so skipping down a list leaves the counts alone.
-- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, track number, rating, play count, last-played date, and tags. Numbers and dates compare rather than match, so a condition can say "is at least 4" or "is on or after June 1". Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
+- **Genre and date added.** Every song has a genre (read from and written back to the file's tags) and a date added (in Ludi only; today for new imports). Edit either for one song or a whole selection in the edit panel, and search them with `genre=rock`, `genre=none` and `added>=2024-01-01`. Settings can import both from a Swinsian library, with a preview: the date is the earlier of Swinsian's date added and the file's creation date, and a genre only fills a song that has none.
+- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, genre, track number, rating, play count, last-played date, date added, and tags. Numbers and dates compare rather than match, so a condition can say "is at least 4" or "is on or after June 1". Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
 - **Audio analysis.** Ludi listens to every song locally (no uploads, no API keys) with a MusiCNN model running on ONNX Runtime, and stores a 200-number fingerprint of how each track sounds. It runs in the background, backs off while you're playing music, and picks up where it left off if you quit. Everything below is built on it:
   - **Similar songs.** Right-click any song for the tracks that sound most like it.
   - **Auto-tags.** Genre and mood tags applied from the model's own scores, calibrated against your library rather than absolute thresholds. Machine-applied tags carry a gear badge so they're never confused with your own, and re-running the analysis only ever rewrites those.
@@ -20,9 +21,9 @@ Ludi drops the iTunes playlist metaphor. Instead, your library is a tree of nest
   - **Facet browser.** Every tag in the current view with how many songs carry it. Click one to drill in, and the list becomes "what else these songs tend to be", with the combinations that are unusually concentrated marked. Hand any drill-down to the search box to save it.
 - **Import by drag and drop.** Drag audio files in from Finder and Ludi copies them into your library folder, reads their title/artist/album/duration tags, and files them where you dropped them.
 - **Drag files back out.** Hold Option while dragging a selection to copy the underlying audio files out to the Desktop or a Finder folder.
-- **Library scan.** Point Ludi at files already sitting in your library folder and it ingests them in place, grouped by artist and album.
+- **Library scan.** Point Ludi at files already sitting in your library folder and it ingests them in place.
 - **Media keys.** The play/pause and next/previous keys on your keyboard work, along with hotkeys for navigation and playback.
-- **Configurable columns** for track number, duration, rating, artist, album, and tags.
+- **Configurable columns** for track number, duration, rating, artist, album, genre, date added, plays, last played, and tags. Right-click any column header to show or hide columns.
 - **Shuffle and loop that take effect immediately** on the next song, rather than waiting until you manually pick a different track.
 
 Deleting a song moves its audio file to the macOS Trash rather than destroying it.
@@ -150,6 +151,8 @@ The app runs in one of three isolated modes, so dev/test/live never share a data
   - rating (int, nullable 1-5 -- null means "never rated", which is a different fact from a deliberate 1 star, so ratings never default to 0)
   - play_count (int not null, default 0 -- bumped once you have listened to half the track, capped at 30 seconds of accumulated listening, so clicking down a list never inflates it)
   - last_played_at (text, nullable ISO timestamp -- null until that first counted play)
+  - genre (text, nullable -- mirrors the file's genre tag)
+  - date_added (text, YYYY-MM-DD in local time -- Ludi-only, editable, distinct from inserted_at)
   - file_path (text not null, unique constraint)
   - duration_seconds (int not null)
   - inserted_at

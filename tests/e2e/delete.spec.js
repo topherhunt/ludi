@@ -43,7 +43,7 @@ test.describe('Delete', () => {
     expect(fs.existsSync(absPath)).toBe(false);
   });
 
-  test('deleting a selection that spans nested folders removes every song file inside them', async ({ window }) => {
+  test('deleting songs that live inside imported (hidden) folders removes their files', async ({ window }) => {
     const outer = path.join(os.tmpdir(), `ludi-nested-delete-${STAMP}`);
     fs.mkdirSync(path.join(outer, 'inner'), { recursive: true });
     fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), path.join(outer, `top-${STAMP}.m4a`));
@@ -59,22 +59,18 @@ test.describe('Delete', () => {
     expect(absPaths).toHaveLength(2);
     absPaths.forEach((p) => expect(fs.existsSync(p)).toBe(true));
 
-    // Select everything under the outer folder -- both folders and both songs.
+    // The folders aren't shown; the songs inside them are listed directly.
     await window.locator('.playlist-item').first().click();
-    const outerRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: path.basename(outer) });
-    const innerRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'inner' });
-    // Imported folders arrive collapsed.
-    await outerRow.locator('.chevron').click();
-    await innerRow.locator('.chevron').click();
-    await outerRow.click();
-    await innerRow.click({ modifiers: ['Meta'] });
-    await window.locator('.tree-item-content').filter({ hasText: `top-${STAMP}` }).click({ modifiers: ['Meta'] });
-    await window.locator('.tree-item-content').filter({ hasText: `deep-${STAMP}` }).click({ modifiers: ['Meta'] });
-    await expect(window.locator('.tree-item-content.selected')).toHaveCount(4);
+    const top = window.locator('.qa-song-row').filter({ hasText: `top-${STAMP}` });
+    const deep = window.locator('.qa-song-row').filter({ hasText: `deep-${STAMP}` });
+    await top.click();
+    await deep.click({ modifiers: ['Meta'] });
+    await expect(window.locator('.tree-item-content.selected')).toHaveCount(2);
 
     await window.keyboard.press('Backspace');
     await window.click('#modalYesBtn');
-    await expect(outerRow).toHaveCount(0, { timeout: 2000 });
+    await expect(top).toHaveCount(0, { timeout: 2000 });
+    await expect(deep).toHaveCount(0);
     await expect.poll(() => absPaths.filter((p) => fs.existsSync(p))).toEqual([]);
   });
 

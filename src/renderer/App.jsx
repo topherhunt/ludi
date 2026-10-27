@@ -21,7 +21,7 @@ import {
   clearSelection,
 } from './stores/navigation.js';
 import { applySettingsFromIPC } from './stores/columns.js';
-import { refreshTags } from './stores/tags.js';
+import { refreshTags, bumpLibraryVersion } from './stores/tags.js';
 import { refreshSavedSearches } from './stores/savedSearches.js';
 import { refreshClusters } from './stores/clusters.js';
 import { listTitles } from './stores/viewHistory.js';
@@ -42,11 +42,13 @@ import {
   loopMode,
 } from './stores/playback.js';
 import { getAudioPlayer } from './hooks/useAudio.js';
-import { isSearching, searchRootListId, searchResultsInDisplayOrder, searchFolderSongs } from './stores/search.js';
-import { isShowingSimilar, similarResults } from './stores/similar.js';
-import { isShowingCluster, clusterSongs } from './stores/clusters.js';
+import { isSearching, searchRootListId } from './stores/search.js';
+import { isShowingSimilar } from './stores/similar.js';
+import { isShowingCluster } from './stores/clusters.js';
 import { mapOpen, mapPointsNearestTo } from './stores/musicMap.js';
-import { getSongsInList, getSong, getRootListId, recordSongPlay } from './utils/api.js';
+import { displayedSongs, groupSongs, collapseKey, arrangedSongsInList } from './stores/songList.js';
+import { setAllGroupsCollapsed } from './stores/listView.js';
+import { getSong, getRootListId, recordSongPlay } from './utils/api.js';
 
 // How long playback may be stopped before we let macOS suspend the app again.
 // Long enough to cover loading the next track over a slow disk or a network
@@ -107,9 +109,6 @@ export function App() {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   };
-
-  // Explorer refetch function (captured when Explorer is ready)
-  let explorerRefetch = null;
 
   // Get audio player (singleton)
   const player = getAudioPlayer();
@@ -185,7 +184,7 @@ export function App() {
   // (a scan ingests songs; the Swinsian import can create tags)
   onMount(() => {
     window.electronAPI?.onLibraryChanged?.(() => {
-      explorerRefetch?.();
+      bumpLibraryVersion();
       refreshTags();
     });
   });
@@ -337,14 +336,12 @@ export function App() {
     if (song) await playSong(song);
   };
 
-  // Handle play folder
+  // Play a whole sidebar list from the top, in the order its own view would
+  // show it (its saved grouping and sort), whether or not it's on screen.
   const handlePlayFolder = async (listId) => {
-    const songs = await getSongsInList(listId);
-    if (songs.length === 0) return;
-
-    setCurrentPlaylist(songs, 0, listId);
-    setPlayingRootListId(await getRootListId(listId));
-    await playCurrentTrack();
+    const rows = await arrangedSongsInList(listId);
+    if (rows.length === 0) return;
+    await playRows(rows, null, await getRootListId(listId));
   };
 
   // Queue the rows a results view shows, as they stand right now. The queue is a
@@ -367,8 +364,15 @@ export function App() {
     await playCurrentTrack();
   };
 
-  // A virtual folder in the nested search view plays just its own hits.
-  const handlePlaySearchFolder = (listId) => playRows(searchFolderSongs(listId), null, searchRootListId());
+  // The sidebar list the shown rows belong to, if any. Similar songs and a
+  // group's songs aren't any one sidebar list.
+  const shownRootListId = () => {
+    if (isShowingSimilar() || isShowingCluster()) return null;
+    return isSearching() ? searchRootListId() : currentListId();
+  };
+
+  // A group row plays just its own songs, in the order shown.
+  const handlePlayGroup = (groupKey) => playRows(groupSongs(groupKey), null, shownRootListId());
 
   const mapPointsAsRows = (points) => points.map((point) => ({
     item_id: point.itemId,
@@ -381,23 +385,11 @@ export function App() {
 
   // Handle play song in context. Identified by its list_items id, not its song
   // id -- the same song can appear more than once in one playlist. The context
-  // is the whole playlist the song sits in (every folder, collapsed or not), or
-  // the rows of whichever results view is showing.
-  const handlePlaySong = async (itemId, parentListId) => {
-    // Similar songs, groups and the map aren't any one sidebar list.
-    if (isShowingSimilar()) return playRows(similarResults(), itemId, null);
-    if (isShowingCluster()) return playRows(clusterSongs(), itemId, null);
+  // is every row of the list on screen in the order shown, collapsed groups
+  // included.
+  const handlePlaySong = async (itemId) => {
     if (mapOpen()) return playRows(mapPointsAsRows(mapPointsNearestTo(itemId)), itemId, null);
-    if (isSearching()) return playRows(searchResultsInDisplayOrder(), itemId, searchRootListId());
-
-    const rootListId = await getRootListId(parentListId);
-    const songs = await getSongsInList(rootListId);
-    const songIndex = songs.findIndex((s) => s.item_id === itemId);
-    if (songIndex === -1) throw new Error(`Item ${itemId} is not in list ${rootListId}`);
-
-    setCurrentPlaylist(songs, songIndex, rootListId);
-    setPlayingRootListId(rootListId);
-    await playCurrentTrack();
+    return playRows(displayedSongs(), itemId, shownRootListId());
   };
 
   // Toggle play/pause
@@ -496,27 +488,16 @@ export function App() {
     clearSelection();
 
     // If clicking on the same list, force a refetch (user might want to refresh)
-    if (sameList && explorerRefetch) {
-      explorerRefetch();
-    }
+    if (sameList) bumpLibraryVersion();
   };
 
-  // Collapse / expand every folder in the explorer tree. Lives here (not in the
-  // Explorer) so the sidebar header buttons and the folder context menu share it.
-  const setAllFoldersExpanded = async (isExpanded) => {
-    const folders = document.querySelectorAll('[data-folder-id]');
-    for (const folder of folders) {
-      await window.electronAPI?.updateFolderExpanded?.({
-        listId: parseInt(folder.dataset.folderId),
-        isExpanded,
-      });
-    }
-    explorerRefetch?.();
-  };
-  const handleCollapseAll = () => setAllFoldersExpanded(false);
-  const handleExpandAll = () => setAllFoldersExpanded(true);
+  // Collapse / expand every group in the list on screen. Lives here (not in the
+  // Explorer) so the sidebar header buttons and the group context menu share it.
+  const handleCollapseAll = () => setAllGroupsCollapsed(collapseKey(), true);
+  const handleExpandAll = () => setAllGroupsCollapsed(collapseKey(), false);
 
-  // Handle new folder from sidebar
+  // DEPRECATED (folders): song lists no longer show folders. TODO: delete with
+  // the rest of the folder code (see TASKS.md).
   const handleNewFolder = async () => {
     // Get position for new folder (end of current list)
     const items = await window.electronAPI?.getListItems?.(currentListId()) || [];
@@ -528,7 +509,7 @@ export function App() {
         position,
         title: folderName,
       });
-      explorerRefetch?.();
+      bumpLibraryVersion();
       hideRenameModal();
     }, 'Add Folder In Playlist');
   };
@@ -554,17 +535,10 @@ export function App() {
         listTitle={listTitle()}
         onPlayFolder={handlePlayFolder}
         onPlaySong={handlePlaySong}
-        onPlaySearchFolder={handlePlaySearchFolder}
+        onPlayGroup={handlePlayGroup}
         onSeek={handleSeek}
         onCollapseAll={handleCollapseAll}
         onExpandAll={handleExpandAll}
-        onRefetchReady={(fn) => {
-          explorerRefetch = fn;
-          // Expose for testing
-          if (typeof window !== 'undefined') {
-            window.refreshExplorer = fn;
-          }
-        }}
       />
 
       <PlayerControls

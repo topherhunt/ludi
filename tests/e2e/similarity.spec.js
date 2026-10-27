@@ -229,11 +229,11 @@ test.describe('Similar songs', () => {
     await window.locator('#playPauseBtn').click();
   });
 
-  test('right-clicking a result offers the song menu, positional actions grayed out', async ({ window }) => {
+  test('right-clicking a result offers the song menu, without folder actions', async ({ window }) => {
     await window.locator('.qa-similar-view .tree-item-content').first().click({ button: 'right' });
 
     await expect(window.locator('.qa-find-similar')).toBeVisible();
-    await expect(window.locator('.qa-add-folder-after')).toHaveClass(/disabled/);
+    await expect(window.locator('.qa-add-folder-after')).toHaveCount(0);
     await window.locator('.qa-similar-title').click();
     await expect(window.locator('.qa-find-similar')).toHaveCount(0);
   });

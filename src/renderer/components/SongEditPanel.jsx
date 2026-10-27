@@ -43,6 +43,8 @@ function resolveSelectedSongs(allItems, selectedIds) {
         artist: it.artist || '',
         album: it.album || '',
         track_number: it.track_number,
+        genre: it.genre || '',
+        date_added: it.date_added,
         duration_seconds: it.duration_seconds,
         tags: it.tags || [],
       });
@@ -102,10 +104,16 @@ export function SongEditPanel() {
     showSimilarTo(songList().map(s => ({ songId: s.id, title: s.title })));
 
   const commitField = async (field, rawValue) => {
-    const value = field === 'track_number'
-      ? (rawValue.trim() === '' ? null : parseInt(rawValue, 10))
-      : rawValue;
-    if (field === 'track_number' && value !== null && Number.isNaN(value)) return;
+    let value = rawValue;
+    if (field === 'track_number') {
+      value = rawValue.trim() === '' ? null : parseInt(rawValue, 10);
+      if (value !== null && Number.isNaN(value)) return;
+    } else if (field === 'genre') {
+      value = rawValue.trim() === '' ? null : rawValue.trim();
+    } else if (field === 'date_added') {
+      // Every song has a date added, so a cleared date input is not a value.
+      if (rawValue === '') return;
+    }
     await Promise.all(songList().map(s => updateSong(s.id, { [field]: value })));
     refresh();
   };
@@ -182,6 +190,30 @@ export function SongEditPanel() {
             ref={(el) => bindValue(el, () => sharedField('album').value)}
             placeholder={sharedField('album').isMultiple ? '<multiple>' : ''}
             onChange={commitOnChange('album')}
+            onKeyDown={blurOnEnter}
+          />
+        </label>
+        <label class="song-edit-field">
+          <span class="song-edit-label">Genre</span>
+          <input
+            class="song-edit-input qa-edit-genre"
+            classList={{ 'is-multiple': sharedField('genre').isMultiple }}
+            type="text"
+            spellcheck={false}
+            ref={(el) => bindValue(el, () => sharedField('genre').value)}
+            placeholder={sharedField('genre').isMultiple ? '<multiple>' : ''}
+            onChange={commitOnChange('genre')}
+            onKeyDown={blurOnEnter}
+          />
+        </label>
+        <label class="song-edit-field">
+          <span class="song-edit-label">Added</span>
+          <input
+            class="song-edit-input qa-edit-date-added"
+            classList={{ 'is-multiple': sharedField('date_added').isMultiple }}
+            type="date"
+            ref={(el) => bindValue(el, () => sharedField('date_added').value)}
+            onChange={commitOnChange('date_added')}
             onKeyDown={blurOnEnter}
           />
         </label>

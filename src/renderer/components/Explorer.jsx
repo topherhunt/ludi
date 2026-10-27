@@ -3,7 +3,7 @@ import { currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal, showAlert } from '../stores/modals.js';
 import { ExplorerHeader } from './ExplorerHeader.jsx';
 import { ColumnHeaders } from './ColumnHeaders.jsx';
-import { TreeView } from './TreeView.jsx';
+import { SongListView } from './SongListView.jsx';
 import { ContextMenu } from './ContextMenu.jsx';
 import { BatchRenameModal } from './BatchRenameModal.jsx';
 import { RenameModal, ConfirmModal } from './Modal.jsx';
@@ -19,12 +19,11 @@ import {
   getSong,
 } from '../utils/api.js';
 import { selectedItems, clearSelection, selectItem } from '../stores/navigation.js';
-import { isSearching, runSearch, searchFolderSongs } from '../stores/search.js';
+import { isSearching, runSearch } from '../stores/search.js';
+import { groupSongs } from '../stores/songList.js';
+import { bumpLibraryVersion } from '../stores/tags.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
-import { SearchResultsView } from './SearchResultsView.jsx';
-import { SimilarSongsView } from './SimilarSongsView.jsx';
-import { ClusterSongsView } from './ClusterSongsView.jsx';
 import { isShowingCluster, groupsOpen } from '../stores/clusters.js';
 import { GroupsView } from './GroupsView.jsx';
 import { MusicMapView } from './MusicMapView.jsx';
@@ -51,18 +50,11 @@ export function Explorer(props) {
   const [batchRenameOpen, setBatchRenameOpen] = createSignal(false);
   const [batchRenameCount, setBatchRenameCount] = createSignal(0);
 
-  // Tree refetch function
-  let refetchTree = null;
+  // Every song list reloads from the library version.
+  const refetchTree = bumpLibraryVersion;
 
   // Get list title
   const getListTitle = () => props.listTitle || 'Library';
-
-  // Handle refetch callback from TreeView
-  const handleRefetch = (fn) => {
-    refetchTree = fn;
-    // Also expose refetch to parent for sidebar operations
-    props.onRefetchReady?.(fn);
-  };
 
   // Close context menu
   const closeContextMenu = () => {
@@ -79,8 +71,8 @@ export function Explorer(props) {
   // Show context menu. Remembers whether the rows are pulled out of folders the
   // user can't see (search and the analysis views), where positional actions
   // would land somewhere invisible. Right-clicking outside the selection selects
-  // just that row, so the highlight shows what the menu acts on. (A search
-  // folder has no item id; its menu acts on the hits inside it.)
+  // just that row, so the highlight shows what the menu acts on. (A group row
+  // has no item id; its menu acts on the songs inside it.)
   const handleContextMenu = (x, y, item) => {
     if (item.id !== null && !selectedItems().has(item.id)) selectItem(item.id);
     setContextMenu({
@@ -91,6 +83,10 @@ export function Explorer(props) {
       removesFromPlaylist: deleteRemovesFromPlaylist(),
     });
   };
+
+  // DEPRECATED (folders): the folder handlers from here through the batch rename
+  // below, and their context-menu items, can't be reached now that song lists
+  // show no folder rows. TODO: delete them (see TASKS.md).
 
   // Add folder inside another folder
   const handleAddFolderInside = async (parentListId) => {
@@ -191,12 +187,11 @@ export function Explorer(props) {
   // Copy the selection's audio files into a folder the user picks -- the same
   // thing Option-dragging out to the Finder does, minus the modifier. Acts on
   // the whole selection when the click landed inside it, on the one row when it
-  // didn't, like every other context action here. A search folder copies just
-  // its hits.
+  // didn't, like every other context action here. A group copies its songs.
   const handleCopyFilesTo = async (item) => {
     const selected = selectedItems();
     let itemIds;
-    if (item.id === null) itemIds = searchFolderSongs(item.list_id).map((hit) => hit.item_id);
+    if (item.groupKey !== undefined) itemIds = groupSongs(item.groupKey).map((song) => song.item_id);
     else itemIds = selected.has(item.id) ? Array.from(selected) : [item.id];
 
     const result = await copyItemsToFolder(itemIds);
@@ -303,12 +298,6 @@ export function Explorer(props) {
     refetchTree?.();
   };
 
-  // A search folder plays just its hits, the same as double-clicking it.
-  const handlePlayFolder = (listId) => {
-    if (isSearching()) props.onPlaySearchFolder(listId);
-    else props.onPlayFolder(listId);
-  };
-
   // Delete item(s) with confirmation dialog
   // Used by both context menu and keyboard shortcut for consistent behavior
   //
@@ -354,9 +343,10 @@ export function Explorer(props) {
     });
   };
 
-  // Delete an item (from context menu)
+  // Delete an item, or every song in a group (from context menu)
   const handleDelete = (item) => {
-    handleDeleteWithConfirm([item.id]);
+    if (item.groupKey !== undefined) handleDeleteWithConfirm(groupSongs(item.groupKey).map((song) => song.item_id));
+    else handleDeleteWithConfirm([item.id]);
   };
 
   // Handle delete selected (from keyboard)
@@ -435,13 +425,12 @@ export function Explorer(props) {
         <ColumnHeaders />
       </Show>
 
-      {/* Seven things can fill the explorer, and exactly one of them does. */}
+      {/* Four things can fill the explorer, and exactly one of them does. */}
       <Switch fallback={
-        <TreeView
-          onRefetch={handleRefetch}
+        <SongListView
           listTitle={getListTitle()}
-          onPlayFolder={props.onPlayFolder}
           onPlaySong={props.onPlaySong}
+          onPlayGroup={props.onPlayGroup}
           onContextMenu={handleContextMenu}
         />
       }>
@@ -451,21 +440,8 @@ export function Explorer(props) {
         <Match when={facetsOpen()}>
           <FacetBrowser />
         </Match>
-        <Match when={isShowingSimilar()}>
-          <SimilarSongsView onPlaySong={props.onPlaySong} onContextMenu={handleContextMenu} />
-        </Match>
-        <Match when={isShowingCluster()}>
-          <ClusterSongsView onPlaySong={props.onPlaySong} onContextMenu={handleContextMenu} />
-        </Match>
         <Match when={groupsOpen()}>
           <GroupsView />
-        </Match>
-        <Match when={isSearching()}>
-          <SearchResultsView
-            onPlaySong={props.onPlaySong}
-            onPlaySearchFolder={props.onPlaySearchFolder}
-            onContextMenu={handleContextMenu}
-          />
         </Match>
       </Switch>
 
@@ -481,7 +457,8 @@ export function Explorer(props) {
           onAddFolderInside={handleAddFolderInside}
           onAddFolderAfter={handleAddFolderAfter}
           onMoveIntoNewFolder={handleMoveIntoNewFolder}
-          onPlayFolder={handlePlayFolder}
+          onPlayFolder={props.onPlayFolder}
+          onPlayGroup={props.onPlayGroup}
           onCollapseAll={props.onCollapseAll}
           onExpandAll={props.onExpandAll}
           onSort={handleSort}

@@ -56,9 +56,6 @@ test.describe('Song edit panel', () => {
 
     await window.keyboard.press('Escape');
     await window.locator('.qa-playlist-item[data-list-id="0"]').click();
-    const folderRow = window.locator(`.tree-item-content[data-folder-id="${folder.listId}"]`);
-    await expect(folderRow).toBeVisible({ timeout: 2000 });
-    await folderRow.locator('.tree-item-icon.chevron').click();
     await expect(rowOf(window, songIds[0])).toBeVisible({ timeout: 2000 });
   });
 
@@ -82,7 +79,9 @@ test.describe('Song edit panel', () => {
     await expect(playtime(window)).toHaveText(`${formatTime(toneSeconds * 3)} total`);
   });
 
-  test('selecting the folder totals every song inside it', async ({ window }) => {
+  // DEPRECATED (folders): song lists no longer show folder rows. TODO: delete
+  // with the rest of the folder code (see TASKS.md).
+  test.skip('selecting the folder totals every song inside it', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.locator(`.tree-item-content[data-folder-id="${folder.listId}"]`).click();
 

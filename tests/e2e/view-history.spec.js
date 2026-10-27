@@ -128,7 +128,7 @@ test.describe('Switching playlists from the sidebar', () => {
     await mainLibrary(window).click();
     await window.fill('.search-input', TERM);
     await window.press('.search-input', 'Enter');
-    await expect(window.locator('.qa-search-song')).toHaveCount(SONGS);
+    await expect(window.locator('.qa-song-row')).toHaveCount(SONGS);
     await window.locator('.explorer-container').evaluate((el) => { el.scrollTop = 300; });
 
     await playlist(window).click();

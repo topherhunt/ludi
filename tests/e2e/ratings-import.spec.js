@@ -129,7 +129,7 @@ test.describe('Swinsian ratings and tags import', () => {
       const db = process.mainModule.require(modulePath);
       const tagNames = db.getSongTagNames();
       return {
-        ratings: db.getSongsForRatingMatch().filter(s => ids.includes(s.id)).map(s => s.rating),
+        ratings: db.getSongsForSwinsianMatch().filter(s => ids.includes(s.id)).map(s => s.rating),
         tagged: ids.filter(id => tagNames.has(id)),
       };
     }, { modulePath: DATABASE_MODULE, ids: songIds });
@@ -143,7 +143,7 @@ test.describe('Swinsian ratings and tags import', () => {
 
     const afterRatings = await electronApp.evaluate((unused, { modulePath, ids }) => {
       const db = process.mainModule.require(modulePath);
-      const byId = new Map(db.getSongsForRatingMatch().map(s => [s.id, s.rating]));
+      const byId = new Map(db.getSongsForSwinsianMatch().map(s => [s.id, s.rating]));
       return ids.map(id => byId.get(id));
     }, { modulePath: DATABASE_MODULE, ids: songIds });
     expect(afterRatings).toEqual([4, null]);

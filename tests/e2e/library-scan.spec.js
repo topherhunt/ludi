@@ -52,7 +52,7 @@ test.describe('Library scan', () => {
           if (child.song_id === null) continue;
           const song = await window.electronAPI.getSong(child.song_id);
           if (song && song.file_path.endsWith(rel)) {
-            return { folderTitle: item.list_title, songTitle: child.song_title };
+            return { folderTitle: item.list_title, folderItemId: item.id, songId: child.song_id };
           }
         }
       }
@@ -62,18 +62,11 @@ test.describe('Library scan', () => {
     expect(placement).not.toBeNull();
     expect(placement.folderTitle).toBe(expectedFolderTitle);
 
-    // The main window's tree auto-refreshed (no manual re-click) and shows the folder.
-    const importedFolder = window
-      .locator('.tree-item-content[data-is-folder="true"]')
-      .filter({ hasText: expectedFolderTitle });
-    await expect(importedFolder.first()).toBeVisible({ timeout: 2000 });
+    // The main window's list auto-refreshed (no manual re-click) and shows the song.
+    await expect(window.locator(`.qa-song-row[data-song-id="${placement.songId}"]`)).toHaveCount(1, { timeout: 2000 });
 
-    // Clean up: remove the folder from the tree and the dropped file from disk.
-    await importedFolder.first().click();
-    await window.keyboard.press('Backspace');
-    await window.waitForTimeout(100);
-    await window.click('#modalYesBtn');
-    await window.waitForTimeout(100);
+    // Clean up: remove the folder and the dropped file from disk.
+    await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), placement.folderItemId);
     fs.rmSync(dropDir, { recursive: true, force: true });
   });
 });

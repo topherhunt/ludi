@@ -111,7 +111,7 @@ test.describe('Play history', () => {
       await searchBox.fill(query);
       await searchBox.press('Enter');
       await window.waitForTimeout(400);
-      const results = window.locator('.qa-search-song');
+      const results = window.locator('.qa-song-row');
       await expect(results).toHaveCount(1);
       await expect(results.first()).toHaveAttribute('data-song-id', String(songId));
     }
@@ -120,7 +120,7 @@ test.describe('Play history', () => {
     await searchBox.fill(`${stamp} plays=0`);
     await searchBox.press('Enter');
     await window.waitForTimeout(400);
-    await expect(window.locator('.qa-search-song')).toHaveCount(0);
+    await expect(window.locator('.qa-song-row')).toHaveCount(0);
 
     await deleteSong(window, songId);
   });
@@ -135,7 +135,7 @@ test.describe('Play history', () => {
       await expect(window.locator('.advanced-search-dialog')).toBeVisible();
     };
     const runSearch = () => window.locator('.modal-btn').filter({ hasText: 'Search' }).click();
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
 
     await openComposer();
     await window.locator('.advsearch-field-select').first().selectOption('title');

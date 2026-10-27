@@ -9,40 +9,7 @@ import {
   confirmModalState,
   hideConfirmModal,
 } from '../stores/modals.js';
-
-/**
- * Load column settings from localStorage
- */
-function loadColumnSettings() {
-  const defaults = {
-    visibility: {
-      track: true,
-      duration: true,
-      rating: true,
-      artist: true,
-      album: true,
-      tags: true,
-    },
-    widths: {},
-  };
-
-  if (typeof localStorage === 'undefined') return defaults;
-
-  const saved = localStorage.getItem('ludi-column-settings');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      return {
-        ...defaults,
-        ...parsed,
-        visibility: { ...defaults.visibility, ...parsed.visibility },
-      };
-    } catch (e) {
-      return defaults;
-    }
-  }
-  return defaults;
-}
+import { COLUMNS, columnVisibility, columnWidths, setAllColumnVisibility } from '../stores/columns.js';
 
 /** Modal bodies are set via innerHTML, so anything from a file has to be escaped. */
 function escapeHtml(text) {
@@ -53,15 +20,6 @@ function escapeHtml(text) {
 }
 
 /**
- * Save column settings to localStorage
- */
-function saveColumnSettings(visibility) {
-  const current = loadColumnSettings();
-  current.visibility = visibility;
-  localStorage.setItem('ludi-column-settings', JSON.stringify(current));
-}
-
-/**
  * Settings window component
  */
 export function Settings() {
@@ -69,13 +27,8 @@ export function Settings() {
   const [databasePath, setDatabasePath] = createSignal('');
   const [libraryPath, setLibraryPath] = createSignal('');
 
-  // Column visibility state
-  const [colTrack, setColTrack] = createSignal(true);
-  const [colDuration, setColDuration] = createSignal(true);
-  const [colRating, setColRating] = createSignal(true);
-  const [colArtist, setColArtist] = createSignal(true);
-  const [colAlbum, setColAlbum] = createSignal(true);
-  const [colTags, setColTags] = createSignal(true);
+  // Column visibility as edited here, applied on Save
+  const [colVisibility, setColVisibility] = createSignal({ ...columnVisibility() });
 
   // Library scan state
   const [scanning, setScanning] = createSignal(false);
@@ -90,6 +43,8 @@ export function Settings() {
   // Swinsian ratings and tags import. `busy` covers the read+match pass, which happens
   // before anything is written.
   const [ratingImport, setRatingImport] = createSignal({ busy: false });
+  // Swinsian date added and genre import: '' when idle, else the button's busy label.
+  const [detailsImport, setDetailsImport] = createSignal('');
 
   // Load settings on mount
   onMount(async () => {
@@ -98,14 +53,6 @@ export function Settings() {
     setDatabasePath(settings.database_path || '');
     setLibraryPath(settings.library_path || '');
 
-    // Load column visibility from localStorage
-    const columnSettings = loadColumnSettings();
-    setColTrack(columnSettings.visibility.track);
-    setColDuration(columnSettings.visibility.duration);
-    setColRating(columnSettings.visibility.rating);
-    setColArtist(columnSettings.visibility.artist);
-    setColAlbum(columnSettings.visibility.album);
-    setColTags(columnSettings.visibility.tags);
 
     setAnalysis(await window.electronAPI.getAnalysisProgress());
     window.electronAPI.onAnalysisProgress(async (progress) => {
@@ -264,6 +211,74 @@ export function Settings() {
     );
   };
 
+  // Same preview-then-approve flow as the ratings import, for date added and genre.
+  const handleImportDetails = async () => {
+    const dbPath = await window.electronAPI.chooseSwinsianLibrary();
+    if (!dbPath) return;
+
+    setDetailsImport('Reading...');
+    let preview;
+    try {
+      preview = await window.electronAPI.previewSwinsianDetails(dbPath);
+    } catch (e) {
+      setDetailsImport('');
+      showAlert(
+        '<i class="bi bi-exclamation-triangle" style="margin-right: 8px;"></i>Could Not Read That Library',
+        `<p>${escapeHtml(e.message)}</p>`
+      );
+      return;
+    }
+    setDetailsImport('');
+
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    if (preview.songsToDate === 0 && preview.songsToGenre === 0) {
+      showAlert(
+        '<i class="bi bi-calendar" style="margin-right: 8px;"></i>Nothing to Import',
+        `<p>Matched ${plural(preview.matched, 'track')} of ${preview.foundTracks}, but every date and genre here already agrees.</p>`
+      );
+      return;
+    }
+
+    // Genres and titles come from a foreign database and land in innerHTML, so escape them.
+    const list = (items) => `<div class="skipped-files-list"><ul>${items.join('')}</ul></div>`;
+    const dateNote = preview.songsToDate > 0
+      ? `<p><strong>${plural(preview.songsToDate, 'song')}</strong> will get a new date added`
+        + ` (the earlier of Swinsian's date added and the file's creation date), by year:</p>`
+        + list(preview.yearCounts.map(y => `<li>${y.value}: ${y.songs}</li>`))
+      : '';
+    const genreNote = preview.songsToGenre > 0
+      ? `<p><strong>${plural(preview.songsToGenre, 'song')}</strong> with no genre here will get one,`
+        + ` written to the file too (genres already set here are kept):</p>`
+        + list(preview.genreCounts.map(g => `<li>${escapeHtml(g.value)}: ${g.songs}</li>`))
+      : '';
+    const shown = preview.unmatched.slice(0, 200);
+    const more = preview.unmatched.length - shown.length;
+    const unmatchedNote = preview.unmatched.length > 0
+      ? `<p>${plural(preview.unmatched.length, 'track')} had no match here:</p>`
+        + list([...shown.map(t => `<li>${escapeHtml(t)}</li>`), ...(more > 0 ? [`<li>...and ${more} more</li>`] : [])])
+      : '';
+
+    showConfirmModal(
+      'Import Date Added and Genre',
+      `<p>Matched <strong>${preview.matched}</strong> of ${preview.foundTracks} tracks.</p>`
+      + dateNote + genreNote + unmatchedNote + `<p>Import them?</p>`,
+      async () => {
+        setDetailsImport('Importing...');
+        const result = await window.electronAPI.applySwinsianDetails(dbPath);
+        setDetailsImport('');
+        const failedNote = result.failed.length > 0
+          ? `<p>${plural(result.failed.length, 'file')} could not be written, so kept no genre:</p>`
+            + list(result.failed.map(f => `<li>${escapeHtml(f.file)}: ${escapeHtml(f.error)}</li>`))
+          : '';
+        showAlert(
+          '<i class="bi bi-calendar-check" style="margin-right: 8px;"></i>Date Added and Genre Imported',
+          `<p>Dated <strong>${plural(result.songsDated, 'song')}</strong>`
+          + ` and set the genre of <strong>${result.songsGenred}</strong>.</p>` + failedNote
+        );
+      }
+    );
+  };
+
   // Start / stop the audio analysis pass
   const handleAnalyze = async () => {
     setAnalysis(await window.electronAPI.startAnalysis());
@@ -303,20 +318,8 @@ export function Settings() {
       library_path: libraryPath(),
     };
 
-    // Save column visibility
-    const visibility = {
-      track: colTrack(),
-      duration: colDuration(),
-      rating: colRating(),
-      artist: colArtist(),
-      album: colAlbum(),
-      tags: colTags(),
-    };
-    saveColumnSettings(visibility);
-
-    // Notify main window with the column settings data
-    const columnSettingsData = loadColumnSettings();
-    await window.electronAPI?.notifyColumnSettingsChanged?.(columnSettingsData);
+    setAllColumnVisibility(colVisibility());
+    await window.electronAPI?.notifyColumnSettingsChanged?.({ visibility: columnVisibility(), widths: columnWidths() });
 
     await window.electronAPI?.saveSettings?.(newSettings);
     window.electronAPI?.closeSettings?.();
@@ -488,65 +491,43 @@ export function Settings() {
         </div>
 
         <div class="setting-item">
+          <label class="setting-label">Import date added and genre</label>
+          <div class="setting-description">
+            Read each track's date added and genre out of a Swinsian library and apply
+            them to matching songs here, matched the same way. Dates are replaced; a
+            genre only fills a song that has none. Nothing is written until you've seen
+            what it would change.
+          </div>
+          <div class="button-row">
+            <button
+              class="browse-btn qa-import-details"
+              onClick={handleImportDetails}
+              disabled={detailsImport() !== ''}
+            >
+              {detailsImport() || 'Import from Swinsian...'}
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-item">
           <label class="setting-label">Visible columns</label>
           <div class="setting-description">
             Choose which columns to display in the playlist view
           </div>
           <div class="checkbox-group">
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colTrack"
-                checked={colTrack()}
-                onChange={(e) => setColTrack(e.target.checked)}
-              />
-              {' #'}
-            </label>
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colDuration"
-                checked={colDuration()}
-                onChange={(e) => setColDuration(e.target.checked)}
-              />
-              {' Time'}
-            </label>
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colRating"
-                checked={colRating()}
-                onChange={(e) => setColRating(e.target.checked)}
-              />
-              {' Rating'}
-            </label>
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colArtist"
-                checked={colArtist()}
-                onChange={(e) => setColArtist(e.target.checked)}
-              />
-              {' Artist'}
-            </label>
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colAlbum"
-                checked={colAlbum()}
-                onChange={(e) => setColAlbum(e.target.checked)}
-              />
-              {' Album'}
-            </label>
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                id="colTags"
-                checked={colTags()}
-                onChange={(e) => setColTags(e.target.checked)}
-              />
-              {' Tags'}
-            </label>
+            <For each={COLUMNS}>
+              {(column) => (
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    class={`qa-setting-column-${column.key}`}
+                    checked={colVisibility()[column.key]}
+                    onChange={(e) => setColVisibility({ ...colVisibility(), [column.key]: e.target.checked })}
+                  />
+                  {` ${column.menuLabel || column.label}`}
+                </label>
+              )}
+            </For>
           </div>
         </div>
       </div>

@@ -444,8 +444,8 @@ ipcMain.handle('db:addFolder', (event, { parentListId, position, title }) => {
   return db.addFolder(parentListId, position, title);
 });
 
-ipcMain.handle('db:addSong', (event, { filePath, title, artist, album, durationSeconds, trackNumber }) => {
-  return db.addSong(filePath, title, artist, album, durationSeconds, trackNumber);
+ipcMain.handle('db:addSong', (event, { filePath, title, artist, album, durationSeconds, trackNumber, genre }) => {
+  return db.addSong(filePath, title, artist, album, durationSeconds, trackNumber, genre);
 });
 
 ipcMain.handle('db:addSongToList', (event, { songId, parentListId, position }) => {
@@ -565,6 +565,7 @@ const FILE_TAGS = {
   artist: { tag: 'artist', cleared: '' },
   album: { tag: 'album', cleared: '' },
   track_number: { tag: 'track', cleared: 0 },
+  genre: { tag: 'genre', cleared: '' },
 };
 
 // Each tag write rewrites the whole file, so two at once (fields committed in
@@ -573,7 +574,7 @@ let tagWriteQueue = Promise.resolve();
 
 // The file is written first: if that fails the edit fails, rather than leaving
 // the database saying something the file doesn't.
-ipcMain.handle('db:updateSong', (event, { songId, fields }) => {
+function updateSong(songId, fields) {
   const fileTags = {};
   for (const [field, { tag, cleared }] of Object.entries(FILE_TAGS)) {
     if (field in fields) fileTags[tag] = fields[field] === null ? cleared : fields[field];
@@ -588,7 +589,9 @@ ipcMain.handle('db:updateSong', (event, { songId, fields }) => {
   });
   tagWriteQueue = update.catch(() => {});
   return update;
-});
+}
+
+ipcMain.handle('db:updateSong', (event, { songId, fields }) => updateSong(songId, fields));
 
 ipcMain.handle('db:setSongRating', (event, { songIds, rating }) => {
   return db.setSongRating(songIds, rating);
@@ -604,7 +607,7 @@ ipcMain.handle('ratings:chooseSwinsianLibrary', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     title: 'Select Swinsian Library',
-    message: 'Choose the Swinsian library file to read star ratings and tags from.',
+    message: 'Choose the Swinsian library file to import from.',
     filters: [{ name: 'Swinsian library', extensions: ['sqlite', 'db', 'swinsianlibrary'] }],
   });
 
@@ -615,12 +618,12 @@ ipcMain.handle('ratings:chooseSwinsianLibrary', async () => {
 // Read-only: reports what the import would change so the user approves counts
 // rather than a black box.
 ipcMain.handle('ratings:previewSwinsian', (event, swinsianDbPath) => {
-  return swinsianImport.previewImport(swinsianDbPath, db.getSongsForRatingMatch());
+  return swinsianImport.previewImport(swinsianDbPath, db.getSongsForSwinsianMatch());
 });
 
 ipcMain.handle('ratings:applySwinsian', (event, swinsianDbPath) => {
   const { writes, tagWrites, songsRated, songsTagged } =
-    swinsianImport.resolveImport(swinsianDbPath, db.getSongsForRatingMatch());
+    swinsianImport.resolveImport(swinsianDbPath, db.getSongsForSwinsianMatch());
   for (const { rating, songIds } of writes) {
     db.setSongRating(songIds, rating);
   }
@@ -634,6 +637,29 @@ ipcMain.handle('ratings:applySwinsian', (event, swinsianDbPath) => {
     mainWindow.webContents.send('library-changed');
   }
   return { songsRated, songsTagged };
+});
+
+ipcMain.handle('swinsian:previewDetails', (event, swinsianDbPath) => {
+  return swinsianImport.previewDetailsImport(swinsianDbPath, db.getSongsForSwinsianMatch());
+});
+
+// Genre is a file tag, so each one goes through the same queued file-then-DB
+// write as an edit. A file that can't be written is reported, not fatal.
+ipcMain.handle('swinsian:applyDetails', async (event, swinsianDbPath) => {
+  const { dates, genres } = swinsianImport.resolveDetailsImport(swinsianDbPath, db.getSongsForSwinsianMatch());
+  db.setSongDatesAdded(dates);
+  const failed = [];
+  for (const [songId, genre] of genres) {
+    try {
+      await updateSong(songId, { genre });
+    } catch (e) {
+      failed.push({ file: db.getSong(songId).file_path, error: e.message });
+    }
+  }
+  if ((dates.length > 0 || genres.length > 0) && mainWindow) {
+    mainWindow.webContents.send('library-changed');
+  }
+  return { songsDated: dates.length, songsGenred: genres.length - failed.length, failed };
 });
 
 ipcMain.handle('db:deleteItemWithFiles', async (event, itemId) => {
@@ -791,6 +817,7 @@ async function importSingleFile(filePath, parentListId, position, libraryPath) {
   const album = metadata.common.album || 'Unknown';
   const durationSeconds = Math.floor(metadata.format.duration || 0);
   const trackNumber = metadata.common.track?.no || null;
+  const genre = metadata.common.genre?.[0] || null;
 
   // Create destination directory
   const destDir = path.join(libraryPath, artist, album);
@@ -814,7 +841,7 @@ async function importSingleFile(filePath, parentListId, position, libraryPath) {
   let isNewSong = false;
   try {
     // Add song to database
-    songId = db.addSong(relativePath, title, artist, album, durationSeconds, trackNumber);
+    songId = db.addSong(relativePath, title, artist, album, durationSeconds, trackNumber, genre);
     isNewSong = true;
   } catch (dbError) {
     // Check if this is a UNIQUE constraint error (song already exists)
@@ -1012,6 +1039,7 @@ ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
         album: metadata.common.album || 'Unknown',
         durationSeconds: Math.floor(metadata.format.duration || 0),
         trackNumber: metadata.common.track?.no || null,
+        genre: metadata.common.genre?.[0] || null,
       });
     } catch (error) {
       console.error('Error reading metadata for:', relativePath, error);
@@ -1040,7 +1068,7 @@ ipcMain.handle('library:ingestMissing', async (event, relativePaths) => {
       try {
         const songId = db.addSong(
           song.relativePath, song.title, song.artist, song.album,
-          song.durationSeconds, song.trackNumber
+          song.durationSeconds, song.trackNumber, song.genre
         );
         db.addSongToList(songId, folderId, songPosition);
         songPosition++;

@@ -504,10 +504,26 @@ body.resizing-sidebar {
 
 .tree-item-content > .col-artist,
 .tree-item-content > .col-album,
+.tree-item-content > .col-genre,
 .tree-item-content > .col-tags {
   color: #999;
   font-size: 13px;
   padding: 0 8px 0 0.2em;
+}
+
+.tree-item-content > .col-date_added,
+.tree-item-content > .col-plays,
+.tree-item-content > .col-last_played {
+  color: #858585;
+  font-size: 12px;
+  padding: 0 8px 0 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Group rows (album, artist...) span the whole row */
+.group-row .tree-item-label {
+  font-weight: 700;
+  color: #8ea2c4;
 }
 
 /* Star rating column */
@@ -1153,38 +1169,65 @@ body.resizing-sidebar {
   border-color: #007acc;
 }
 
-.search-view-toggle {
+/* Group-by and sort-by menu buttons */
+.list-view-controls {
   display: flex;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  overflow: hidden;
+  gap: 6px;
 }
 
-.search-toggle-btn {
+.list-view-btn {
   background: none;
-  border: none;
-  color: #888;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #aaa;
   cursor: pointer;
-  padding: 4px 8px;
-  font-size: 14px;
+  padding: 3px 8px;
+  font-size: 12px;
   display: flex;
   align-items: center;
-  border-right: 1px solid #3e3e42;
+  gap: 6px;
+  white-space: nowrap;
   -webkit-app-region: no-drag;
 }
 
-.search-toggle-btn:last-child {
-  border-right: none;
-}
-
-.search-toggle-btn:hover {
+.list-view-btn:hover {
   background: #2d2d30;
   color: #d4d4d4;
 }
 
-.search-toggle-btn.active {
-  background: #007acc;
-  color: #fff;
+.sort-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 0;
+  font-size: 13px;
+}
+
+.sort-menu-label {
+  flex: 1;
+  padding: 6px 16px;
+  white-space: nowrap;
+}
+
+.sort-menu-option {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.sort-menu-option:hover,
+.sort-menu-btn:hover {
+  background-color: #094771;
+}
+
+.sort-menu-btn {
+  background: none;
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+  min-width: 24px;
 }
 
 .search-empty-state {

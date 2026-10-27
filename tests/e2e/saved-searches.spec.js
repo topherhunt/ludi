@@ -33,7 +33,7 @@ const savedRow = (window, name) => window.locator('.qa-saved-search', { hasText:
 async function search(window, query, expectedCount) {
   await window.locator('.search-input').fill(query);
   await window.keyboard.press('Enter');
-  await expect(window.locator('.qa-search-song')).toHaveCount(expectedCount);
+  await expect(window.locator('.qa-song-row')).toHaveCount(expectedCount);
 }
 
 /** Pin the search that's currently running to the sidebar. */
@@ -105,7 +105,7 @@ test.describe('Saved searches', () => {
 
     await savedRow(window, 'First tone').click();
     await expect(window.locator('.search-input')).toHaveValue('savedtone0');
-    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(window.locator('.qa-song-row')).toHaveCount(1);
     await expect(savedRow(window, 'First tone')).toHaveClass(/active/);
 
     await deleteSavedSearch(window, 'First tone');
@@ -126,7 +126,7 @@ test.describe('Saved searches', () => {
 
     await savedRow(window, 'Renamed tone').click();
     await expect(window.locator('.search-input')).toHaveValue('savedtone1');
-    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(window.locator('.qa-song-row')).toHaveCount(1);
 
     await deleteSavedSearch(window, 'Renamed tone');
     await window.locator('.search-clear-btn').click();

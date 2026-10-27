@@ -77,15 +77,12 @@ test.describe('Play queue from the library tree', () => {
   async function openPlaylist(window) {
     await window.keyboard.press('Escape');
     await window.locator(`.qa-playlist-item[data-list-id="${playlistId}"]`).click();
-    const outer = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: path.basename(DIR) });
-    if (!(await songRow(window, A).count())) await outer.locator('.chevron').click();
     await expect(songRow(window, A)).toBeVisible();
-    return outer;
   }
 
-  test('double-clicking a song queues the whole playlist, collapsed subfolders included', async ({ window }) => {
+  test('double-clicking a song queues the whole playlist, songs in hidden folders included', async ({ window }) => {
     await openPlaylist(window);
-    await expect(songRow(window, B)).toHaveCount(0); // inner folder stays collapsed
+    await expect(songRow(window, B)).toBeVisible(); // folders aren't shown; their songs are
 
     await songRow(window, A).dblclick();
     await expect(nowPlaying(window)).toHaveText(A);
@@ -99,7 +96,9 @@ test.describe('Play queue from the library tree', () => {
     await expect(window.locator('#nextBtn')).toBeDisabled();
   });
 
-  test('double-clicking a folder queues just that folder, subfolders included', async ({ window }) => {
+  // DEPRECATED (folders): song lists no longer show folder rows. TODO: delete
+  // with the rest of the folder code (see TASKS.md).
+  test.skip('double-clicking a folder queues just that folder, subfolders included', async ({ window }) => {
     const outer = await openPlaylist(window);
 
     await outer.dblclick();

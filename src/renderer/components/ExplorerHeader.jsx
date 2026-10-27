@@ -1,5 +1,5 @@
 import { Show, onCleanup, createEffect } from 'solid-js';
-import { searchQuery, isSearching, searchViewMode, setSearchViewMode, runSearch, clearSearch } from '../stores/search.js';
+import { searchQuery, isSearching, runSearch, clearSearch } from '../stores/search.js';
 import { isShowingSimilar, similarSeeds, similarTotal, clearSimilar } from '../stores/similar.js';
 import { saveSearch } from '../stores/savedSearches.js';
 import { isShowingCluster, activeCluster, clusterSongs, clearCluster, groupsOpen, clusters, closeGroups } from '../stores/clusters.js';
@@ -9,6 +9,7 @@ import { facetsOpen, facetMatches, closeFacets } from '../stores/facets.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
 import { saveClusterAsPlaylist } from '../utils/api.js';
 import { showRenameModal, showAlert } from '../stores/modals.js';
+import { ListViewControls } from './ListViewControls.jsx';
 
 export function ExplorerHeader(props) {
   let searchInputRef;
@@ -190,24 +191,11 @@ export function ExplorerHeader(props) {
           }
         >
           <h1 id="currentListTitle">Search Results in {props.title || 'Main Library'}</h1>
-          <div class="search-view-toggle">
-            <button
-              class="search-toggle-btn"
-              classList={{ active: searchViewMode() === 'nested' }}
-              onClick={() => setSearchViewMode('nested')}
-              title="Nested view"
-            >
-              <i class="bi bi-diagram-3" />
-            </button>
-            <button
-              class="search-toggle-btn"
-              classList={{ active: searchViewMode() === 'flat' }}
-              onClick={() => setSearchViewMode('flat')}
-              title="Flat view"
-            >
-              <i class="bi bi-list-ul" />
-            </button>
-          </div>
+        </Show>
+
+        {/* The map, facets and the groups list aren't song lists. */}
+        <Show when={!groupsOpen() && !mapOpen() && !facetsOpen()}>
+          <ListViewControls />
         </Show>
       </div>
 

@@ -18,6 +18,12 @@ export function formatTime(seconds) {
   return `${hours}:${mins.toString().padStart(2, '0')}:${padded}`;
 }
 
+/** A timestamp (ISO, UTC) as the local calendar date, YYYY-MM-DD. */
+export function formatLocalDate(timestamp) {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /**
  * Format a file size in bytes to human-readable format
  * @param {number} bytes - Size in bytes

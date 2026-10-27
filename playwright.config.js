@@ -2,6 +2,9 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
+  // DEPRECATED (folders): song lists no longer show folder rows, so these specs
+  // can't run. TODO: delete them with the rest of the folder code (see TASKS.md).
+  testIgnore: ['folder-*.spec.js', 'folders.spec.js', 'chevron-dblclick.spec.js'],
   globalSetup: './tests/e2e/global-setup.js',
   timeout: 30000,
   // Spec files run in parallel, each worker with its own app (see fixtures.js).

@@ -54,11 +54,6 @@ const waitForPlayingNode = (window) =>
 async function playFirstSong(window) {
   await window.keyboard.press('Escape');
   await window.locator('.qa-playlist-item[data-list-id="0"]').click();
-  const folderRow = window.locator(`.tree-item-content[data-folder-id="${folder.listId}"]`);
-  await expect(folderRow).toBeVisible({ timeout: 2000 });
-  if (!(await rowOf(window, songIds[0]).isVisible())) {
-    await folderRow.locator('.tree-item-icon.chevron').click();
-  }
   await rowOf(window, songIds[0]).dblclick();
   await expect(window.locator('#playPauseBtn')).toHaveClass(/playing/);
   await waitForPlayingNode(window);

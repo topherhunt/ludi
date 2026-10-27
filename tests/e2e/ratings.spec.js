@@ -161,7 +161,7 @@ test.describe('Star ratings', () => {
     await searchInput.press('Enter');
     await window.waitForTimeout(300);
 
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
     await expect(results).toHaveCount(1);
     await expect(results.first()).toHaveAttribute('data-song-id', String(liked));
 
@@ -172,7 +172,7 @@ test.describe('Star ratings', () => {
     await searchInput.fill(`${stamp} AND rating=none`);
     await searchInput.press('Enter');
     await window.waitForTimeout(300);
-    await expect(window.locator('.qa-search-song')).toHaveCount(0);
+    await expect(window.locator('.qa-song-row')).toHaveCount(0);
 
     await window.keyboard.press('Escape');
     await window.waitForTimeout(150);
@@ -210,7 +210,7 @@ test.describe('Star ratings', () => {
 
     // Only the 4-star song survives, which is what proves the composer emitted
     // `rating>=4` and not a plain equality.
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
     await expect(results).toHaveCount(1);
     await expect(results.first()).toHaveAttribute('data-song-id', String(liked));
 

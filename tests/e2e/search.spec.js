@@ -31,7 +31,7 @@ test.describe('Search', () => {
     await expect(gearBtn).toBeVisible();
   });
 
-  test('Enter in search input shows Search Results title and view toggle', async ({ window }) => {
+  test('Enter in search input shows Search Results title and the group/sort controls', async ({ window }) => {
     const searchInput = await window.locator('.search-input');
     await searchInput.click();
     await searchInput.fill('jump');
@@ -41,13 +41,13 @@ test.describe('Search', () => {
     const title = await window.locator('#currentListTitle');
     await expect(title).toHaveText('Search Results in Main Library');
 
-    const viewToggle = await window.locator('.search-view-toggle');
-    await expect(viewToggle).toBeVisible();
+    await expect(window.locator('.qa-group-by-btn')).toBeVisible();
+    await expect(window.locator('.qa-sort-btn')).toBeVisible();
   });
 
   test('matching songs are shown as search results', async ({ window }) => {
     // Already searching "jump" from previous test
-    const songRows = await window.locator('.qa-search-song');
+    const songRows = await window.locator('.qa-song-row');
     await expect(songRows.first()).toBeVisible({ timeout: 1000 });
   });
 
@@ -91,27 +91,6 @@ test.describe('Search', () => {
 
     // Clean up
     await searchInput.press('Escape');
-    await window.waitForTimeout(50);
-  });
-
-  test('flat view toggle shows songs without folder grouping', async ({ window }) => {
-    const searchInput = await window.locator('.search-input');
-    await searchInput.click();
-    await searchInput.fill('jump');
-    await searchInput.press('Enter');
-    await window.waitForTimeout(200);
-
-    const flatBtn = await window.locator('.search-toggle-btn').nth(1);
-    await flatBtn.click();
-    await window.waitForTimeout(100);
-
-    await expect(flatBtn).toHaveClass(/active/);
-    const songRows = await window.locator('.qa-search-song');
-    await expect(songRows.first()).toBeVisible();
-
-    // Switch back to nested
-    const nestedBtn = await window.locator('.search-toggle-btn').first();
-    await nestedBtn.click();
     await window.waitForTimeout(50);
   });
 
@@ -201,7 +180,7 @@ test.describe('Search scoping', () => {
     }, { itemId: imported.itemId, targetListId: listId });
 
     const searchInput = window.locator('.search-input');
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
 
     // In the Main Library: one hit, the Main Library placement.
     await window.locator('.qa-playlist-item[data-list-id="0"]').click();
@@ -224,8 +203,6 @@ test.describe('Search scoping', () => {
     // and not both.
     await expect(results).toHaveCount(1);
     await expect(results).toHaveAttribute('data-item-id', String(playlistItemId));
-    // The tree is rooted at the playlist, so no "Main Library" wrapper folder.
-    await expect(window.locator('.qa-search-folder')).toHaveCount(0);
 
     // Clean up: drop the playlist, then the song and its file.
     await window.locator('.search-clear-btn').click();

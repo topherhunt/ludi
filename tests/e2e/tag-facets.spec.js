@@ -152,7 +152,7 @@ test.describe('Sidebar tag facets', () => {
     await window.locator('.qa-playlist-item[data-list-id="0"]').click();
     await window.locator('.search-input').fill('facet-0');
     await window.keyboard.press('Enter');
-    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(window.locator('.qa-song-row')).toHaveCount(1);
 
     // Only song A is on screen, so alpha drops from 2 to 1 and gamma is gone.
     const counts = await chipCounts(window);
@@ -168,13 +168,13 @@ test.describe('Sidebar tag facets', () => {
 
     await sidebarChip(window, 'alpha').click();
     await expect(window.locator('.search-input')).toHaveValue('tag=alpha');
-    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row')).toHaveCount(2);
 
     await sidebarChip(window, 'beta').click();
     await expect(window.locator('.search-input')).toHaveValue('tag=alpha tag=beta');
 
     // Only song A carries both.
-    await expect(window.locator('.qa-search-song')).toHaveCount(1);
+    await expect(window.locator('.qa-song-row')).toHaveCount(1);
     await expect(sidebarChip(window, 'alpha')).toHaveClass(/tag-pill-active/);
     await expect(sidebarChip(window, 'beta')).toHaveClass(/tag-pill-active/);
 
@@ -190,7 +190,7 @@ test.describe('Sidebar tag facets', () => {
     // Take beta off: alpha stays applied, and both of its songs come back.
     await sidebarChip(window, 'beta').click();
     await expect(window.locator('.search-input')).toHaveValue('tag=alpha');
-    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row')).toHaveCount(2);
     await expect(sidebarChip(window, 'beta')).not.toHaveClass(/tag-pill-active/);
 
     // Taking the last one off leaves the search entirely.

@@ -1,5 +1,5 @@
 // The Advanced Search composer: every compared field (Track #, Rating, Play
-// count, Last played) offers an operator, and the two rating membership values
+// count, Last played, Date added) offers an operator, and the two rating membership values
 // hide it because "at least unrated" is meaningless.
 
 const { test, expect, testAudioDir } = require('./fixtures');
@@ -103,7 +103,7 @@ test.describe('Advanced search composer', () => {
 
     // Track 3 is filtered out, which is what proves the composer emitted
     // `track>=9` rather than the old `track=9` equality.
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
     await expect(results).toHaveCount(1);
     await expect(results.first()).toHaveAttribute('data-song-id', String(late));
 
@@ -141,11 +141,47 @@ test.describe('Advanced search composer', () => {
 
     // Only the song with no rating comes back: the query ran as a membership
     // test, ignoring whatever the operator had been set to.
-    const results = window.locator('.qa-search-song');
+    const results = window.locator('.qa-song-row');
     await expect(results).toHaveCount(1);
     await expect(results.first()).toHaveAttribute('data-song-id', String(unrated));
 
     await resetComposer(window);
     await cleanUp(window, [rated, unrated]);
+  });
+
+  test('genre matches by substring and date added compares with a date picker', async ({ window }) => {
+    const { stamp, songs } = await importSongs(window, 'advsearch-genre', 3);
+    await window.evaluate(async (ids) => {
+      const fields = [
+        { genre: 'Alternative Rock', date_added: '2024-05-01' },
+        { genre: 'Rock', date_added: '2020-05-01' },
+        { genre: 'Folk', date_added: '2024-05-01' },
+      ];
+      for (const [i, songId] of ids.entries()) await window.electronAPI.updateSong({ songId, fields: fields[i] });
+    }, songs.map(s => s.songId));
+
+    await openComposer(window);
+    await window.locator('.advsearch-value-input').first().fill(stamp);
+    const addCondition = window.locator('.advsearch-action-btn').filter({ hasText: 'Condition' }).first();
+    await addCondition.click();
+    await window.locator('.advsearch-field-select').nth(1).selectOption('genre');
+    await window.locator('.advsearch-condition-row').nth(1).locator('.advsearch-value-input').fill('rock');
+    await addCondition.click();
+    await window.locator('.advsearch-field-select').nth(2).selectOption('added');
+    await expect(window.locator('.qa-compare-op option').first()).toHaveText('is on or after');
+    await window.locator('.qa-date-value').fill('2024-01-01');
+    await window.locator('.modal-btn').filter({ hasText: 'Search' }).click();
+
+    // Only the Alternative Rock song is both rock and added this side of 2024.
+    await expect(window.locator('.search-input')).toHaveValue(`title=${stamp} AND genre=rock AND added>=2024-01-01`);
+    const results = window.locator('.qa-song-row');
+    await expect(results).toHaveCount(1);
+    await expect(results.first()).toHaveAttribute('data-song-id', String(songs[0].songId));
+
+    await resetComposer(window);
+    await window.locator('.search-clear-btn').click();
+    await window.evaluate(async (itemIds) => {
+      for (const id of itemIds) await window.electronAPI.deleteItemWithFiles(id);
+    }, songs.map(s => s.itemId));
   });
 });

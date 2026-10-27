@@ -2,24 +2,24 @@ import { createSignal, createMemo, createRoot } from 'solid-js';
 
 const STORAGE_KEY = 'ludi-column-settings';
 
-const DEFAULT_VISIBILITY = {
-  track: true,
-  duration: true,
-  rating: true,
-  artist: true,
-  album: true,
-  tags: true,
-};
+// The optional columns, in display order after the always-visible title.
+// Tags stays last: it stretches to fill the rest of the row.
+const COLUMNS = [
+  { key: 'track', label: '#', menuLabel: 'Track #', width: 40, visible: true },
+  { key: 'duration', label: 'Time', width: 60, visible: true },
+  { key: 'rating', label: 'Rating', width: 90, visible: true },
+  { key: 'artist', label: 'Artist', width: 150, visible: true },
+  { key: 'album', label: 'Album', width: 150, visible: true },
+  { key: 'genre', label: 'Genre', width: 110, visible: true },
+  { key: 'date_added', label: 'Added', menuLabel: 'Date Added', width: 95, visible: true },
+  { key: 'plays', label: 'Plays', width: 55, visible: false },
+  { key: 'last_played', label: 'Last Played', width: 95, visible: false },
+  { key: 'tags', label: 'Tags', width: 100, visible: true },
+];
 
-const DEFAULT_WIDTHS = {
-  title: 300,
-  track: 40,
-  duration: 60,
-  rating: 90,
-  artist: 150,
-  album: 150,
-  tags: 100,
-};
+const DEFAULT_VISIBILITY = Object.fromEntries(COLUMNS.map((c) => [c.key, c.visible]));
+
+const DEFAULT_WIDTHS = { title: 300, ...Object.fromEntries(COLUMNS.map((c) => [c.key, c.width])) };
 
 /**
  * Load column settings from localStorage
@@ -77,18 +77,11 @@ const {
     const vis = columnVisibility();
     const widths = columnWidths();
 
-    const cols = [`${widths.title || 300}px`];  // Title is always visible
-
-    if (vis.track) cols.push(`${widths.track || 40}px`);
-    if (vis.duration) cols.push(`${widths.duration || 60}px`);
-    if (vis.rating) cols.push(`${widths.rating || 90}px`);
-    if (vis.artist) cols.push(`${widths.artist || 150}px`);
-    if (vis.album) cols.push(`${widths.album || 150}px`);
-    // Tags is the last column: let it stretch to fill the remaining width (with a
-    // sensible minimum) rather than sitting at a fixed ~100px with empty space
-    // to its right.
-    if (vis.tags) cols.push('minmax(100px, 1fr)');
-
+    const cols = [`${widths.title}px`];  // Title is always visible
+    for (const { key } of COLUMNS) {
+      if (!vis[key]) continue;
+      cols.push(key === 'tags' ? 'minmax(100px, 1fr)' : `${widths[key]}px`);
+    }
     return cols.join(' ');
   });
 
@@ -181,6 +174,8 @@ function applySettingsFromIPC(settings) {
 }
 
 export {
+  COLUMNS,
+
   // Signals
   columnVisibility,
   columnWidths,

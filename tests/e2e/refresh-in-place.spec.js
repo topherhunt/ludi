@@ -13,10 +13,12 @@ const STAMP = Date.now();
 const LIST_NAME = `RIP List ${STAMP}`;
 const TARGET_NAME = `RIP Target ${STAMP}`;
 
-// Enough folder rows above the song that the list has somewhere to scroll.
-const FILLER_FOLDERS = 30;
+// Enough filler rows (one other song, placed repeatedly) above the song that the
+// list has somewhere to scroll.
+const FILLER_ROWS = 30;
 
 let song = null;    // { songId, itemId }
+let fillerItemId = null;
 let targetId = null;
 
 const playlistRow = (window, name) =>
@@ -66,27 +68,25 @@ const scrollTop = (window) =>
 
 test.describe('Refreshing a list in place', () => {
   test.beforeAll(async ({ window }) => {
-    const src = path.join(os.tmpdir(), `ludi-rip-${STAMP}.m4a`);
-    fs.copyFileSync(TONE, src);
-    song = await window.evaluate(async (fp) => {
-      const result = await window.electronAPI.importFiles({
-        filePaths: [fp], parentListId: 0, position: 0,
-      });
-      return { songId: result.imported[0].songId, itemId: result.imported[0].itemId };
-    }, src);
-    fs.unlinkSync(src);
+    const srcs = ['song', 'filler'].map((name) => path.join(os.tmpdir(), `ludi-rip-${name}-${STAMP}.m4a`));
+    srcs.forEach((src) => fs.copyFileSync(TONE, src));
+    const imported = await window.evaluate(async (filePaths) => {
+      const result = await window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 });
+      return result.imported.map((it) => ({ songId: it.songId, itemId: it.itemId }));
+    }, srcs);
+    srcs.forEach((src) => fs.unlinkSync(src));
+    [song, { itemId: fillerItemId }] = imported;
 
     const listId = await makePlaylist(window, LIST_NAME);
     targetId = await makePlaylist(window, TARGET_NAME);
 
-    // A tall list: filler folders first, then the song as the last row, so it is
+    // A tall list: filler rows first, then the song as the last row, so it is
     // on screen once the list is scrolled to the bottom.
-    await window.evaluate(async ({ listId, itemId, count }) => {
-      for (let i = 0; i < count; i++) {
-        await window.electronAPI.addFolder({ parentListId: listId, position: i, title: `RIP F${i}` });
-      }
-      await window.electronAPI.copyItemsToList({ itemIds: [itemId], targetListId: listId, skipSongIds: [] });
-    }, { listId, itemId: song.itemId, count: FILLER_FOLDERS });
+    await window.evaluate(async ({ listId, itemId, fillerItemId, count }) => {
+      await window.electronAPI.copyItemsToList({
+        itemIds: [...Array(count).fill(fillerItemId), itemId], targetListId: listId, skipSongIds: [],
+      });
+    }, { listId, itemId: song.itemId, fillerItemId, count: FILLER_ROWS });
   });
 
   test.afterAll(async ({ window }) => {
@@ -98,7 +98,9 @@ test.describe('Refreshing a list in place', () => {
       await window.click('#modalYesBtn');
       await expect(row).toHaveCount(0, { timeout: 2000 });
     }
-    await window.evaluate((id) => window.electronAPI.deleteItemWithFiles(id), song.itemId);
+    await window.evaluate(async (ids) => {
+      for (const id of ids) await window.electronAPI.deleteItemWithFiles(id);
+    }, [song.itemId, fillerItemId]);
   });
 
   test('applying a tag adds the pill without rebuilding the rows or moving the scroll', async ({ window }) => {
@@ -109,7 +111,7 @@ test.describe('Refreshing a list in place', () => {
     const scrolled = await scrollToBottom(window);
     expect(scrolled).toBeGreaterThan(0); // the list really is scrollable
     const rowCount = await markRows(window);
-    expect(rowCount).toBe(FILLER_FOLDERS + 1);
+    expect(rowCount).toBe(FILLER_ROWS + 1);
 
     const tagName = `rip-${STAMP}`;
     const input = window.locator('.qa-tag-input');

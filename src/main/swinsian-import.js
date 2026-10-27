@@ -1,6 +1,7 @@
 /**
  * Import star ratings, and the space-separated tags in the `grouping` field,
- * from a Swinsian library into Ludi.
+ * from a Swinsian library into Ludi. A second, separate import brings in each
+ * track's date added and genre.
  *
  * Ratings and tags can't be recomputed -- they are years of accumulated
  * judgement -- so this reads the foreign database
@@ -105,16 +106,17 @@ function readTracks(swinsianDbPath) {
 }
 
 /**
- * Match foreign tracks against Ludi's songs.
+ * Index Ludi's songs for matching foreign tracks, and return a lookup from a
+ * track to the songs it matches: `{ songs, byFilename }`, or null.
  *
  * Filename first, then title: the files were copied into Ludi's library so
  * their names survived, while titles are more likely to collide across a
- * library ("Intro", "Untitled"). A key matching several Ludi songs rates all of
- * them -- a duplicate of a track you rated 5 stars is still a 5-star track.
+ * library ("Intro", "Untitled"). A key matching several Ludi songs applies to
+ * all of them -- a duplicate of a track you rated 5 stars is still a 5-star track.
  *
- * @param {Array} ludiSongs - rows from db.getSongsForRatingMatch()
+ * @param {Array} ludiSongs - rows from db.getSongsForSwinsianMatch()
  */
-function matchTracks(tracks, ludiSongs) {
+function songMatcher(ludiSongs) {
   const byBasename = new Map();
   const byTitle = new Map();
   const addTo = (map, key, song) => {
@@ -128,6 +130,17 @@ function matchTracks(tracks, ludiSongs) {
     addTo(byTitle, normalize(song.title), song);
   }
 
+  return (track) => {
+    if (byBasename.has(track.basename)) return { songs: byBasename.get(track.basename), byFilename: true };
+    if (byTitle.has(track.title)) return { songs: byTitle.get(track.title), byFilename: false };
+    return null;
+  };
+}
+
+/** Match foreign rated/tagged tracks against Ludi's songs (see songMatcher). */
+function matchTracks(tracks, ludiSongs) {
+  const match = songMatcher(ludiSongs);
+
   // songId -> stars, and songId -> tag names. A song reached by two foreign
   // tracks keeps the first (filename) match, which is the more trustworthy of the two.
   const ratings = new Map();
@@ -137,13 +150,14 @@ function matchTracks(tracks, ludiSongs) {
   const unmatched = [];
 
   for (const track of tracks) {
-    const hits = byBasename.get(track.basename) || byTitle.get(track.title);
-    if (!hits || hits.length === 0) {
+    const found = match(track);
+    if (!found) {
       unmatched.push(track.label || track.title || track.basename);
       continue;
     }
-    if (byBasename.has(track.basename)) matchedByFilename++;
+    if (found.byFilename) matchedByFilename++;
     else matchedByTitle++;
+    const hits = found.songs;
 
     for (const song of hits) {
       if (track.stars !== null && !ratings.has(song.id)) ratings.set(song.id, track.stars);
@@ -230,4 +244,119 @@ function resolveImport(swinsianDbPath, ludiSongs) {
   };
 }
 
-module.exports = { previewImport, resolveImport, matchTracks, toStars, parseGrouping, MAX_RATING };
+// ---- Date added and genre ----------------------------------------------------
+
+// Swinsian stores dates as Core Data timestamps: seconds since 2001-01-01 UTC.
+const CORE_DATA_EPOCH_SECONDS = 978307200;
+// Anything earlier is a zeroed or corrupt timestamp (Swinsian has some at the
+// Unix epoch), not a real date.
+const EARLIEST_PLAUSIBLE = '1990-01-01';
+
+/** A Core Data timestamp as a local YYYY-MM-DD, or null if missing or implausible. */
+function coreDataDay(seconds) {
+  if (seconds === null || seconds === undefined) return null;
+  const d = new Date((seconds + CORE_DATA_EPOCH_SECONDS) * 1000);
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return day < EARLIEST_PLAUSIBLE ? null : day;
+}
+
+/**
+ * When a track joined the library: the earlier of Swinsian's `dateadded` and
+ * the file's `datecreated`. A library migrated into Swinsian has one
+ * `dateadded` for everything it brought along, while the file's own creation
+ * date still says when it was first acquired.
+ */
+function trackDay(row) {
+  const days = [coreDataDay(row.dateadded), coreDataDay(row.datecreated)].filter(Boolean);
+  return days.length > 0 ? days.sort()[0] : null;
+}
+
+/** Read every track's date added and genre out of a Swinsian library file. */
+function readTrackDetails(swinsianDbPath) {
+  const foreign = new Database(swinsianDbPath, { readonly: true, fileMustExist: true });
+  try {
+    const table = findTrackTable(foreign);
+    if (!table) {
+      throw new Error(
+        'No track table found in that file -- it has no table with both a "path" and a "rating" column. Is it a Swinsian library?'
+      );
+    }
+    const missing = ['title', 'genre', 'dateadded', 'datecreated'].filter(c => !table.columns.includes(c));
+    if (missing.length > 0) {
+      throw new Error(`The track table has no ${missing.join(', ')} column, so this import can't read it.`);
+    }
+    const rows = foreign
+      .prepare(`SELECT path, title, genre, dateadded, datecreated FROM "${table.name}"`)
+      .all();
+    return rows.map(row => ({
+      day: trackDay(row),
+      genre: (row.genre || '').trim() || null,
+      basename: normalize(path.basename(row.path || '')),
+      title: normalize(row.title),
+      label: row.title || path.basename(row.path || ''),
+    }));
+  } finally {
+    foreign.close();
+  }
+}
+
+/**
+ * Match tracks to Ludi songs and work out what changes. Every matched song
+ * takes the track's date. Genre only fills songs that have none here, so
+ * genres set in Ludi are never overwritten.
+ */
+function matchDetails(tracks, ludiSongs) {
+  const match = songMatcher(ludiSongs);
+  const dates = new Map();  // songId -> YYYY-MM-DD
+  const genres = new Map(); // songId -> genre
+  let matched = 0;
+  const unmatched = [];
+
+  for (const track of tracks) {
+    const found = match(track);
+    if (!found) {
+      unmatched.push(track.label || track.title || track.basename);
+      continue;
+    }
+    matched++;
+    for (const song of found.songs) {
+      if (track.day && !dates.has(song.id) && song.date_added !== track.day) dates.set(song.id, track.day);
+      if (track.genre && !song.genre && !genres.has(song.id)) genres.set(song.id, track.genre);
+    }
+  }
+
+  const countBy = (values) => {
+    const counts = new Map();
+    for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+    return Array.from(counts, ([value, songs]) => ({ value, songs }));
+  };
+
+  unmatched.sort((a, b) => a.localeCompare(b));
+  return {
+    dates,
+    genres,
+    matched,
+    unmatched,
+    yearCounts: countBy([...dates.values()].map(day => day.slice(0, 4)))
+      .sort((a, b) => a.value.localeCompare(b.value)),
+    genreCounts: countBy(genres.values()).sort((a, b) => b.songs - a.songs || a.value.localeCompare(b.value)),
+  };
+}
+
+/** Report what importing date added and genre would change, without writing anything. */
+function previewDetailsImport(swinsianDbPath, ludiSongs) {
+  const tracks = readTrackDetails(swinsianDbPath);
+  const { dates, genres, ...rest } = matchDetails(tracks, ludiSongs);
+  return { foundTracks: tracks.length, songsToDate: dates.size, songsToGenre: genres.size, ...rest };
+}
+
+/** The date and genre writes to apply: `{ dates: [[songId, day]], genres: [[songId, genre]] }`. */
+function resolveDetailsImport(swinsianDbPath, ludiSongs) {
+  const { dates, genres } = matchDetails(readTrackDetails(swinsianDbPath), ludiSongs);
+  return { dates: [...dates], genres: [...genres] };
+}
+
+module.exports = {
+  previewImport, resolveImport, matchTracks, toStars, parseGrouping, MAX_RATING,
+  previewDetailsImport, resolveDetailsImport, matchDetails, trackDay,
+};

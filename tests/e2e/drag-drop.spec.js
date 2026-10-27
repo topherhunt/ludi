@@ -41,7 +41,10 @@ test.describe('Drag and Drop', () => {
     }
   });
 
-  test('should preserve relative order when dragging multiple items DOWN', async ({ window }) => {
+  // DEPRECATED (folders): the four tests below build folders as drag fodder, and
+  // song lists no longer show folder rows. Multi-song reorder is covered in
+  // list-view.spec.js. TODO: delete with the rest of the folder code (see TASKS.md).
+  test.skip('should preserve relative order when dragging multiple items DOWN', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);
 
@@ -136,7 +139,7 @@ test.describe('Drag and Drop', () => {
     }
   });
 
-  test('should preserve relative order when dragging multiple items UP', async ({ window }) => {
+  test.skip('should preserve relative order when dragging multiple items UP', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);
 
@@ -217,7 +220,7 @@ test.describe('Drag and Drop', () => {
     }
   });
 
-  test('should not reparent child items when dragging folder with selected children', async ({ window }) => {
+  test.skip('should not reparent child items when dragging folder with selected children', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);
 
@@ -321,7 +324,7 @@ test.describe('Drag and Drop', () => {
     await window.waitForTimeout(100);
   });
 
-  test('should insert as first child when dropping on bottom zone of expanded folder', async ({ window }) => {
+  test.skip('should insert as first child when dropping on bottom zone of expanded folder', async ({ window }) => {
     await window.keyboard.press('Escape');
     await window.waitForTimeout(50);
 

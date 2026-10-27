@@ -93,9 +93,14 @@ const test = base.extend({
     await use(electronApp);
   },
 
-  // Fixture that provides the main window
+  // Fixture that provides the main window. Every test starts with the Main
+  // Library ungrouped in library order (the app's default groups it by album);
+  // specs about grouping and sorting set what they need.
   window: async ({}, use) => {
     const { window } = await setupElectronApp();
+    await window.evaluate(() => window.__ludiResetListViews({
+      'list:0': { groupBy: 'none', sort: [{ field: 'natural', dir: 'asc' }] },
+    }));
     await use(window);
   },
 

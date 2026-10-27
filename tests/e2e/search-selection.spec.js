@@ -20,7 +20,7 @@ async function runSearch(window) {
   const input = window.locator('.search-input');
   await input.fill(TERM);
   await input.press('Enter');
-  await expect(window.locator('.qa-search-song')).toHaveCount(3, { timeout: 2000 });
+  await expect(window.locator('.qa-song-row')).toHaveCount(3, { timeout: 2000 });
 }
 
 async function dragOnto(window, source, target) {
@@ -60,8 +60,8 @@ test.describe('Search result selection', () => {
 
   test('click, CMD-click and SHIFT-click select rows in the search results', async ({ window }) => {
     await runSearch(window);
-    const rows = window.locator('.qa-search-song');
-    const selected = window.locator('.qa-search-song.selected');
+    const rows = window.locator('.qa-song-row');
+    const selected = window.locator('.qa-song-row.selected');
 
     await rows.nth(0).click();
     await expect(selected).toHaveCount(1);
@@ -81,9 +81,11 @@ test.describe('Search result selection', () => {
     await rows.nth(2).click({ modifiers: ['Shift'] });
     await expect(selected).toHaveCount(3);
 
-    // Clicking empty space below the results clears the selection.
-    const box = await window.locator('#explorerContainer').boundingBox();
-    await window.mouse.click(box.x + box.width / 2, box.y + box.height - 10);
+    // Clicking empty space below the results clears the selection. (Just below
+    // the last row: the container's bottom edge can be a horizontal scrollbar,
+    // and pressing a scrollbar never fires a click.)
+    const last = await rows.nth(2).boundingBox();
+    await window.mouse.click(last.x + 50, last.y + last.height + 30);
     await expect(selected).toHaveCount(0);
 
     await window.locator('.search-clear-btn').click();
@@ -101,10 +103,10 @@ test.describe('Search result selection', () => {
     const listId = parseInt(await playlist.getAttribute('data-list-id'));
 
     await runSearch(window);
-    const rows = window.locator('.qa-search-song');
+    const rows = window.locator('.qa-song-row');
     await rows.nth(0).click();
     await rows.nth(1).click({ modifiers: ['Meta'] });
-    await expect(window.locator('.qa-search-song.selected')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row.selected')).toHaveCount(2);
 
     // Dragging any selected row carries the whole selection.
     await dragOnto(window, rows.nth(0), playlist);

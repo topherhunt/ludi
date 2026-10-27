@@ -203,7 +203,7 @@ test.describe('Facet browser', () => {
 
     await expect(window.locator('.search-input')).toHaveValue('tag=fx-deep tag=fx-rare');
     await expect(window.locator('.qa-facets-view')).toHaveCount(0);
-    await expect(window.locator('.qa-search-song')).toHaveCount(2);
+    await expect(window.locator('.qa-song-row')).toHaveCount(2);
     await expect(window.locator('.qa-save-search')).toBeVisible();
 
     await window.locator('.search-clear-btn').click();

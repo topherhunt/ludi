@@ -151,7 +151,9 @@ test.describe('Playlists', () => {
     await removePlaylist(window, name);
   });
 
-  test('dragging a folder onto a playlist copies the folder, not moves it', async ({ window }) => {
+  // DEPRECATED (folders): song lists no longer show folder rows. TODO: delete
+  // with the rest of the folder code (see TASKS.md).
+  test.skip('dragging a folder onto a playlist copies the folder, not moves it', async ({ window }) => {
     const folderName = `PLFolder${STAMP}`;
     const tempDir = path.join(os.tmpdir(), folderName);
     fs.mkdirSync(tempDir, { recursive: true });
@@ -508,11 +510,8 @@ test.describe('Playlists', () => {
     );
     expect(placedItemId).toBeTruthy();
 
+    // The folder itself isn't shown; its song is listed with the playlist's own.
     await openList(window, playlistRow(window, name));
-    const folderRow = window.locator('.tree-item-content[data-is-folder="true"]').filter({ hasText: 'Nested' });
-    await expect(folderRow).toBeVisible({ timeout: 2000 });
-    await folderRow.locator('.tree-item-icon.chevron').click();
-
     const nestedSong = songRow(window, song.songId);
     await expect(nestedSong).toHaveCount(1, { timeout: 2000 });
     await nestedSong.dblclick();

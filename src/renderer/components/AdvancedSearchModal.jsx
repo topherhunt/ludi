@@ -6,12 +6,14 @@ const FIELD_OPTIONS = [
   { value: 'title', label: 'Title' },
   { value: 'artist', label: 'Artist' },
   { value: 'album', label: 'Album' },
+  { value: 'genre', label: 'Genre' },
   { value: 'any', label: 'Any field' },
   { value: 'track', label: 'Track #' },
   { value: 'tag', label: 'Tag' },
   { value: 'rating', label: 'Rating' },
   { value: 'plays', label: 'Play count' },
   { value: 'lastplayed', label: 'Last played' },
+  { value: 'added', label: 'Date added' },
 ];
 
 // Countable fields compare rather than match, because "songs I like" is a
@@ -23,15 +25,16 @@ const NUMBER_OPERATORS = [
 ];
 
 // The same three operators read as nonsense against a date ("last played is at
-// least June 1"), so the date field gets its own labels for them.
+// least June 1"), so the date fields get their own labels for them.
 const DATE_OPERATORS = [
   { value: '>=', label: 'is on or after' },
   { value: '=',  label: 'is on' },
   { value: '<=', label: 'is on or before' },
 ];
 
-const COMPARED_FIELDS = ['track', 'rating', 'plays', 'lastplayed'];
-const operatorsFor = (field) => (field === 'lastplayed' ? DATE_OPERATORS : NUMBER_OPERATORS);
+const DATE_FIELDS = ['lastplayed', 'added'];
+const COMPARED_FIELDS = ['track', 'rating', 'plays', ...DATE_FIELDS];
+const operatorsFor = (field) => (DATE_FIELDS.includes(field) ? DATE_OPERATORS : NUMBER_OPERATORS);
 
 const numericPlaceholder = (field) => {
   if (field === 'track') return 'e.g. 7';
@@ -186,8 +189,8 @@ function ConditionRow({ node, canRemove }) {
           </select>
         </Match>
 
-        {/* Last played: a real date picker, so the query never has to be typed */}
-        <Match when={node.field === 'lastplayed'}>
+        {/* Dates: a real date picker, so the query never has to be typed */}
+        <Match when={DATE_FIELDS.includes(node.field)}>
           <input
             ref={(el) => { if (el) inputRefs.set(node.id, el); }}
             type="date"

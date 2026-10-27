@@ -7,8 +7,8 @@ import { clearCluster, closeGroups } from './clusters.js';
 import { closeMap } from './musicMap.js';
 import { closeFacets } from './facets.js';
 import { libraryVersion } from './tags.js';
-import { buildRootResolver } from '../utils/listTree.js';
-import { buildNestedTree, songsInTreeOrder, findTreeFolder } from '../utils/searchTree.js';
+import { songRowsUnder } from '../utils/listTree.js';
+import { resetSearchCollapse } from './listView.js';
 
 const {
   searchQuery,
@@ -17,26 +17,17 @@ const {
   setSearchResults,
   searchError,
   setSearchError,
-  searchViewMode,
-  setSearchViewMode,
   searchRootListId,
   setSearchRootListId,
   isSearching,
-  searchTree,
-  collapsedFolders,
-  setCollapsedFolders,
 } = createRoot(() => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal(null); // null = not searching
   const [searchError, setSearchError] = createSignal(null);     // null | 'invalid_syntax'
-  const [searchViewMode, setSearchViewMode] = createSignal('nested');
   // The root list the current results came from -- results are scoped to the
   // list you were viewing when you searched.
   const [searchRootListId, setSearchRootListId] = createSignal(null);
   const isSearching = createMemo(() => searchResults() !== null);
-  const searchTree = createMemo(() => buildNestedTree(searchResults() || [], searchRootListId()));
-  // Kept here rather than in each folder row, which is rebuilt on every refresh.
-  const [collapsedFolders, setCollapsedFolders] = createSignal(new Set());
 
   return {
     searchQuery,
@@ -45,14 +36,9 @@ const {
     setSearchResults,
     searchError,
     setSearchError,
-    searchViewMode,
-    setSearchViewMode,
     searchRootListId,
     setSearchRootListId,
     isSearching,
-    searchTree,
-    collapsedFolders,
-    setCollapsedFolders,
   };
 });
 
@@ -89,7 +75,7 @@ async function runSearch(queryString) {
 
   setSearchQuery(trimmed);
   setSearchRootListId(currentListId());
-  setCollapsedFolders(new Set());
+  resetSearchCollapse();
   await filterResults(trimmed, currentListId(), null);
 }
 
@@ -119,33 +105,6 @@ async function filterResults(trimmed, rootListId, keepItemIds) {
   const allItems = await getAllListItems();
   if (generation !== searchGeneration) return;
 
-  // map: list_id -> the list_items row for that folder (for walking the ancestor chain)
-  const listIdToFolderItem = new Map();
-  for (const item of allItems) {
-    if (item.list_id !== null) {
-      listIdToFolderItem.set(item.list_id, item);
-    }
-  }
-
-  // Which root list (Main Library or playlist) an item ultimately sits under.
-  const rootOf = buildRootResolver(allItems);
-
-  function getAncestorFolders(item) {
-    const ancestors = [];
-    let listId = item.parent_list_id;
-    while (listId !== rootListId && listId !== null) {
-      const folderItem = listIdToFolderItem.get(listId);
-      if (!folderItem) break;
-      ancestors.unshift({
-        list_id: listId,
-        title: folderItem.list_title,
-        position: folderItem.position,
-      });
-      listId = folderItem.parent_list_id;
-    }
-    return ancestors;
-  }
-
   let ast;
   try {
     ast = parseQuery(trimmed);
@@ -155,41 +114,22 @@ async function filterResults(trimmed, rootListId, keepItemIds) {
     return;
   }
 
-  const results = [];
-  for (const item of allItems) {
-    if (item.song_id === null) continue;
-    if (rootOf(item.parent_list_id) !== rootListId) continue;
-
-    const ancestorFolders = getAncestorFolders(item);
-    const songData = {
-      title: item.song_title || '',
-      artist: item.artist || '',
-      album: item.album || '',
-      track_number: item.track_number,
-      rating: item.rating,
-      play_count: item.play_count,
-      last_played_at: item.last_played_at,
-      ancestorFolderNames: ancestorFolders.map(f => f.title),
-      tags: (item.tags || []).map(t => t.name),
-    };
-
-    if (keepItemIds ? keepItemIds.has(item.id) : evaluateSong(ast, songData)) {
-      results.push({
-        item_id: item.id,
-        song_id: item.song_id,
-        title: item.song_title || '',
-        artist: item.artist || '',
-        album: item.album || '',
-        track_number: item.track_number,
-        rating: item.rating,
-        duration_seconds: item.duration_seconds,
-        parent_list_id: item.parent_list_id,
-        position: item.position,
-        ancestor_folders: ancestorFolders,
-        tags: item.tags || [],
-      });
-    }
-  }
+  const results = songRowsUnder(allItems, rootListId).filter((row) => {
+    if (keepItemIds) return keepItemIds.has(row.item_id);
+    return evaluateSong(ast, {
+      title: row.title || '',
+      artist: row.artist || '',
+      album: row.album || '',
+      genre: row.genre || '',
+      track_number: row.track_number,
+      rating: row.rating,
+      play_count: row.play_count,
+      last_played_at: row.last_played_at,
+      date_added: row.date_added,
+      ancestorFolderNames: row.ancestor_folder_names,
+      tags: row.tags.map(t => t.name),
+    });
+  });
 
   if (!keepItemIds) matchedItemIds = new Set(results.map(result => result.item_id));
   setSearchResults(results);
@@ -207,35 +147,13 @@ function clearSearch() {
   setSearchRootListId(null);
 }
 
-/**
- * The results top to bottom as the current view mode shows them -- the order a
- * play queue started from the results follows.
- */
-function searchResultsInDisplayOrder() {
-  return searchViewMode() === 'nested' ? songsInTreeOrder(searchTree()) : searchResults();
-}
-
-/** The results inside one virtual folder of the nested view, in display order. */
-function searchFolderSongs(listId) {
-  const folder = findTreeFolder(searchTree(), listId);
-  if (!folder) throw new Error(`No search folder ${listId} in the current results`);
-  return songsInTreeOrder(folder.children);
-}
-
 export {
   searchQuery,
   setSearchQuery,
   searchResults,
   searchError,
-  searchViewMode,
-  setSearchViewMode,
   searchRootListId,
   isSearching,
-  searchTree,
-  searchResultsInDisplayOrder,
-  searchFolderSongs,
   runSearch,
   clearSearch,
-  collapsedFolders,
-  setCollapsedFolders,
 };

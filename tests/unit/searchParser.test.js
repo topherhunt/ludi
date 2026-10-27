@@ -257,3 +257,26 @@ describe('evaluateSong -- listening history', () => {
     expect(evaluateSong(parseQuery('lastplayed>=yesterday'), played(3, '2026-06-15T15:30:00.000Z'))).toBe(false);
   });
 });
+
+describe('evaluateSong -- genre and date added', () => {
+  it('matches genre as a substring, and genre=none matches songs with no genre', () => {
+    const rock = makeSong({ genre: 'Alternative Rock' });
+    expect(evaluateSong(parseQuery('genre=rock'), rock)).toBe(true);
+    expect(evaluateSong(parseQuery('genre=folk'), rock)).toBe(false);
+    expect(evaluateSong(parseQuery('genre=none'), rock)).toBe(false);
+    expect(evaluateSong(parseQuery('genre=none'), makeSong({ genre: '' }))).toBe(true);
+  });
+
+  it('compares the date added by day', () => {
+    const song = makeSong({ date_added: '2024-03-01' });
+    expect(parseQuery('added>=2024-01-01')).toMatchObject({ field: 'added', op: '>=', value: '2024-01-01' });
+    expect(evaluateSong(parseQuery('added>=2024-03-01'), song)).toBe(true);
+    expect(evaluateSong(parseQuery('added>2024-03-01'), song)).toBe(false);
+    expect(evaluateSong(parseQuery('added<2025-01-01'), song)).toBe(true);
+    expect(evaluateSong(parseQuery('added=2024-03-01'), song)).toBe(true);
+  });
+
+  it('keeps the ordering operators off genre', () => {
+    expect(parseQuery('genre>=rock')).toMatchObject({ type: 'AND' });
+  });
+});

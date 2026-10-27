@@ -63,6 +63,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseSwinsianLibrary: () => ipcRenderer.invoke('ratings:chooseSwinsianLibrary'),
   previewSwinsianRatings: (dbPath) => ipcRenderer.invoke('ratings:previewSwinsian', dbPath),
   applySwinsianRatings: (dbPath) => ipcRenderer.invoke('ratings:applySwinsian', dbPath),
+  previewSwinsianDetails: (dbPath) => ipcRenderer.invoke('swinsian:previewDetails', dbPath),
+  applySwinsianDetails: (dbPath) => ipcRenderer.invoke('swinsian:applyDetails', dbPath),
 
   // File import operations
   importFiles: (data) => ipcRenderer.invoke('files:import', data),

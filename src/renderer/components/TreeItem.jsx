@@ -1,3 +1,5 @@
+// DEPRECATED (folders): unused since SongListView replaced the folder tree.
+// TODO: delete with the rest of the folder code (see TASKS.md).
 import { Show, createSignal, createMemo, createResource, createEffect, on, For } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { libraryVersion } from '../stores/tags.js';
