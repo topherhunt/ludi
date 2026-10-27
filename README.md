@@ -2,31 +2,56 @@
 
 A fast, lightweight music library and player for macOS.
 
-Your library and playlists live in Ludi's database and have nothing to do with where the audio files actually sit on disk, so you can reorganize freely without moving a single file.
+Ratings, tags, playlists and saved searches, plus an on-device audio model that finds similar songs, auto-tags by genre and mood, and maps your library. Everything runs locally.
+
+Your library and playlists live in Ludi's database, independent of where the audio files sit on disk, so you can reorganize without moving files.
 
 ## Features
 
-- **Group and sort any list.** Every song list -- the library, a playlist, search results, similar songs, an auto-playlist -- can be grouped by album, artist then album, year added then album, or genre then album, and sorted by any stack of fields (date added, album, artist, title, genre, rating, plays, last played), each A-Z or Z-A. Groups sort by their earliest value, or latest when descending, and a group of one song is shown as the song itself. Double-click a group to play just its songs. Each list remembers its own grouping and sort across restarts; the library starts grouped by album, and playlists start in playlist order, which is the only order you can drag songs into.
-- **Playlists.** Reference-only song lists in the sidebar -- adding a song to a playlist copies the reference, never the file, and never moves it out of your library.
-- **Tags.** Tag a song, a selection, or a whole folder at once. Tags show as colored pills in their own column and as chips in the sidebar; the chips are scoped to whatever you're looking at and carry a count, and clicking them stacks up as filters.
-- **Star ratings.** A 1-5 star column in the song list. Click a star to rate, click the same star again to clear it, or press `1`-`5` (and `0` to clear) to rate everything you have selected. Ratings are searchable -- `rating>=4`, `rating=none` -- and available as a condition in the advanced-search composer. Settings can import the ratings out of an existing Swinsian library -- along with the space-separated tags in its Grouping field -- showing you what it would match before writing anything.
-- **Listening history.** Every song carries a play count and a last-played date, both searchable -- `plays>=5`, `plays=0` for everything you have never got to, `lastplayed>=2026-01-01` -- and both offered as conditions in the advanced-search composer. A play is counted once you have actually listened to half the track (30 seconds is enough for anything longer), so skipping down a list leaves the counts alone.
-- **Genre and date added.** Every song has a genre (read from and written back to the file's tags) and a date added (in Ludi only; today for new imports). Edit either for one song or a whole selection in the edit panel, and search them with `genre=rock`, `genre=none` and `added>=2024-01-01`. Settings can import both from a Swinsian library, with a preview: the date is the earlier of Swinsian's date added and the file's creation date, and a genre only fills a song that has none.
-- **Search.** Filter as you type, or build advanced searches with conditions on title, artist, album, genre, track number, rating, play count, last-played date, date added, and tags. Numbers and dates compare rather than match, so a condition can say "is at least 4" or "is on or after June 1". Search can be scoped to a playlist, and any search can be **saved to the sidebar** -- saved as the query, so songs join and leave it on their own as your library changes.
-- **Audio analysis.** Ludi listens to every song locally (no uploads, no API keys) with a MusiCNN model running on ONNX Runtime, and stores a 200-number fingerprint of how each track sounds. It runs in the background, backs off while you're playing music, and picks up where it left off if you quit. Everything below is built on it:
-  - **Similar songs.** Right-click any song for the tracks that sound most like it.
-  - **Auto-tags.** Genre and mood tags applied from the model's own scores, calibrated against your library rather than absolute thresholds. Machine-applied tags carry a gear badge so they're never confused with your own, and re-running the analysis only ever rewrites those.
-  - **Auto-playlists.** Ludi clusters the library into groups, names each one after what makes it distinctive, and lets you save any of them as a real playlist.
-  - **Music map.** Your whole library as a zoomable, pannable 2D landscape where similar music sits together. Hover for a title, double-click to play, or shift-drag a lasso around a region and save it as a playlist.
-  - **Facet browser.** Every tag in the current view with how many songs carry it. Click one to drill in, and the list becomes "what else these songs tend to be", with the combinations that are unusually concentrated marked. Hand any drill-down to the search box to save it.
-- **Import by drag and drop.** Drag audio files in from Finder and Ludi copies them into your library folder, reads their title/artist/album/duration tags, and files them where you dropped them.
-- **Drag files back out.** Hold Option while dragging a selection to copy the underlying audio files out to the Desktop or a Finder folder.
-- **Library scan.** Point Ludi at files already sitting in your library folder and it ingests them in place.
-- **Media keys.** The play/pause and next/previous keys on your keyboard work, along with hotkeys for navigation and playback.
-- **Configurable columns** for track number, duration, rating, artist, album, genre, date added, plays, last played, and tags. Right-click any column header to show or hide columns.
-- **Shuffle and loop that take effect immediately** on the next song, rather than waiting until you manually pick a different track.
+### Browse
 
-Deleting a song moves its audio file to the macOS Trash rather than destroying it.
+- 🗂️ **Group and sort any list** by album, artist, genre or year added, and by any stack of fields. Each list remembers its own settings. Drag-reordering works in playlist order.
+- 📦 **Collapsed groups show a summary** in each column: track range, total time, average rating, tags, and so on. Opening a group selects its songs.
+- 🧱 **Configurable columns.** Right-click a header to show or hide columns; drag its edge to resize.
+- ↩️ **Back and forward** between screens.
+
+### Organize
+
+- 🎶 **Playlists** from anywhere: a lasso on the music map, a group of sound-alike songs, or songs dragged in. Each keeps its own grouping, search and scroll position.
+- 🏷️ **Tags** on a song, a selection, or a whole album. Sidebar tag chips show counts and stack as filters.
+- ⭐ **Star ratings.** Click a star, or press `1`-`5` (`0` clears) to rate the selection.
+- ✏️ **Edit panel** for one song or many. Title, artist, album, track # and genre are written into the audio file too.
+
+### Find
+
+- 🔍 **Search** as you type, or build advanced queries on any field: `rating>=4`, `plays=0`, `added>=2024-01-01`, with `AND`/`OR`/`NOT`.
+- 📌 **Saved searches** in the sidebar stay live as your library changes.
+- 📈 **Listening history.** Play counts and last-played dates, counted once you've heard half the track.
+
+### Discover
+
+Ludi analyzes every song locally with a MusiCNN model (no uploads, no API keys), in the background, resuming where it left off.
+
+- 🧲 **Similar songs** for any song or selection.
+- 🤖 **Auto-tags** for genre and mood, hidden unless you turn on "Show AI tags". Re-analysis never touches your own tags.
+- 🫧 **Auto-playlists** (*Groups* in the sidebar): clusters of songs that sound alike, which you can save as playlists.
+- 🗺️ **Music map.** A zoomable 2D map of your library. Double-click to play, or lasso a region into a playlist.
+- 🔬 **Facet browser.** Drill into tags to see what else those songs tend to be.
+
+### Listen
+
+- ▶️ **Double-click to play** the list as shown, or just one group.
+- 🔀 **Shuffle and loop** apply to the very next song. Double-click the loop button to repeat one.
+- ⌨️ **Keyboard and media keys** for playback, navigation, seeking and rating.
+- ☕ **Keeps your Mac awake** through a playlist.
+
+### Your files
+
+- 📥 **Drag and drop import** copies files into your library folder.
+- 🔄 **Library scan** imports files already in the library folder.
+- 📤 **Copy files out** to any folder from the right-click menu, or Option-drag to Finder.
+- 🗑️ **Deleted songs go to the Trash.**
+- 🦢 **Swinsian import** brings over ratings, Grouping-field tags, date added and genre, with a preview first.
 
 ## Install
 
@@ -66,14 +91,19 @@ npm start
 # (tests use 5274), and reaps any dev server a previous run left behind.
 npm run dev
 
-# Run integration tests (NOTE: starting the test suite RESETS the test DB! No concurrent runs!)
+# Run the e2e tests (Playwright, 5 parallel workers). Each worker gets a fresh
+# throwaway database and library. Don't start a second run while one is going:
+# they share the test Vite server, and the new run reaps the old one's.
 npm test
+
+# Run the unit tests (Vitest, watch mode)
+npm run test:unit
 
 # Build a packaged macOS app + .dmg (output in release/), without publishing
 npm run release
 ```
 
-The integration tests use Playwright to launch the app, verify the UI is displayed correctly, and confirm no errors occurred during startup.
+The e2e tests drive the real app through Playwright for Electron. In test mode its windows stay hidden, its audio is muted, and it leaves your media keys, clipboard and Trash alone.
 
 ### Architecture
 
@@ -81,7 +111,7 @@ The integration tests use Playwright to launch the app, verify the UI is display
 - SolidJS for the UI layer
 - SQLite for the music library DB
 - Howler.js for audio playback
-- music-metadata for extracting title/artist/album tags from audiofiles
+- music-metadata for reading tags from audio files, and taglib-wasm for writing edits back into them
 - essentia.js (mel-spectrograms) + ONNX Runtime Web (MusiCNN inference) for audio analysis, both running as WASM in a hidden renderer window
 - umap-js for projecting the analysis embeddings down to the 2D music map
 - Thorough integration tests using Playwright for Electron
@@ -113,18 +143,18 @@ The `afterSign` hook in `scripts/verify-signature.js` then verifies the signatur
 
 ### Data locations
 
-The app runs in one of three isolated modes, so dev/test/live never share a database or music folder:
+The app runs in one of three isolated modes, so dev/test/live never share a database or music folder (`LUDI_DB_PATH` overrides the database path):
 
 | Mode | Trigger | Database (`~/.ludi/`) | Music library (`~/Music/`) |
 | --- | --- | --- | --- |
 | live | packaged `.dmg` | `ludi-library-live.sqlite` | `Ludi Library` |
 | dev | `npm run dev`, `npm start` | `ludi-library-dev.sqlite` | `Ludi Library Dev` |
-| test | `npm test` (reset each run) | `ludi-library-test.sqlite` | `Ludi Library Test` |
+| test | `npm test` | a temp dir per test worker (`LUDI_TEST_HOME`) | the same temp dir |
 
 ### The SQLite DB schema
 
 - `lists`\
-  *Represents a playlist (such as the mandatory "Main Library" list) or a subfolder within a list. The app auto-creates one mandatory playlist with id=0, position=0, and title="Main Library". For now, root-level playlists will be ordered in the sidebar using the* `sidebar_position` *field but long-term we may need a* `sidebar_items` *table.*
+  *Represents a playlist (such as the mandatory "Main Library" list) or a subfolder within a list. Subfolders are deprecated: song lists group by album instead, and the folder code is due for removal (see TASKS.md). The app auto-creates one mandatory playlist with id=0, position=0, and title="Main Library". For now, root-level playlists will be ordered in the sidebar using the* `sidebar_position` *field but long-term we may need a* `sidebar_items` *table.*
   - id
   - title
   - is_subfolder (not null)
@@ -218,7 +248,7 @@ Notes on implementation:
 - ✅ Basic Electron app skeleton, basic integration test harness
 - ✅ Drag-and-drop import, playback, drag-and-drop reordering, selecting & deleting songs
 - ✅ Media buttons support
-- ✅ Folders
+- ✅ Folders (since replaced by grouping)
 - ✅ Hotkeys for playlist navigation & playback
 - ✅ Configurable columns for track #, duration, artist, album, and tags
 - ✅ Refactor all UI to SolidJS for performance & easier maintenance
@@ -228,12 +258,14 @@ Notes on implementation:
 - ✅ Local audio analysis (MusiCNN embeddings, mood/genre scores)
 - ✅ Similar songs, auto-tags, auto-playlists, the music map, and the facet browser
 - ✅ Saved searches
+- ✅ Star ratings, listening history, and the Swinsian import
+- ✅ Edits written back into the audio files
+- ✅ Grouping and sorting every song list, with genre and date added
 
 ## Wishlist (later steps)
 
 "Utilities" menu with some useful utilities:
 
-- Scan for any audiofiles in the audio library folder that aren't present as a song
 - Scan for any songs in our DB whose audiofile can't be found
 - Scan for any songs whose duration_seconds in the DB doesn't match the audiofile duration
 - Scan for any songs that aren't in the "main library" list
@@ -242,4 +274,4 @@ Other:
 
 - Detect/Prevent the app from being opened twice at the same time, to avoid conflicting writes to the sqlite DB.
 - Volume equalizer - when enabled, per-song volume is adjusted so all songs have the same max volume.
-- Right-click on a folder -> Scans -> "List duplicates of the same song" (in that list/folder). Opens a new window listing all duplicates found (for each, the song + the folder path). Click on any item to jump to it in the main window.
+- Right-click on a playlist -> Scans -> "List duplicates of the same song" (in that playlist). Opens a new window listing all duplicates found. Click on any item to jump to it in the main window.
