@@ -13,6 +13,26 @@ const STARS = Array.from({ length: MAX_RATING }, (_, i) => i + 1);
  * Hovering previews the rating you would get by clicking, so the widget shows
  * the outcome before you commit to it.
  */
+/**
+ * A read-only average rating, filling stars fractionally: 3.4 is three full
+ * stars and four tenths of the fourth.
+ */
+export function AverageStars(props) {
+  const fill = (star) => Math.min(Math.max(props.rating - (star - 1), 0), 1);
+  return (
+    <span class="star-rating average-stars qa-average-stars" data-rating={props.rating} title={`Average ${props.rating} stars`}>
+      <For each={STARS}>
+        {(star) => (
+          <span class="average-star">
+            <i class="star bi bi-star" />
+            <i class="star bi bi-star-fill average-star-fill" style={{ 'clip-path': `inset(0 ${100 - fill(star) * 100}% 0 0)` }} />
+          </span>
+        )}
+      </For>
+    </span>
+  );
+}
+
 export function StarRating(props) {
   const [hovered, setHovered] = createSignal(null);
 

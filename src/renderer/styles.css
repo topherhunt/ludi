@@ -21,6 +21,14 @@ body {
   height: 100vh;
 }
 
+/* A click on a window-drag region never reaches the page, so while a menu is
+   open they stop dragging and the click can close it. */
+body.floating-menu-open .app-container::before,
+body.floating-menu-open .sidebar-header,
+body.floating-menu-open .explorer-header {
+  -webkit-app-region: no-drag;
+}
+
 /* Make top padding area draggable (sidebar only) */
 .app-container::before {
   content: '';
@@ -297,10 +305,17 @@ body.resizing-sidebar {
   position: relative;
 }
 
+/* The column headers stick to the top of the list's scroll box, so a row
+   scrolled into view must clear them. */
+#explorerContainer:has(> .column-headers) {
+  scroll-padding-top: 32px;
+}
+
 /* Tree View */
 .explorer-tree {
   list-style: none;
   padding: 8px;
+  min-width: fit-content;
 }
 
 .tree-item {
@@ -557,6 +572,23 @@ body.resizing-sidebar {
 
 .star-rating .star:hover {
   transform: scale(1.15);
+}
+
+/* A collapsed group's average: each filled star is clipped over its outline. */
+.average-star {
+  position: relative;
+  display: inline-flex;
+}
+
+.average-stars .star,
+.average-stars .star:hover {
+  cursor: inherit;
+  transform: none;
+}
+
+.average-star-fill {
+  position: absolute;
+  inset: 0;
 }
 
 /* Hidden columns */

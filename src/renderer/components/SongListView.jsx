@@ -13,11 +13,13 @@ import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
 import { startNativeFileDrag } from '../utils/dragOut.js';
 import { songsInTreeOrder } from '../utils/arrangeRows.js';
+import { knownText, summarizeSongs } from '../utils/groupSummary.js';
 import { formatTime, formatLocalDate, pluralize } from '../utils/format.js';
 import { getItemById, moveItem, addSongsToList } from '../utils/api.js';
-import { TagPillList } from './TagPill.jsx';
-import { StarRating } from './StarRating.jsx';
+import { TagPill, TagPillList } from './TagPill.jsx';
+import { StarRating, AverageStars } from './StarRating.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
+import { ColumnHeaders } from './ColumnHeaders.jsx';
 
 // Row order for SHIFT-range selection. Collapsed groups drop their children
 // from the DOM, so document order is exactly what the user sees.
@@ -25,7 +27,32 @@ const visibleItemIds = () =>
   Array.from(document.querySelectorAll('#explorerTree .tree-item-content[data-item-id]'))
     .map((el) => parseInt(el.dataset.itemId));
 
-const knownText = (value) => (value && value !== 'Unknown' ? value : '');
+// A tag on a few of a group's songs is faint but still readable.
+const MIN_TAG_OPACITY = 0.25;
+
+function groupCellContent(key, summary) {
+  switch (key) {
+    case 'track': return summary.track;
+    case 'duration': return summary.duration ? formatTime(summary.duration) : '';
+    case 'rating': return summary.rating === null ? '' : <AverageStars rating={summary.rating} />;
+    case 'artist': return summary.artist;
+    case 'album': return summary.album;
+    case 'genre': return summary.genre;
+    case 'date_added': return summary.date_added || '';
+    case 'plays': return summary.plays || '';
+    case 'last_played': return summary.last_played ? formatLocalDate(summary.last_played) : '';
+    case 'tags': return (
+      <For each={summary.tags}>
+        {({ tag, share }) => (
+          <span class="qa-group-tag" style={{ opacity: Math.max(share, MIN_TAG_OPACITY) }} data-share={share}>
+            <TagPill tag={{ ...tag, is_auto: 0 }} />
+          </span>
+        )}
+      </For>
+    );
+    default: throw new Error(`No cell for column ${key}`);
+  }
+}
 
 function cellContent(key, song) {
   switch (key) {
@@ -115,8 +142,10 @@ function SongRow(props) {
 function GroupRow(props) {
   const collapsed = () => isGroupCollapsed(collapseKey(), props.node.key);
   const toggle = () => toggleGroupCollapsed(collapseKey(), props.node.key);
-  const holdsPlayingSong = createMemo(() =>
-    songsInTreeOrder(props.node.children).some((song) => song.item_id === currentPlayingItemId()));
+  const songs = createMemo(() => songsInTreeOrder(props.node.children));
+  const holdsPlayingSong = createMemo(() => songs().some((song) => song.item_id === currentPlayingItemId()));
+  // Collapsed, the row previews its songs column by column; expanded, the songs show for themselves.
+  const summary = createMemo(() => (collapsed() ? summarizeSongs(songs()) : null));
 
   // A group has no placement of its own (id null); the menu acts on the songs in it.
   const handleContextMenu = (e) => {
@@ -136,7 +165,7 @@ function GroupRow(props) {
         class="tree-item-content group-row qa-group-row"
         data-group-key={props.node.key}
         data-is-group="true"
-        style={{ 'grid-template-columns': '1fr' }}
+        style={{ 'grid-template-columns': collapsed() ? gridTemplateColumns() : '1fr' }}
         onClick={toggle}
         onDblClick={(e) => {
           // Double-clicking the chevron is two toggles, not a play.
@@ -156,6 +185,16 @@ function GroupRow(props) {
             <span class="tree-item-count">{props.node.songCount} {pluralize(props.node.songCount, 'song')}</span>
           </span>
         </span>
+
+        <Show when={summary()}>
+          <For each={COLUMNS}>
+            {(column) => (
+              <Show when={columnVisibility()[column.key]}>
+                <span class={`col-${column.key}`} data-column={column.key}>{groupCellContent(column.key, summary())}</span>
+              </Show>
+            )}
+          </For>
+        </Show>
       </div>
       <Show when={!collapsed()}>
         <ul class="tree-item-children expanded">
@@ -387,7 +426,7 @@ export function SongListView(props) {
   // ---- Clicks ----
 
   const handleContainerClick = (e) => {
-    if (!e.target.closest('.tree-item-content')) clearSelection();
+    if (!e.target.closest('.tree-item-content, .column-headers')) clearSelection();
   };
 
   const showsEmptyPlaylist = () => isListView() && libraryLoaded() && nodes.length === 0 && currentListId() !== MAIN_LIBRARY_ID;
@@ -405,6 +444,9 @@ export function SongListView(props) {
       onDrop={handleDrop}
       onDragEnd={handleDragEnd}
     >
+      {/* Inside the scroll box, so the headings scroll sideways with the columns. */}
+      <ColumnHeaders />
+
       <Show when={isShowingSimilar() && similarNotice()}>
         <div class="search-empty-state qa-similar-notice">
           <i class="bi bi-soundwave" />

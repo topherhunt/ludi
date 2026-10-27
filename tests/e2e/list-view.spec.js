@@ -14,8 +14,8 @@ const PLAYLIST = `List View ${STAMP}`;
 
 // Playlist order. S4 has no album, so it stands alone whatever the grouping.
 const SONGS = [
-  { name: `lv1-${STAMP}`, album: ALPHA, track_number: 2, genre: 'Rock', date_added: '2024-03-01' },
-  { name: `lv2-${STAMP}`, album: ALPHA, track_number: 1, genre: 'Rock', date_added: '2022-01-01' },
+  { name: `lv1-${STAMP}`, album: ALPHA, artist: 'Ann', track_number: 2, genre: 'Rock', date_added: '2024-03-01' },
+  { name: `lv2-${STAMP}`, album: ALPHA, artist: 'Bob', track_number: 1, genre: 'Rock', date_added: '2022-01-01' },
   { name: `lv3-${STAMP}`, album: BETA, track_number: 1, genre: 'Folk', date_added: '2023-06-01' },
   { name: `lv4-${STAMP}`, album: '', track_number: null, genre: null, date_added: '2025-01-01' },
   { name: `lv5-${STAMP}`, album: BETA, track_number: 2, genre: 'Folk', date_added: '2021-05-05' },
@@ -24,6 +24,7 @@ const [S1, S2, S3, S4, S5] = SONGS.map((s) => s.name);
 
 let playlistId = null;
 let libraryItemIds = [];
+let tagId = null; // on S1 only, which is rated 4 to S2's 3
 
 const nowPlaying = (window) => window.locator('.player-info .song-title');
 const songRows = (window) => window.locator('.qa-song-row');
@@ -84,18 +85,24 @@ test.describe('Song list grouping and sorting', () => {
     await expect(playlist).toBeVisible({ timeout: 2000 });
     playlistId = parseInt(await playlist.getAttribute('data-list-id'));
 
-    libraryItemIds = await window.evaluate(async ({ filePaths, songs, listId }) => {
+    ({ libraryItemIds, tagId } = await window.evaluate(async ({ filePaths, songs, listId, tagName }) => {
       const imported = await window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 });
       const library = await window.electronAPI.getListItems(0);
       const itemIds = [];
+      const songIds = [];
       for (const { name, ...fields } of songs) {
         const item = library.find((it) => it.song_title === name);
         await window.electronAPI.updateSong({ songId: item.song_id, fields });
         itemIds.push(item.id);
+        songIds.push(item.song_id);
       }
       await window.electronAPI.copyItemsToList({ itemIds, targetListId: listId, skipSongIds: [] });
-      return imported.itemIds;
-    }, { filePaths: files, songs: SONGS, listId: playlistId });
+      await window.electronAPI.setSongRating({ songIds: [songIds[0]], rating: 4 });
+      await window.electronAPI.setSongRating({ songIds: [songIds[1]], rating: 3 });
+      const tag = await window.electronAPI.createTag({ name: tagName, color: '#4ec9b0' });
+      await window.electronAPI.addTagToSongs({ tagId: tag.id, songIds: [songIds[0]] });
+      return { libraryItemIds: imported.itemIds, tagId: tag.id };
+    }, { filePaths: files, songs: SONGS, listId: playlistId, tagName: `lvtag-${STAMP}` }));
     files.forEach((f) => fs.rmSync(f, { force: true }));
 
     await window.evaluate(() => { window.__ludiRepeatOneWindowMs = 1; });
@@ -113,9 +120,10 @@ test.describe('Song list grouping and sorting', () => {
     await window.click('.qa-playlist-delete');
     await window.click('#modalYesBtn');
     await expect(playlist).toHaveCount(0, { timeout: 2000 });
-    await window.evaluate(async (itemIds) => {
+    await window.evaluate(async ({ itemIds, tagId }) => {
+      await window.electronAPI.deleteTag(tagId);
       for (const id of itemIds) await window.electronAPI.deleteItemWithFiles(id);
-    }, libraryItemIds);
+    }, { itemIds: libraryItemIds, tagId });
     while (await window.evaluate(() => window.loopMode) !== 'all') {
       await window.locator('#loopBtn').click();
       await window.waitForTimeout(5);
@@ -148,6 +156,76 @@ test.describe('Song list grouping and sorting', () => {
     // Expand All opens every group.
     await window.locator('.qa-expand-all').click();
     await expect(songRows(window)).toHaveCount(5);
+  });
+
+  test('a collapsed group previews its songs in each column, lined up under the headings', async ({ window }) => {
+    await openPlaylist(window);
+    await chooseGroup(window, 'album');
+    const alpha = groupRow(window, ALPHA);
+    const cell = (key) => alpha.locator(`.col-${key}`);
+
+    const seconds = await window.evaluate(async ({ id, names }) =>
+      (await window.electronAPI.getListItems(id))
+        .filter((it) => names.includes(it.song_title))
+        .reduce((sum, it) => sum + it.duration_seconds, 0), { id: playlistId, names: [S1, S2] });
+    const total = Math.floor(seconds);
+
+    await expect(cell('track')).toHaveText('1-2');
+    await expect(cell('duration')).toHaveText(`${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`);
+    await expect(cell('rating').locator('.qa-average-stars')).toHaveAttribute('data-rating', '3.5');
+    await expect(cell('artist')).toHaveText('Ann + 1');
+    await expect(cell('album')).toHaveText(ALPHA);
+    await expect(cell('genre')).toHaveText('Rock');
+    await expect(cell('date_added')).toHaveText('2022-01-01');
+    // On one of the two songs: half strength.
+    const tag = cell('tags').locator('.qa-group-tag');
+    await expect(tag).toHaveText(`lvtag-${STAMP}`);
+    await expect(tag).toHaveCSS('opacity', '0.5');
+
+    const left = (locator) => locator.evaluate((el) => Math.round(el.getBoundingClientRect().left));
+    expect(await left(cell('genre'))).toBe(await left(songRow(window, S4).locator('.col-genre')));
+
+    // Expanded, the songs speak for themselves.
+    await alpha.click();
+    await expect(cell('track')).toHaveCount(0);
+  });
+
+  test('the column headings scroll sideways with the rows', async ({ window }) => {
+    await openPlaylist(window);
+    const toggleColumns = async () => {
+      await window.locator('.col-header.col-title').click({ button: 'right' });
+      for (const key of ['plays', 'last_played']) await window.locator(`.qa-column-option[data-column="${key}"]`).click();
+      await window.keyboard.press('Escape');
+      await window.locator('#currentListTitle').click();
+    };
+    await toggleColumns(); // wider than the window now
+    const container = window.locator('#explorerContainer');
+    const left = (locator) => locator.evaluate((el) => Math.round(el.getBoundingClientRect().left));
+    const heading = window.locator('.col-header.col-genre');
+    const genreCell = songRow(window, S1).locator('.col-genre');
+    const offset = async () => (await left(heading)) - (await left(genreCell));
+
+    await container.evaluate((el) => { el.scrollLeft = 0; });
+    const before = await offset();
+    const headingBefore = await left(heading);
+    await container.evaluate((el) => { el.scrollLeft = 120; });
+    expect(await container.evaluate((el) => el.scrollLeft)).toBe(120);
+    expect(await left(heading)).toBe(headingBefore - 120);
+    expect(await offset()).toBe(before);
+
+    await toggleColumns();
+  });
+
+  test('an open menu lets clicks through the window-drag strips so they can close it', async ({ window }) => {
+    await openPlaylist(window);
+    const appRegion = () => window.locator('.explorer-header').evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-app-region'));
+    expect(await appRegion()).toBe('drag');
+
+    await window.locator('.qa-sort-btn').click();
+    expect(await appRegion()).toBe('no-drag');
+    await window.locator('.explorer-header').click({ position: { x: 5, y: 5 } });
+    await expect(window.locator('.qa-sort-menu')).toHaveCount(0);
+    expect(await appRegion()).toBe('drag');
   });
 
   test('double-clicking a group plays just its songs; double-clicking its caret only toggles', async ({ window }) => {

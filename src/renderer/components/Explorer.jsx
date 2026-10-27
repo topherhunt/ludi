@@ -2,7 +2,6 @@ import { createSignal, Show, Switch, Match } from 'solid-js';
 import { currentListId, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { showRenameModal, hideRenameModal, showConfirmModal, hideConfirmModal, showAlert } from '../stores/modals.js';
 import { ExplorerHeader } from './ExplorerHeader.jsx';
-import { ColumnHeaders } from './ColumnHeaders.jsx';
 import { SongListView } from './SongListView.jsx';
 import { ContextMenu } from './ContextMenu.jsx';
 import { BatchRenameModal } from './BatchRenameModal.jsx';
@@ -418,12 +417,6 @@ export function Explorer(props) {
         advancedSearchOpen={advancedSearchOpen()}
         onAdvancedSearch={() => setAdvancedSearchOpen(true)}
       />
-
-      {/* The map, the facet browser and the groups list aren't lists of songs --
-          column headings over them would be labelling nothing. */}
-      <Show when={!mapOpen() && !facetsOpen() && !groupsOpen()}>
-        <ColumnHeaders />
-      </Show>
 
       {/* Four things can fill the explorer, and exactly one of them does. */}
       <Switch fallback={
