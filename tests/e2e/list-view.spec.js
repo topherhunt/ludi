@@ -158,6 +158,23 @@ test.describe('Song list grouping and sorting', () => {
     await expect(songRows(window)).toHaveCount(5);
   });
 
+  test('opening a group selects every song in it, ready to edit together', async ({ window }) => {
+    await openPlaylist(window);
+    await chooseGroup(window, 'album');
+    await window.locator('.qa-collapse-all').click();
+    await songRow(window, S4).click();
+
+    // On a preview cell, which opening the group removes.
+    await groupRow(window, ALPHA).locator('.col-album').click();
+    await expect(songRows(window).and(window.locator('.selected'))).toHaveCount(2);
+    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S1, S2]);
+    await expect(window.locator('.qa-song-edit-panel')).toBeVisible();
+
+    // The caret opens it the same way.
+    await groupRow(window, BETA).locator('.tree-item-icon.chevron').click();
+    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S3, S5]);
+  });
+
   test('a collapsed group previews its songs in each column, lined up under the headings', async ({ window }) => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');

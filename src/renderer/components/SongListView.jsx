@@ -1,5 +1,5 @@
 import { For, Show, Switch, Match, createMemo, onCleanup } from 'solid-js';
-import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, rangeSelect, setLastSelectedItemId, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { COLUMNS, columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
@@ -141,7 +141,11 @@ function SongRow(props) {
 
 function GroupRow(props) {
   const collapsed = () => isGroupCollapsed(collapseKey(), props.node.key);
-  const toggle = () => toggleGroupCollapsed(collapseKey(), props.node.key);
+  // Opening a group also selects its songs, ready to edit together.
+  const toggle = () => {
+    if (collapsed()) selectAll(songs().map((song) => song.item_id));
+    toggleGroupCollapsed(collapseKey(), props.node.key);
+  };
   const songs = createMemo(() => songsInTreeOrder(props.node.children));
   const holdsPlayingSong = createMemo(() => songs().some((song) => song.item_id === currentPlayingItemId()));
   // Collapsed, the row previews its songs column by column; expanded, the songs show for themselves.
@@ -426,7 +430,10 @@ export function SongListView(props) {
   // ---- Clicks ----
 
   const handleContainerClick = (e) => {
-    if (!e.target.closest('.tree-item-content, .column-headers')) clearSelection();
+    // The path, not target.closest: the click may have removed its own target
+    // (a group's preview cells go when it opens).
+    const onRow = e.composedPath().some((el) => el instanceof Element && el.matches('.tree-item-content, .column-headers'));
+    if (!onRow) clearSelection();
   };
 
   const showsEmptyPlaylist = () => isListView() && libraryLoaded() && nodes.length === 0 && currentListId() !== MAIN_LIBRARY_ID;

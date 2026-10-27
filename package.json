@@ -40,7 +40,8 @@
     "mac": {
       "target": "dmg",
       "category": "public.app-category.music",
-      "identity": "Ludi Signing"
+      "identity": "Ludi Signing",
+      "electronLanguages": ["en"]
     }
   },
   "devDependencies": {
