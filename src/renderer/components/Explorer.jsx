@@ -19,7 +19,7 @@ import {
 } from '../utils/api.js';
 import { selectedItems, clearSelection, selectItem } from '../stores/navigation.js';
 import { isSearching, runSearch } from '../stores/search.js';
-import { groupSongs } from '../stores/songList.js';
+import { groupSongs, visibleSongIds } from '../stores/songList.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
@@ -354,49 +354,16 @@ export function Explorer(props) {
     handleDeleteWithConfirm(selected);
   };
 
-  // Get visible item IDs for keyboard navigation
-  const getVisibleItemIds = () => {
-    const ids = [];
-    const tree = document.getElementById('explorerTree');
-    if (!tree) return ids;
+  // Set while the song list is showing (not the map, facets or groups).
+  let songList = null;
 
-    const elements = tree.querySelectorAll('.tree-item-content');
-    elements.forEach((el) => {
-      let parent = el.closest('.tree-item').parentElement;
-      let visible = true;
+  // The song list's songs in on-screen order, rendered or scrolled out of view.
+  const getVisibleItemIds = () => (songList ? visibleSongIds() : []);
 
-      while (parent && parent.id !== 'explorerTree') {
-        if (
-          parent.classList.contains('tree-item-children') &&
-          !parent.classList.contains('expanded')
-        ) {
-          visible = false;
-          break;
-        }
-        parent = parent.parentElement;
-      }
-
-      // Search results render virtual folder rows that have no placement id.
-      if (visible && el.dataset.itemId) {
-        ids.push(parseInt(el.dataset.itemId));
-      }
-    });
-
-    return ids;
-  };
-
-  // Scroll selected item into view
   const scrollSelectedIntoView = () => {
     const selected = selectedItems();
-    if (selected.size === 0) return;
-
-    const firstId = Array.from(selected)[0];
-    const el = document.querySelector(
-      `.tree-item-content[data-item-id="${firstId}"]`
-    );
-    if (el) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
+    const topmost = getVisibleItemIds().find((id) => selected.has(id));
+    if (topmost !== undefined) songList.scrollItemIntoView(topmost);
   };
 
   // Initialize keyboard navigation
@@ -421,6 +388,7 @@ export function Explorer(props) {
       {/* Four things can fill the explorer, and exactly one of them does. */}
       <Switch fallback={
         <SongListView
+          ref={(api) => { songList = api; }}
           listTitle={getListTitle()}
           onPlaySong={props.onPlaySong}
           onPlayGroup={props.onPlayGroup}

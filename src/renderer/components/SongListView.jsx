@@ -1,14 +1,14 @@
-import { For, Show, Switch, Match, createMemo, onCleanup } from 'solid-js';
+import { For, Show, Switch, Match, createMemo, createSignal, onMount, onCleanup } from 'solid-js';
 import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { COLUMNS, columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
-import { startInternalDrag, endDrag, dragSource, showDropIndicator, hideDropIndicator } from '../stores/dragdrop.js';
+import { startInternalDrag, endDrag, dragSource, draggedItemIds, showDropIndicator, hideDropIndicator } from '../stores/dragdrop.js';
 import { isSearching, searchError } from '../stores/search.js';
 import { isShowingSimilar, similarResults, similarTotal, similarLoading, similarNotice, hasMoreSimilar, showMoreSimilar, PAGE_SIZE } from '../stores/similar.js';
 import { isShowingCluster } from '../stores/clusters.js';
 import { isReorderable, isGroupCollapsed, toggleGroupCollapsed } from '../stores/listView.js';
-import { nodes, activeViewKey, collapseKey, isListView, libraryLoaded } from '../stores/songList.js';
+import { nodes, visibleRows, visibleSongIds, activeViewKey, collapseKey, isListView, libraryLoaded } from '../stores/songList.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
 import { startNativeFileDrag } from '../utils/dragOut.js';
@@ -21,11 +21,10 @@ import { StarRating, AverageStars } from './StarRating.jsx';
 import { DropIndicator } from './DropIndicator.jsx';
 import { ColumnHeaders } from './ColumnHeaders.jsx';
 
-// Row order for SHIFT-range selection. Collapsed groups drop their children
-// from the DOM, so document order is exactly what the user sees.
-const visibleItemIds = () =>
-  Array.from(document.querySelectorAll('#explorerTree .tree-item-content[data-item-id]'))
-    .map((el) => parseInt(el.dataset.itemId));
+// Only the rows in and near view are in the DOM, so every row is this tall and
+// a row's position is its index times this.
+const ROW_HEIGHT = 28;
+const OVERSCAN_ROWS = 20;
 
 // A tag on a few of a group's songs is faint but still readable.
 const MIN_TAG_OPACITY = 0.25;
@@ -73,11 +72,12 @@ function cellContent(key, song) {
 function SongRow(props) {
   const isCurrent = createMemo(() => props.song.item_id === currentPlayingItemId());
   const isSelected = createMemo(() => selectedItems().has(props.song.item_id));
+  const isDragged = createMemo(() => dragSource() === 'tree' && draggedItemIds().includes(props.song.item_id));
 
   // Plain click replaces the selection, CMD toggles, SHIFT extends from the last click.
   const handleClick = (e) => {
     if (e.shiftKey && lastSelectedItemId() !== null) {
-      rangeSelect(props.song.item_id, visibleItemIds());
+      rangeSelect(props.song.item_id, visibleSongIds());
     } else if (e.metaKey || e.ctrlKey) {
       toggleSelection(props.song.item_id);
     } else {
@@ -106,8 +106,8 @@ function SongRow(props) {
     <li class="tree-item" data-item-id={props.song.item_id}>
       <div
         class="tree-item-content qa-song-row"
-        classList={{ 'current-song': isCurrent(), selected: isSelected() }}
-        style={{ 'grid-template-columns': gridTemplateColumns() }}
+        classList={{ 'current-song': isCurrent(), selected: isSelected(), dragging: isDragged() }}
+        style={{ 'grid-template-columns': gridTemplateColumns(), height: `${ROW_HEIGHT}px` }}
         data-item-id={props.song.item_id}
         data-is-folder="false"
         data-song-id={props.song.song_id}
@@ -169,7 +169,7 @@ function GroupRow(props) {
         class="tree-item-content group-row qa-group-row"
         data-group-key={props.node.key}
         data-is-group="true"
-        style={{ 'grid-template-columns': collapsed() ? gridTemplateColumns() : '1fr' }}
+        style={{ 'grid-template-columns': collapsed() ? gridTemplateColumns() : '1fr', height: `${ROW_HEIGHT}px` }}
         onClick={toggle}
         onDblClick={(e) => {
           // Double-clicking the chevron is two toggles, not a play.
@@ -200,18 +200,11 @@ function GroupRow(props) {
           </For>
         </Show>
       </div>
-      <Show when={!collapsed()}>
-        <ul class="tree-item-children expanded">
-          <For each={props.node.children}>
-            {(child) => <SongListNode {...props} node={child} depth={props.depth + 1} />}
-          </For>
-        </ul>
-      </Show>
     </li>
   );
 }
 
-function SongListNode(props) {
+function SongListRow(props) {
   return (
     <Show when={props.node.type === 'group'} fallback={<SongRow {...props} song={props.node.data} />}>
       <GroupRow {...props} />
@@ -230,10 +223,49 @@ function SongListNode(props) {
  */
 export function SongListView(props) {
   let containerRef;
+  let treeRef;
   let draggedIds = [];
   let dropTarget = null; // { itemId, before } or { itemId: null } for the end of the list
 
   const reorderable = () => isListView() && isReorderable(activeViewKey());
+
+  // ---- Rendering only the rows in view ----
+  //
+  // Measured from the container's own top, which the rows start a little below
+  // (the column headers), so the window errs towards rendering a few more rows.
+  const [viewport, setViewport] = createSignal({ top: 0, height: 0 });
+  const measureViewport = () => setViewport({ top: containerRef.scrollTop, height: containerRef.clientHeight });
+
+  onMount(() => {
+    measureViewport();
+    const observer = new ResizeObserver(measureViewport);
+    observer.observe(containerRef);
+    onCleanup(() => observer.disconnect());
+  });
+
+  const windowRange = createMemo(() => {
+    const count = visibleRows().rows.length;
+    const { top, height } = viewport();
+    const start = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN_ROWS);
+    const end = Math.min(count, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN_ROWS);
+    return { start, end, count };
+  }, undefined, { equals: (a, b) => a.start === b.start && a.end === b.end && a.count === b.count });
+
+  const windowRows = createMemo(() => visibleRows().rows.slice(windowRange().start, windowRange().end));
+
+  // Nearest-edge, like scrollIntoView({ block: 'nearest' }), for a row that may not be rendered.
+  const scrollItemIntoView = (itemId) => {
+    const index = visibleRows().rows.findIndex((node) => node.type === 'song' && node.data.item_id === itemId);
+    if (index === -1) throw new Error(`Item ${itemId} is not in the list`);
+    const rowTop = treeRef.offsetTop + parseFloat(getComputedStyle(treeRef).paddingTop) + index * ROW_HEIGHT;
+    const viewTop = containerRef.scrollTop + containerRef.querySelector('.column-headers').offsetHeight;
+    const viewBottom = containerRef.scrollTop + containerRef.clientHeight;
+    if (rowTop < viewTop) containerRef.scrollTo({ top: containerRef.scrollTop - (viewTop - rowTop), behavior: 'instant' });
+    else if (rowTop + ROW_HEIGHT > viewBottom) containerRef.scrollTo({ top: containerRef.scrollTop + (rowTop + ROW_HEIGHT - viewBottom), behavior: 'instant' });
+  };
+
+  props.ref({ scrollItemIntoView });
+  onCleanup(() => props.ref(null));
 
   // ---- Drag autoscroll ----
   //
@@ -304,10 +336,9 @@ export function SongListView(props) {
     // 'copyMove' when the drag may also land back in this list: Chromium refuses
     // a drop whose dropEffect isn't allowed, and a sidebar playlist drop is a copy.
     e.dataTransfer.effectAllowed = reorderable() ? 'copyMove' : 'copy';
-    for (const id of ids) {
-      const row = containerRef.querySelector(`.tree-item-content[data-item-id="${id}"]`);
-      if (row) row.style.opacity = '0.5';
-    }
+    // On the source row itself: scrolling can unmount it mid-drag, and a detached
+    // node's dragend never bubbles up to the container.
+    e.currentTarget.addEventListener('dragend', handleDragEnd, { once: true });
     startInternalDrag(ids, 'tree');
   };
 
@@ -316,7 +347,6 @@ export function SongListView(props) {
     draggedIds = [];
     dropTarget = null;
     endDrag();
-    containerRef.querySelectorAll('.tree-item-content').forEach((el) => { el.style.opacity = ''; });
   };
 
   const showIndicatorAt = (top) => {
@@ -343,8 +373,7 @@ export function SongListView(props) {
       if (!isExternalFile) return clearDropTarget();
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
-      const rows = containerRef.querySelectorAll('#explorerTree .tree-item-content');
-      showIndicatorAt(rows.length > 0 ? rows[rows.length - 1].getBoundingClientRect().bottom : containerRef.getBoundingClientRect().top);
+      showIndicatorAt(treeRef.getBoundingClientRect().bottom - parseFloat(getComputedStyle(treeRef).paddingBottom));
       dropTarget = { itemId: null };
       return;
     }
@@ -445,11 +474,11 @@ export function SongListView(props) {
       classList={{ 'qa-similar-view': isShowingSimilar(), 'qa-cluster-view': isShowingCluster() }}
       id="explorerContainer"
       ref={containerRef}
+      onScroll={measureViewport}
       onClick={handleContainerClick}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onDragEnd={handleDragEnd}
     >
       {/* Inside the scroll box, so the headings scroll sideways with the columns. */}
       <ColumnHeaders />
@@ -485,15 +514,16 @@ export function SongListView(props) {
           </div>
         </Match>
         <Match when={true}>
-          <ul class="explorer-tree" id="explorerTree" data-list-id={currentListId()}>
+          <ul class="explorer-tree" id="explorerTree" data-list-id={currentListId()} ref={treeRef}>
             <Show when={showsEmptyPlaylist()}>
               <li class="empty-playlist qa-empty-playlist">Drag songs here to add them to this playlist.</li>
             </Show>
-            <For each={nodes}>
+            <li class="qa-rows-above" style={{ height: `${windowRange().start * ROW_HEIGHT}px` }} />
+            <For each={windowRows()}>
               {(node) => (
-                <SongListNode
+                <SongListRow
                   node={node}
-                  depth={0}
+                  depth={visibleRows().depths.get(node.key)}
                   onPlaySong={props.onPlaySong}
                   onPlayGroup={props.onPlayGroup}
                   onContextMenu={props.onContextMenu}
@@ -501,6 +531,7 @@ export function SongListView(props) {
                 />
               )}
             </For>
+            <li class="qa-rows-below" style={{ height: `${(windowRange().count - windowRange().end) * ROW_HEIGHT}px` }} />
           </ul>
         </Match>
       </Switch>

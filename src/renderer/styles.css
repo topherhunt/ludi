@@ -337,6 +337,10 @@ body.resizing-sidebar {
   background-color: rgba(9, 71, 113, 0.5);
 }
 
+.tree-item-content.dragging {
+  opacity: 0.5;
+}
+
 .tree-item-content.drag-over {
   background-color: #264f78;
   outline: 1px solid #007acc;

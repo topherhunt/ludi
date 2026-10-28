@@ -63,7 +63,7 @@ describe('arrangeRows', () => {
     expect(titles(desc[1].children)).toEqual(['b2', 'b1']);
   });
 
-  it('breaks ties with later sort fields, then track #, then title', () => {
+  it('breaks ties with later sort fields, then album, track # and title', () => {
     const rows = [
       song({ title: 'b', artist: 'X', rating: 5 }),
       song({ title: 'a', artist: 'X', rating: 5 }),
@@ -72,6 +72,17 @@ describe('arrangeRows', () => {
     ];
     const nodes = arrangeRows(rows, { groupBy: 'none', sort: [{ field: 'artist', dir: 'asc' }, { field: 'rating', dir: 'desc' }] });
     expect(titles(nodes)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('keeps albums together under a tie, before track # and title', () => {
+    const rows = [
+      song({ title: 'y2', album: 'Yellow', track_number: 2, date_added: '2024-01-01' }),
+      song({ title: 'b1', album: 'Blue', track_number: 1, date_added: '2024-01-01' }),
+      song({ title: 'y1', album: 'Yellow', track_number: 1, date_added: '2024-01-01' }),
+      song({ title: 'b2', album: 'Blue', track_number: 2, date_added: '2024-01-01' }),
+    ];
+    const nodes = arrangeRows(rows, { groupBy: 'none', sort: [{ field: 'date_added', dir: 'asc' }] });
+    expect(titles(nodes)).toEqual(['b1', 'b2', 'y1', 'y2']);
   });
 
   it('puts missing values last in either direction', () => {

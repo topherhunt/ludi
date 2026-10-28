@@ -108,10 +108,13 @@ function sortValue(node, valueOf, dir) {
 
 const trackOf = (row) => row.track_number || null;
 
+// Ties under the chosen sort fall back to album, track # and title, so a sort
+// by date added or genre doesn't interleave songs from different albums.
 function sortNodes(nodes, sort) {
   const keyed = nodes.map((node) => ({
     node,
     values: sort.map(({ field, dir }) => sortValue(node, SORT_FIELDS[field].value, dir)),
+    album: sortValue(node, SORT_FIELDS.album.value, 'asc'),
     track: sortValue(node, trackOf, 'asc'),
     title: node.type === 'group' ? node.title : knownText(node.data.title),
   }));
@@ -120,7 +123,7 @@ function sortNodes(nodes, sort) {
       const cmp = compareValues(a.values[i], b.values[i], sort[i].dir);
       if (cmp !== 0) return cmp;
     }
-    return compareValues(a.track, b.track, 'asc') || compareValues(a.title, b.title, 'asc');
+    return compareValues(a.album, b.album, 'asc') || compareValues(a.track, b.track, 'asc') || compareValues(a.title, b.title, 'asc');
   });
   return keyed.map(({ node }) => {
     if (node.type === 'group') node.children = sortNodes(node.children, sort);

@@ -6,7 +6,7 @@ import { libraryVersion } from './tags.js';
 import { isSearching, searchResults, searchRootListId } from './search.js';
 import { isShowingSimilar, similarResults } from './similar.js';
 import { isShowingCluster, clusterSongs } from './clusters.js';
-import { viewSettings } from './listView.js';
+import { viewSettings, isGroupCollapsed } from './listView.js';
 import { songRowsUnder } from '../utils/listTree.js';
 import { arrangeRows, songsInTreeOrder, findGroup } from '../utils/arrangeRows.js';
 
@@ -61,10 +61,30 @@ const store = createRoot(() => {
 
   const displayedSongs = createMemo(() => songsInTreeOrder(arranged()));
 
-  return { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, arranged, displayedSongs };
+  // The rows on screen, top to bottom: an open group's rows follow it, a
+  // collapsed group's are left out. Holds the store's own node proxies, which
+  // reconcile keeps stable, so a row's DOM survives recomputing this.
+  const visibleRows = createMemo(() => {
+    const rows = [];
+    const depths = new Map();
+    const walk = (list, depth) => {
+      for (const node of list) {
+        rows.push(node);
+        depths.set(node.key, depth);
+        if (node.type === 'group' && !isGroupCollapsed(collapseKey(), node.key)) walk(node.children, depth + 1);
+      }
+    };
+    walk(nodes, 0);
+    return { rows, depths };
+  });
+
+  const visibleSongIds = createMemo(() =>
+    visibleRows().rows.filter((node) => node.type === 'song').map((node) => node.data.item_id));
+
+  return { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, arranged, displayedSongs, visibleRows, visibleSongIds };
 });
 
-export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs } = store;
+export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs, visibleRows, visibleSongIds } = store;
 
 /** The songs in one group, in the order shown. */
 export function groupSongs(groupKey) {

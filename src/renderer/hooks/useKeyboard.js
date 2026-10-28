@@ -201,9 +201,10 @@ export function useKeyboard(options) {
       const element = document.querySelector(
         `.tree-item-content[data-item-id="${firstSelectedId}"]`
       );
-      if (!element) return;
+      // A song scrolled out of view has no element but is still in the list.
+      if (!element && !getVisibleItemIds().includes(firstSelectedId)) return;
 
-      if (element.dataset.isFolder === 'true') {
+      if (element && element.dataset.isFolder === 'true') {
         if (e.key === 'Enter' && selected.size === 1) {
           const item = await getItemById(firstSelectedId);
           if (item) onRenameFolder?.(item);
