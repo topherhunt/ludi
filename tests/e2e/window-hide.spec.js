@@ -23,6 +23,24 @@ test.describe('Window close behavior', () => {
     expect(state.destroyed).toBe(false);
     expect(state.visible).toBe(false);
   });
+
+  // Reopening at these bounds on the next launch is covered by tests/unit/window-bounds.test.js.
+  test('closing the window saves its size and position for the next launch', async ({ electronApp, window }) => {
+    const original = await electronApp.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
+      const bounds = win.getBounds();
+      win.setBounds({ x: 40, y: 60, width: 1000, height: 700 });
+      win.close();
+      return bounds;
+    });
+
+    const settings = await window.evaluate(() => window.electronAPI.getSettings());
+    expect(JSON.parse(settings.window_bounds)).toEqual({ x: 40, y: 60, width: 1000, height: 700 });
+
+    await electronApp.evaluate(({ BrowserWindow }, bounds) => {
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html')).setBounds(bounds);
+    }, original);
+  });
 });
 
 test.describe('Test mode stays out of the way', () => {

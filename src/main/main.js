@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker, contentTracing } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, globalShortcut, protocol, net, shell, clipboard, nativeImage, powerSaveBlocker, contentTracing, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const db = require('./database');
 const { parseFile } = require('music-metadata');
 const { audioContentType } = require('./audio-mime');
+const { restoredBounds } = require('./window-bounds');
 const analysis = require('./analysis');
 const similarity = require('./similarity');
 const clusters = require('./clusters');
@@ -66,9 +67,10 @@ const CORS_HEADERS = {
 };
 
 function createWindow() {
+  const saved = db.getSettings().window_bounds;
+  const workAreas = screen.getAllDisplays().map((display) => display.workArea);
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...restoredBounds(saved === undefined ? null : JSON.parse(saved), workAreas),
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
@@ -108,6 +110,7 @@ function createWindow() {
   // 'activate' handler. A real quit (Cmd+Q) sets app.isQuitting in 'before-quit'
   // so the window is allowed to actually close.
   mainWindow.on('close', (e) => {
+    db.updateSetting('window_bounds', JSON.stringify(mainWindow.getNormalBounds()));
     if (process.platform === 'darwin' && !app.isQuitting) {
       e.preventDefault();
       mainWindow.hide();

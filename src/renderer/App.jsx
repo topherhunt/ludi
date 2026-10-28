@@ -371,8 +371,9 @@ export function App() {
     return isSearching() ? searchRootListId() : currentListId();
   };
 
-  // A group row plays just its own songs, in the order shown.
-  const handlePlayGroup = (groupKey) => playRows(groupSongs(groupKey), null, shownRootListId());
+  // A group row plays from its first song on through the whole list shown, so
+  // looping covers the list, not just the group.
+  const handlePlayGroup = (groupKey) => handlePlaySong(groupSongs(groupKey)[0].item_id);
 
   const mapPointsAsRows = (points) => points.map((point) => ({
     item_id: point.itemId,

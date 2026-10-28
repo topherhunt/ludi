@@ -110,16 +110,16 @@ test.describe('Playing from search results', () => {
     await expect(nowPlaying(window)).toHaveText(HIT_C);
   });
 
-  test('double-clicking an album group plays just the hits inside it', async ({ window }) => {
+  test('double-clicking an album group plays its hits, then on through the rest of the results', async ({ window }) => {
     await search(window, TERM, 3);
 
     await window.locator(SEARCH_GROUP).filter({ hasText: ALBUM }).dblclick();
     await expect(nowPlaying(window)).toHaveText(HIT_A);
-    await expect(row(window, HIT_C)).toBeVisible(); // two toggles leave it expanded
 
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_C);
-    // The loose hit is outside the album, so the queue ends here.
+    await next(window);
+    await expect(nowPlaying(window)).toHaveText(HIT_D);
     await expect(window.locator('#nextBtn')).toBeDisabled();
   });
 
@@ -138,7 +138,7 @@ test.describe('Playing from search results', () => {
     await expect(menu).toHaveCount(0);
   });
 
-  test('right-clicking an album group plays its hits', async ({ window }) => {
+  test('right-clicking an album group plays from its hits on through the results', async ({ window }) => {
     await search(window, TERM, 3);
 
     await window.locator(SEARCH_GROUP).filter({ hasText: ALBUM }).click({ button: 'right' });
@@ -146,7 +146,8 @@ test.describe('Playing from search results', () => {
     await expect(nowPlaying(window)).toHaveText(HIT_A);
     await next(window);
     await expect(nowPlaying(window)).toHaveText(HIT_C);
-    await expect(window.locator('#nextBtn')).toBeDisabled();
+    await next(window);
+    await expect(nowPlaying(window)).toHaveText(HIT_D);
   });
 
   test('rating a hit redraws its stars, and a collapsed group stays collapsed', async ({ window }) => {

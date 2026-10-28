@@ -93,6 +93,22 @@ function toggleItemSelection(itemId) {
 }
 
 /**
+ * Cmd/ctrl+click on a group: drop its items if all are selected, else add them.
+ * @param {number[]} itemIds
+ */
+function toggleItemsSelection(itemIds) {
+  setSelectedItemIds(prev => {
+    const next = new Set(prev);
+    if (itemIds.every(id => next.has(id))) itemIds.forEach(id => next.delete(id));
+    else {
+      itemIds.forEach(id => next.add(id));
+      setLastSelectedItemId(itemIds[0]);
+    }
+    return next;
+  });
+}
+
+/**
  * Select a range of items (for shift+click)
  * @param {number} itemId - The end of the range
  */
@@ -213,6 +229,7 @@ export {
   isSelected,
   selectItem,
   toggleItemSelection,
+  toggleItemsSelection,
   selectRange,
   rangeSelect,
   selectAll,

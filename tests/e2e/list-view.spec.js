@@ -178,6 +178,27 @@ test.describe('Song list grouping and sorting', () => {
     expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S1, S2]);
   });
 
+  test('Right and Left open and close the selected groups', async ({ window }) => {
+    await openPlaylist(window);
+    await chooseGroup(window, 'album');
+    await window.locator('.qa-collapse-all').click();
+
+    await groupRow(window, ALPHA).locator('.col-album').click();
+    await window.keyboard.press('ArrowRight');
+    await expect(songRow(window, S1)).toBeVisible();
+    await expect(songRow(window, S3)).toHaveCount(0);
+    await window.keyboard.press('ArrowLeft');
+    await expect(songRow(window, S1)).toHaveCount(0);
+
+    await groupRow(window, BETA).locator('.col-album').click({ modifiers: ['Meta'] });
+    await expect(groupRow(window, ALPHA)).toHaveClass(/selected/);
+    await expect(groupRow(window, BETA)).toHaveClass(/selected/);
+    await window.keyboard.press('ArrowRight');
+    await expect(songRows(window)).toHaveCount(5);
+    await window.keyboard.press('ArrowLeft');
+    expect(await rowTitles(songRows(window))).toEqual([S4]);
+  });
+
   test('a collapsed group previews its songs in each column, lined up under the headings', async ({ window }) => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');
@@ -248,7 +269,7 @@ test.describe('Song list grouping and sorting', () => {
     expect(await appRegion()).toBe('drag');
   });
 
-  test('double-clicking a group plays just its songs; double-clicking its caret only toggles', async ({ window }) => {
+  test('double-clicking a group plays on from it through the rest of the list; double-clicking its caret only toggles', async ({ window }) => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');
 
@@ -259,7 +280,14 @@ test.describe('Song list grouping and sorting', () => {
     await expect(nowPlaying(window)).toHaveText(S3);
     await window.locator('#nextBtn').click();
     await expect(nowPlaying(window)).toHaveText(S5);
+    await window.locator('#nextBtn').click();
+    await expect(nowPlaying(window)).toHaveText(S4);
     await expect(window.locator('#nextBtn')).toBeDisabled();
+    // The queue is the whole list, so it holds the songs before the group too.
+    await window.locator('#prevBtn').click();
+    await window.locator('#prevBtn').click();
+    await window.locator('#prevBtn').click();
+    await expect(nowPlaying(window)).toHaveText(S2);
     await window.locator('#playPauseBtn').click();
   });
 

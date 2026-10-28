@@ -10,6 +10,8 @@ import {
 import { isAnyModalOpen, closeAllModals } from '../stores/modals.js';
 import { getItemById } from '../utils/api.js';
 import { rateSelection } from '../stores/ratings.js';
+import { outermostSelectedGroupKeys, collapseKey } from '../stores/songList.js';
+import { isGroupCollapsed, toggleGroupCollapsed } from '../stores/listView.js';
 
 /**
  * Keyboard navigation hook for the explorer tree
@@ -141,56 +143,26 @@ export function useKeyboard(options) {
       return;
     }
 
-    // Left/Right arrows for folder expand/collapse or seeking.
-    // DEPRECATED (folders): no row is a folder any more, so only the seek branch
-    // runs, here and in the Enter/Space handler below. TODO: delete the folder
-    // branches (see TASKS.md).
+    // Right opens the selected groups and Left closes them; with no group
+    // selected, they seek in the playing song.
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-
-      // Check if any selected items are folders
-      let hasSelectedFolder = false;
-      const selected = selectedItems();
-
-      for (const itemId of selected) {
-        const element = document.querySelector(
-          `.tree-item-content[data-item-id="${itemId}"]`
-        );
-        if (element && element.dataset.isFolder === 'true') {
-          hasSelectedFolder = true;
-          break;
-        }
+      const groupKeys = outermostSelectedGroupKeys();
+      if (groupKeys.length === 0) {
+        onSeek?.(e.key === 'ArrowRight' ? 5 : -5);
+        return;
       }
-
-      if (hasSelectedFolder) {
-        // Collapse (left) or expand (right) selected folders. Click the chevron so
-        // this uses the exact same smooth, no-refetch code path as a manual chevron
-        // click -- the old refetch path reloaded the whole tree, flashing "Loading..."
-        // and jumping the scroll position.
-        for (const itemId of selected) {
-          const element = document.querySelector(
-            `.tree-item-content[data-item-id="${itemId}"]`
-          );
-          if (element && element.dataset.isFolder === 'true') {
-            const chevron = element.querySelector('.tree-item-icon.chevron');
-            const isExpanded = chevron?.classList.contains('expanded');
-            const shouldExpand = e.key === 'ArrowRight';
-
-            if (shouldExpand !== isExpanded) {
-              chevron?.click();
-            }
-          }
-        }
-      } else {
-        // No folder selected, seek in current song
-        const seekAmount = e.key === 'ArrowRight' ? 5 : -5;
-        onSeek?.(seekAmount);
+      const open = e.key === 'ArrowRight';
+      for (const key of groupKeys) {
+        if (isGroupCollapsed(collapseKey(), key) === open) toggleGroupCollapsed(collapseKey(), key);
       }
       return;
     }
 
     // Enter renames a single selected folder (same as right-click -> Rename).
     // Space plays a folder; Enter/Space both play a song.
+    // DEPRECATED (folders): no row is a folder any more, so only the song branch
+    // runs. TODO: delete the folder branch (see TASKS.md).
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
 

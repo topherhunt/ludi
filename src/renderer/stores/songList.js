@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { getAllListItems } from '../utils/api.js';
-import { currentListId, selectItem, MAIN_LIBRARY_ID } from './navigation.js';
+import { currentListId, selectItem, selectedItems, MAIN_LIBRARY_ID } from './navigation.js';
 import { openList } from './viewHistory.js';
 import { libraryVersion } from './tags.js';
 import { isSearching, searchResults, searchRootListId } from './search.js';
@@ -132,6 +132,24 @@ export function groupSongs(groupKey) {
   const group = findGroup(store.arranged(), groupKey);
   if (!group) throw new Error(`No group ${groupKey} in the current view`);
   return songsInTreeOrder(group.children);
+}
+
+/**
+ * The selected groups -- every song in them selected, as their highlight shows
+ * -- leaving out any inside another selected group, so opening them opens one level.
+ */
+export function outermostSelectedGroupKeys() {
+  const selected = selectedItems();
+  const keys = [];
+  const walk = (list) => {
+    for (const node of list) {
+      if (node.type !== 'group') continue;
+      if (songsInTreeOrder(node.children).every((song) => selected.has(song.item_id))) keys.push(node.key);
+      else walk(node.children);
+    }
+  };
+  walk(store.arranged());
+  return keys;
 }
 
 /** A playlist's songs as its own view would show them, for playing it from the sidebar. */

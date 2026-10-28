@@ -1,5 +1,5 @@
 import { For, Show, Switch, Match, createMemo, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
-import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, toggleItemsSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { COLUMNS, columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
@@ -146,10 +146,12 @@ function GroupRow(props) {
   const isSelected = createMemo(() => songs().length > 0 && songs().every((song) => selectedItems().has(song.item_id)));
 
   // The caret opens and closes the group; anywhere else on the row selects its
-  // songs, ready to edit together.
+  // songs, ready to edit together, or with CMD adds them to the selection.
   const handleClick = (e) => {
+    const ids = songs().map((song) => song.item_id);
     if (e.target.closest('.tree-item-icon.chevron')) toggleGroupCollapsed(collapseKey(), props.node.key);
-    else selectAll(songs().map((song) => song.item_id));
+    else if (e.metaKey || e.ctrlKey) toggleItemsSelection(ids);
+    else selectAll(ids);
   };
   const holdsPlayingSong = createMemo(() => songs().some((song) => song.item_id === currentPlayingItemId()));
   // Collapsed, the row previews its songs column by column; expanded, the songs show for themselves.

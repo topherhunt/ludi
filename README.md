@@ -11,7 +11,7 @@ Your library and playlists live in Ludi's database, independent of where the aud
 ### Browse
 
 - 🗂️ **Group and sort any list** by album, artist, genre or year added, and by any stack of fields. Each list remembers its own settings. Drag-reordering works in playlist order.
-- 📦 **Collapsed groups show a summary** in each column: track range, total time, average rating, tags, and so on. Opening a group selects its songs.
+- 📦 **Collapsed groups show a summary** in each column: track range, total time, average rating, tags, and so on. Click a group to select its songs; its caret, or `→`/`←`, opens and closes it.
 - 🧱 **Configurable columns.** Right-click a header to show or hide columns; drag its edge to resize.
 - ↩️ **Back and forward** between screens.
 
@@ -24,7 +24,7 @@ Your library and playlists live in Ludi's database, independent of where the aud
 
 ### Find
 
-- 🔍 **Search** as you type, or build advanced queries on any field: `rating>=4`, `plays=0`, `added>=2024-01-01`, with `AND`/`OR`/`NOT`.
+- 🔍 **Search** as you type, or build advanced queries on any field: `rating>=4`, `rating=none` (unrated), `plays=0`, `added>=2024-01-01`, with `AND`/`OR`/`NOT`.
 - 📌 **Saved searches** in the sidebar stay live as your library changes.
 - 📈 **Listening history.** Play counts and last-played dates, counted once you've heard half the track.
 
@@ -40,7 +40,7 @@ Ludi analyzes every song locally with a MusiCNN model (no uploads, no API keys),
 
 ### Listen
 
-- ▶️ **Double-click to play** the list as shown, or just one group.
+- ▶️ **Double-click to play** the list as shown, from a song or a group. Loop all loops the whole list.
 - 🔀 **Shuffle and loop** apply to the very next song. Double-click the loop button to repeat one.
 - ⌨️ **Keyboard and media keys** for playback, navigation, seeking and rating.
 - ☕ **Keeps your Mac awake** through a playlist.
