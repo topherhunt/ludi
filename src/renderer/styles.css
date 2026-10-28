@@ -639,6 +639,16 @@ body.resizing-sidebar {
   line-height: 1.2;
 }
 
+.player-info.revealable .song-title,
+.player-info.revealable .song-artist {
+  cursor: pointer;
+}
+
+.player-info.revealable .song-title:hover,
+.player-info.revealable .song-artist:hover {
+  text-decoration: underline;
+}
+
 .playback-controls {
   display: flex;
   gap: 12px;
@@ -1979,7 +1989,7 @@ body.resizing-sidebar {
   cursor: pointer;
   white-space: nowrap;
 }
-.tag-autocomplete-option:hover { background: #094771; }
+.tag-autocomplete-option.active { background: #094771; }
 .tag-autocomplete-create { color: #9ccc65; }
 .tag-swatch-dot {
   width: 10px;

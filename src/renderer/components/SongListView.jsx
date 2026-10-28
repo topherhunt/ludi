@@ -1,4 +1,4 @@
-import { For, Show, Switch, Match, createMemo, createSignal, onMount, onCleanup } from 'solid-js';
+import { For, Show, Switch, Match, createMemo, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
 import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { COLUMNS, columnVisibility, gridTemplateColumns } from '../stores/columns.js';
@@ -8,7 +8,7 @@ import { isSearching, searchError } from '../stores/search.js';
 import { isShowingSimilar, similarResults, similarTotal, similarLoading, similarNotice, hasMoreSimilar, showMoreSimilar, PAGE_SIZE } from '../stores/similar.js';
 import { isShowingCluster } from '../stores/clusters.js';
 import { isReorderable, isGroupCollapsed, toggleGroupCollapsed } from '../stores/listView.js';
-import { nodes, visibleRows, visibleSongIds, activeViewKey, collapseKey, isListView, libraryLoaded } from '../stores/songList.js';
+import { nodes, visibleRows, visibleSongIds, activeViewKey, collapseKey, isListView, libraryLoaded, itemToReveal, setItemToReveal } from '../stores/songList.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
 import { startNativeFileDrag } from '../utils/dragOut.js';
@@ -141,12 +141,16 @@ function SongRow(props) {
 
 function GroupRow(props) {
   const collapsed = () => isGroupCollapsed(collapseKey(), props.node.key);
-  // Opening a group also selects its songs, ready to edit together.
-  const toggle = () => {
-    if (collapsed()) selectAll(songs().map((song) => song.item_id));
-    toggleGroupCollapsed(collapseKey(), props.node.key);
-  };
   const songs = createMemo(() => songsInTreeOrder(props.node.children));
+  // Highlighted while every song in it is selected, however that came about.
+  const isSelected = createMemo(() => songs().length > 0 && songs().every((song) => selectedItems().has(song.item_id)));
+
+  // The caret opens and closes the group; anywhere else on the row selects its
+  // songs, ready to edit together.
+  const handleClick = (e) => {
+    if (e.target.closest('.tree-item-icon.chevron')) toggleGroupCollapsed(collapseKey(), props.node.key);
+    else selectAll(songs().map((song) => song.item_id));
+  };
   const holdsPlayingSong = createMemo(() => songs().some((song) => song.item_id === currentPlayingItemId()));
   // Collapsed, the row previews its songs column by column; expanded, the songs show for themselves.
   const summary = createMemo(() => (collapsed() ? summarizeSongs(songs()) : null));
@@ -167,10 +171,11 @@ function GroupRow(props) {
     <li class="tree-item">
       <div
         class="tree-item-content group-row qa-group-row"
+        classList={{ selected: isSelected() }}
         data-group-key={props.node.key}
         data-is-group="true"
         style={{ 'grid-template-columns': collapsed() ? gridTemplateColumns() : '1fr', height: `${ROW_HEIGHT}px` }}
-        onClick={toggle}
+        onClick={handleClick}
         onDblClick={(e) => {
           // Double-clicking the chevron is two toggles, not a play.
           if (!e.target.closest('.tree-item-icon.chevron')) props.onPlayGroup(props.node.key);
@@ -266,6 +271,13 @@ export function SongListView(props) {
 
   props.ref({ scrollItemIntoView });
   onCleanup(() => props.ref(null));
+
+  createEffect(() => {
+    const itemId = itemToReveal();
+    if (itemId === null || !visibleSongIds().includes(itemId)) return;
+    setItemToReveal(null);
+    scrollItemIntoView(itemId);
+  });
 
   // ---- Drag autoscroll ----
   //

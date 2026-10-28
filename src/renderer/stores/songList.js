@@ -1,12 +1,13 @@
 import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { getAllListItems } from '../utils/api.js';
-import { currentListId } from './navigation.js';
+import { currentListId, selectItem, MAIN_LIBRARY_ID } from './navigation.js';
+import { openList } from './viewHistory.js';
 import { libraryVersion } from './tags.js';
 import { isSearching, searchResults, searchRootListId } from './search.js';
 import { isShowingSimilar, similarResults } from './similar.js';
 import { isShowingCluster, clusterSongs } from './clusters.js';
-import { viewSettings, isGroupCollapsed } from './listView.js';
+import { viewSettings, isGroupCollapsed, toggleGroupCollapsed } from './listView.js';
 import { songRowsUnder } from '../utils/listTree.js';
 import { arrangeRows, songsInTreeOrder, findGroup } from '../utils/arrangeRows.js';
 
@@ -81,10 +82,50 @@ const store = createRoot(() => {
   const visibleSongIds = createMemo(() =>
     visibleRows().rows.filter((node) => node.type === 'song').map((node) => node.data.item_id));
 
-  return { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, arranged, displayedSongs, visibleRows, visibleSongIds };
+  // A song to find in the Main Library once it has loaded, then the row the
+  // list should scroll to once that row is on screen.
+  const [songToReveal, setSongToReveal] = createSignal(null);
+  const [itemToReveal, setItemToReveal] = createSignal(null);
+  createEffect(() => {
+    const songId = songToReveal();
+    if (songId === null || !libraryLoaded() || activeViewKey() !== `list:${MAIN_LIBRARY_ID}`) return;
+    setSongToReveal(null);
+    const path = pathToSong(arranged(), songId);
+    if (!path) throw new Error(`Song ${songId} is not in the Main Library`);
+    const row = path.pop();
+    for (const group of path) {
+      if (isGroupCollapsed(collapseKey(), group.key)) toggleGroupCollapsed(collapseKey(), group.key);
+    }
+    selectItem(row.data.item_id);
+    setItemToReveal(row.data.item_id);
+  });
+
+  return {
+    libraryLoaded, activeViewKey, collapseKey, isListView, nodes, arranged, displayedSongs, visibleRows, visibleSongIds,
+    setSongToReveal, itemToReveal, setItemToReveal,
+  };
 });
 
-export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs, visibleRows, visibleSongIds } = store;
+export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs, visibleRows, visibleSongIds, itemToReveal, setItemToReveal } = store;
+
+// The groups a song sits in, outermost first, then the song's own row.
+function pathToSong(nodes, songId) {
+  for (const node of nodes) {
+    if (node.type === 'song') {
+      if (node.data.song_id === songId) return [node];
+    } else {
+      const inside = pathToSong(node.children, songId);
+      if (inside) return [node, ...inside];
+    }
+  }
+  return null;
+}
+
+/** Opens the Main Library on a song's row, selected and scrolled into view. */
+export function revealInLibrary(songId) {
+  openList(MAIN_LIBRARY_ID);
+  store.setSongToReveal(songId);
+}
 
 /** The songs in one group, in the order shown. */
 export function groupSongs(groupKey) {

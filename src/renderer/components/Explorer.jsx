@@ -21,6 +21,7 @@ import { selectedItems, clearSelection, selectItem } from '../stores/navigation.
 import { isSearching, runSearch } from '../stores/search.js';
 import { groupSongs, visibleSongIds } from '../stores/songList.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
+import { escapeHtml } from '../utils/format.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
 import { rateFromRow } from '../stores/ratings.js';
 import { isShowingCluster, groupsOpen } from '../stores/clusters.js';
@@ -308,25 +309,23 @@ export function Explorer(props) {
 
     const inPlaylist = deleteRemovesFromPlaylist();
 
-    // Get item descriptions for confirm dialog
-    let name = null;
-    if (itemIds.length === 1) {
-      const item = await window.electronAPI?.getItem?.(itemIds[0]);
-      if (item) {
-        const raw = item.list_id !== null ? item.list_title : item.song_title;
-        name = raw.length > 50 ? raw.substring(0, 50) + '...' : raw;
-      }
+    // One song is named inline; several are listed under the question.
+    const names = [];
+    for (const id of itemIds) {
+      const item = await getItem(id);
+      names.push(item.list_id !== null ? item.list_title : item.song_title);
     }
-
-    const plural = `${itemIds.length} item${itemIds.length > 1 ? 's' : ''}`;
-    const subject = name ? `"${name}"` : plural;
+    const subject = names.length === 1 ? `"${escapeHtml(names[0])}"` : `${names.length} songs`;
+    const list = names.length === 1
+      ? ''
+      : `<div class="skipped-files-list qa-delete-list"><ul>${names.map((name) => `<li>${escapeHtml(name)}</li>`).join('')}</ul></div>`;
 
     const title = inPlaylist
       ? '<i class="bi bi-dash-circle" style="margin-right: 8px;"></i>Remove from Playlist'
       : '<i class="bi bi-trash" style="margin-right: 8px;"></i>Confirm Delete';
-    const message = inPlaylist
-      ? `Remove ${subject} from "${getListTitle()}"? The songs stay in your library.`
-      : `Move ${subject} to the Trash? This is permanent, and also removes the songs from any playlists they're in.`;
+    const message = (inPlaylist
+      ? `Remove ${subject} from "${escapeHtml(getListTitle())}"? The songs stay in your library.`
+      : `Move ${subject} to the Trash? This is permanent, and also removes the songs from any playlists they're in.`) + list;
 
     showConfirmModal(title, message, async () => {
       if (inPlaylist) {
@@ -342,10 +341,11 @@ export function Explorer(props) {
     });
   };
 
-  // Delete an item, or every song in a group (from context menu)
+  // From the context menu: every song in a group, the whole selection when the
+  // click landed inside it, or just the one row.
   const handleDelete = (item) => {
     if (item.groupKey !== undefined) handleDeleteWithConfirm(groupSongs(item.groupKey).map((song) => song.item_id));
-    else handleDeleteWithConfirm([item.id]);
+    else handleDeleteWithConfirm(selectedItems().has(item.id) ? Array.from(selectedItems()) : [item.id]);
   };
 
   // Handle delete selected (from keyboard)

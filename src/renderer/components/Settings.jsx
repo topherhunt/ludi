@@ -10,14 +10,7 @@ import {
   hideConfirmModal,
 } from '../stores/modals.js';
 import { COLUMNS, columnVisibility, columnWidths, setAllColumnVisibility } from '../stores/columns.js';
-
-/** Modal bodies are set via innerHTML, so anything from a file has to be escaped. */
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+import { escapeHtml } from '../utils/format.js';
 
 /**
  * Settings window component

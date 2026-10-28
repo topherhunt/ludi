@@ -74,6 +74,26 @@ test.describe('Delete', () => {
     await expect.poll(() => absPaths.filter((p) => fs.existsSync(p))).toEqual([]);
   });
 
+  test('Delete from the context menu of a selected song deletes the whole selection, listing every song', async ({ window }) => {
+    const names = ['one', 'two', 'three'].map((n) => `multi-${n}-${STAMP}`);
+    const files = names.map((name) => path.join(os.tmpdir(), `${name}.m4a`));
+    files.forEach((p) => fs.copyFileSync(path.join(testAudioDir, 'test-tone.m4a'), p));
+    await window.evaluate((filePaths) => window.electronAPI.importFiles({ filePaths, parentListId: 0, position: 0 }), files);
+    files.forEach((p) => fs.rmSync(p, { force: true }));
+
+    await window.locator('.playlist-item').first().click();
+    const rows = names.map((name) => window.locator('.qa-song-row').filter({ hasText: name }));
+    await rows[0].click();
+    await rows[1].click({ modifiers: ['Meta'] });
+    await rows[2].click({ modifiers: ['Meta'] });
+
+    await rows[1].click({ button: 'right' });
+    await window.locator('.context-menu-item').filter({ hasText: 'Delete' }).click();
+    await expect(window.locator('.qa-delete-list li')).toHaveText(names);
+    await window.click('#modalYesBtn');
+    for (const row of rows) await expect(row).toHaveCount(0, { timeout: 2000 });
+  });
+
   // A file deleted or renamed behind the app's back used to be undeletable: the
   // failed load left the watchdog running, so every few seconds the recovery
   // retried the dead track and threw another "File Not Found" alert on screen --

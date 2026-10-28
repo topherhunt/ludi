@@ -30,6 +30,7 @@ const nowPlaying = (window) => window.locator('.player-info .song-title');
 const songRows = (window) => window.locator('.qa-song-row');
 const songRow = (window, name) => songRows(window).filter({ hasText: name });
 const groupRow = (window, title) => window.locator('.qa-group-row').filter({ hasText: title });
+const caret = (window, title) => groupRow(window, title).locator('.tree-item-icon.chevron');
 // Top-level rows only: groups and the songs that stand alone.
 const topRows = (window) => window.locator('#explorerTree > li > .tree-item-content');
 
@@ -148,9 +149,9 @@ test.describe('Song list grouping and sorting', () => {
     await expect(groupRow(window, ALPHA).locator('.tree-item-count')).toHaveText('2 songs');
     await expect(songRow(window, S1)).toHaveCount(0);
 
-    await groupRow(window, ALPHA).click();
+    await caret(window, ALPHA).click();
     expect(await rowTitles(songRows(window))).toEqual([S1, S2, S4]);
-    await groupRow(window, ALPHA).click();
+    await caret(window, ALPHA).click();
     await expect(songRow(window, S1)).toHaveCount(0);
 
     // Expand All opens every group.
@@ -158,21 +159,23 @@ test.describe('Song list grouping and sorting', () => {
     await expect(songRows(window)).toHaveCount(5);
   });
 
-  test('opening a group selects every song in it, ready to edit together', async ({ window }) => {
+  test('clicking a group selects its songs without opening it; its caret opens it and leaves the selection', async ({ window }) => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');
     await window.locator('.qa-collapse-all').click();
     await songRow(window, S4).click();
 
-    // On a preview cell, which opening the group removes.
     await groupRow(window, ALPHA).locator('.col-album').click();
-    await expect(songRows(window).and(window.locator('.selected'))).toHaveCount(2);
-    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S1, S2]);
+    await expect(groupRow(window, ALPHA)).toHaveClass(/selected/);
+    await expect(songRow(window, S1)).toHaveCount(0);
+    await expect(songRow(window, S4)).not.toHaveClass(/selected/);
     await expect(window.locator('.qa-song-edit-panel')).toBeVisible();
 
-    // The caret opens it the same way.
-    await groupRow(window, BETA).locator('.tree-item-icon.chevron').click();
-    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S3, S5]);
+    await caret(window, ALPHA).click();
+    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S1, S2]);
+    await caret(window, BETA).click();
+    await expect(groupRow(window, BETA)).not.toHaveClass(/selected/);
+    expect(await rowTitles(songRows(window).and(window.locator('.selected')))).toEqual([S1, S2]);
   });
 
   test('a collapsed group previews its songs in each column, lined up under the headings', async ({ window }) => {
@@ -203,7 +206,7 @@ test.describe('Song list grouping and sorting', () => {
     expect(await left(cell('genre'))).toBe(await left(songRow(window, S4).locator('.col-genre')));
 
     // Expanded, the songs speak for themselves.
-    await alpha.click();
+    await caret(window, ALPHA).click();
     await expect(cell('track')).toHaveCount(0);
   });
 
@@ -249,8 +252,7 @@ test.describe('Song list grouping and sorting', () => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');
 
-    const caret = groupRow(window, BETA).locator('.tree-item-icon.chevron');
-    await caret.dblclick();
+    await caret(window, BETA).dblclick();
     await expect(window.locator('#playPauseBtn')).not.toHaveClass(/playing/);
 
     await groupRow(window, BETA).dblclick();

@@ -280,6 +280,46 @@ test.describe('Tags', () => {
     expect(names).toEqual([...names].sort(byName));
   });
 
+  test('typing highlights the closest tag, the arrows move the highlight, and Enter applies it', async ({ window }) => {
+    const stamp = String(Date.now());
+    await gotoLibrary(window);
+    await window.locator(SONG_ROW).nth(0).click();
+    const input = window.locator('.qa-tag-input');
+    const active = window.locator('.qa-tag-autocomplete .active');
+    await input.click();
+    for (const name of [`x${stamp}folk`, `x${stamp}funk`, `${stamp}funky`]) {
+      await input.fill(name);
+      await input.press('Enter');
+      await expect(window.locator('.qa-tag-editor-pills .tag-pill', { hasText: name })).toBeVisible();
+    }
+    await window.locator(SONG_ROW).nth(1).click();
+    await input.click();
+    // A name starting with the text ranks above one that only contains it.
+    await input.fill(`${stamp}funk`);
+    await expect(window.locator('.qa-tag-option')).toHaveText([`${stamp}funky`, `x${stamp}funk`]);
+    await expect(active).toHaveText(`${stamp}funky`);
+
+    await input.fill(`x${stamp}f`);
+    const second = await window.locator('.qa-tag-option').nth(1).textContent();
+    await input.press('ArrowDown');
+    await expect(active).toHaveText(second);
+    await input.press('Enter');
+    await expect(window.locator(`${SONG_ROW}.selected .col-tags .tag-pill`, { hasText: second })).toBeVisible();
+  });
+
+  test('when only "Create" matches, it is highlighted and Enter creates the tag', async ({ window }) => {
+    const name = `fresh${Date.now()}`;
+    await gotoLibrary(window);
+    await window.locator(SONG_ROW).first().click();
+    const input = window.locator('.qa-tag-input');
+    await input.click();
+    await input.fill(name);
+    await expect(window.locator('.qa-tag-autocomplete .active')).toHaveClass(/qa-tag-create/);
+
+    await input.press('Enter');
+    await expect(window.locator(`${SONG_ROW}.selected .col-tags .tag-pill`, { hasText: name })).toBeVisible();
+  });
+
   test('the Tags column stretches to fill the remaining width (last column)', async ({ window }) => {
     await gotoLibrary(window);
     const row = window.locator(SONG_ROW).first();

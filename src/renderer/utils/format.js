@@ -58,3 +58,11 @@ export function pluralize(count, singular, plural) {
 export function formatItemCount(count) {
   return `${count} ${pluralize(count, 'item')}`;
 }
+
+/** Modal bodies are set via innerHTML, so anything from a file has to be escaped. */
+export function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}

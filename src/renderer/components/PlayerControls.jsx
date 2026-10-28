@@ -8,7 +8,9 @@ import {
   hasNextTrack,
   hasPreviousTrack,
   playlist,
+  currentPlayingSongId,
 } from '../stores/playback.js';
+import { revealInLibrary } from '../stores/songList.js';
 import { formatTime } from '../utils/format.js';
 
 /**
@@ -80,6 +82,11 @@ export function PlayerControls(props) {
     return `${state} (double-click to repeat one song)`;
   });
 
+  // The title and artist jump to the playing song in the Main Library.
+  const revealPlayingSong = () => {
+    if (currentPlayingSongId() !== null) revealInLibrary(currentPlayingSongId());
+  };
+
   // Get play/pause icon
   const playPauseIcon = createMemo(() => {
     if (isLoading?.()) return 'bi bi-arrow-repeat';
@@ -95,11 +102,11 @@ export function PlayerControls(props) {
 
   return (
     <footer class="player-controls">
-      <div class="player-info">
-        <div class="song-title" id="currentSongTitle">
+      <div class="player-info" classList={{ revealable: currentPlayingSongId() !== null }}>
+        <div class="song-title qa-now-playing-title" id="currentSongTitle" onClick={revealPlayingSong}>
           {props.songTitle || 'No song playing'}
         </div>
-        <div class="song-artist" id="currentSongArtist">
+        <div class="song-artist qa-now-playing-artist" id="currentSongArtist" onClick={revealPlayingSong}>
           {props.songArtist || ''}
         </div>
       </div>

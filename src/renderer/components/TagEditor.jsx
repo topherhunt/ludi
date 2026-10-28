@@ -1,4 +1,4 @@
-import { createSignal, createMemo, Show, For } from 'solid-js';
+import { createSignal, createMemo, createEffect, on, Show, For } from 'solid-js';
 import { TagPill } from './TagPill.jsx';
 import {
   tags,
@@ -26,7 +26,8 @@ import { addTagToSongs, removeTagFromSongs } from '../utils/api.js';
  * select it (blue), then Backspace to remove it from all selected songs, or
  * Left/Right to move between pills. Click into the input to type; an autocomplete
  * of tags appears (with an inline "Create" option), and picking one applies it
- * to all selected songs.
+ * to all selected songs. The highlighted option is the one Enter picks; Up/Down
+ * move the highlight.
  */
 export function TagEditor(props) {
   const [text, setText] = createSignal('');
@@ -76,17 +77,24 @@ export function TagEditor(props) {
 
   // Autocomplete suggestions: your tags not already on every selected song,
   // filtered by the typed text, plus any tag whose name was typed exactly.
+  // Closest first: the exact name, then names starting with the text, then
+  // names with a word starting with it, then the rest.
   const suggestions = createMemo(() => {
     const t = text().trim().toLowerCase();
     const excluded = appliedToAllIds();
-    let list = tags().filter(tag => !excluded.has(tag.id));
-    if (t) {
-      list = list.filter(tag => tag.name.toLowerCase().includes(t)
-        && (isYourTag(tag) || tag.name.toLowerCase() === t));
-    } else {
-      list = list.filter(isYourTag);
-    }
-    return list;
+    const list = tags().filter(tag => !excluded.has(tag.id));
+    if (!t) return list.filter(isYourTag);
+    const closeness = (name) => {
+      if (name === t) return 0;
+      if (name.startsWith(t)) return 1;
+      if (name.split(/[\s\-_/]+/).some(word => word.startsWith(t))) return 2;
+      return 3;
+    };
+    return list
+      .filter(tag => tag.name.toLowerCase().includes(t) && (isYourTag(tag) || tag.name.toLowerCase() === t))
+      .map(tag => ({ tag, rank: closeness(tag.name.toLowerCase()) }))
+      .sort((a, b) => a.rank - b.rank)
+      .map(({ tag }) => tag);
   });
 
   const showCreate = createMemo(() => {
@@ -94,9 +102,22 @@ export function TagEditor(props) {
     return t.length > 0 && !tags().some(tag => tag.name.toLowerCase() === t.toLowerCase());
   });
 
-  const dropdownVisible = createMemo(() =>
-    inputFocused() && (suggestions().length > 0 || showCreate())
-  );
+  // What the dropdown lists, top to bottom; null is the "Create" option.
+  const options = createMemo(() => [...suggestions(), ...(showCreate() ? [null] : [])]);
+
+  // The option Enter picks. Typing highlights the closest one; before anything
+  // is typed nothing is, until an arrow key moves onto the list.
+  const [activeIndex, setActiveIndex] = createSignal(-1);
+  createEffect(on(options, () => setActiveIndex(text().trim() ? 0 : -1)));
+
+  const dropdownVisible = createMemo(() => inputFocused() && options().length > 0);
+
+  // Scrolls the dropdown alone; scrollIntoView would also scroll the sidebar.
+  const scrollOptionIntoView = (el) => {
+    const list = el.parentElement;
+    if (el.offsetTop < list.scrollTop) list.scrollTop = el.offsetTop;
+    else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight;
+  };
 
   // Refresh song-list views, and which tags count as yours, after a membership
   // change.
@@ -130,15 +151,7 @@ export function TagEditor(props) {
     refresh();
   };
 
-  // Enter in the input: apply an exact match, else the first suggestion, else create.
-  const applyTyped = async () => {
-    const t = text().trim();
-    if (!t) return;
-    const exact = tags().find(tag => tag.name.toLowerCase() === t.toLowerCase());
-    if (exact) { await applyTag(exact); return; }
-    if (suggestions().length > 0) { await applyTag(suggestions()[0]); return; }
-    await createAndApply(t);
-  };
+  const applyOption = (option) => (option === null ? createAndApply(text().trim()) : applyTag(option));
 
   const selectPill = (tagId) => {
     setSelectedPillId(tagId);
@@ -174,7 +187,13 @@ export function TagEditor(props) {
   const handleInputKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      applyTyped();
+      if (activeIndex() !== -1) applyOption(options()[activeIndex()]);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const last = options().length - 1;
+      if (last === -1) return;
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActiveIndex(Math.min(Math.max(activeIndex() + step, 0), last));
     } else if ((e.key === 'Backspace' || e.key === 'ArrowLeft')
       && text() === '' && e.currentTarget.selectionStart === 0) {
       // Jump back into the pills from the empty caret
@@ -221,25 +240,22 @@ export function TagEditor(props) {
 
       <Show when={dropdownVisible()}>
         <div class="tag-autocomplete qa-tag-autocomplete">
-          <For each={suggestions()}>
-            {(tag) => (
+          <For each={options()}>
+            {(option, index) => (
               <div
-                class="tag-autocomplete-option qa-tag-option"
-                onMouseDown={(e) => { e.preventDefault(); applyTag(tag); }}
+                class="tag-autocomplete-option"
+                classList={{ 'qa-tag-option': option !== null, 'tag-autocomplete-create qa-tag-create': option === null, active: index() === activeIndex() }}
+                ref={(el) => createEffect(() => { if (index() === activeIndex()) scrollOptionIntoView(el); })}
+                onMouseEnter={() => setActiveIndex(index())}
+                onMouseDown={(e) => { e.preventDefault(); applyOption(option); }}
               >
-                <span class="tag-swatch-dot" style={{ 'background-color': tag.color }} />
-                {tag.name}
+                <Show when={option !== null} fallback={<><i class="bi bi-plus-circle" /> Create "{text().trim()}"</>}>
+                  <span class="tag-swatch-dot" style={{ 'background-color': option.color }} />
+                  {option.name}
+                </Show>
               </div>
             )}
           </For>
-          <Show when={showCreate()}>
-            <div
-              class="tag-autocomplete-option tag-autocomplete-create qa-tag-create"
-              onMouseDown={(e) => { e.preventDefault(); createAndApply(text().trim()); }}
-            >
-              <i class="bi bi-plus-circle" /> Create "{text().trim()}"
-            </div>
-          </Show>
         </div>
       </Show>
     </div>
