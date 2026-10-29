@@ -199,6 +199,45 @@ test.describe('Song list grouping and sorting', () => {
     expect(await rowTitles(songRows(window))).toEqual([S4]);
   });
 
+  test('Up, Down and Shift move over group rows the same as song rows', async ({ window }) => {
+    await openPlaylist(window);
+    await chooseGroup(window, 'album');
+    await window.locator('.qa-collapse-all').click();
+    const expectSelected = (...expected) => Promise.all(
+      [groupRow(window, ALPHA), groupRow(window, BETA), songRow(window, S4)].map((row, i) =>
+        (expected[i] ? expect(row).toHaveClass(/selected/) : expect(row).not.toHaveClass(/selected/))));
+
+    await groupRow(window, ALPHA).locator('.col-album').click();
+    await window.keyboard.press('ArrowDown');
+    await expectSelected(false, true, false);
+    await window.keyboard.press('ArrowDown');
+    await expectSelected(false, false, true);
+    await window.keyboard.press('ArrowUp');
+    await expectSelected(false, true, false);
+    await window.keyboard.press('Shift+ArrowUp');
+    await expectSelected(true, true, false);
+    await window.keyboard.press('Shift+ArrowDown');
+    await window.keyboard.press('Shift+ArrowDown');
+    await expectSelected(false, true, true);
+  });
+
+  test('Shift-click and Cmd+A take in closed groups along with songs', async ({ window }) => {
+    await openPlaylist(window);
+    await chooseGroup(window, 'album');
+    await window.locator('.qa-collapse-all').click();
+    const allSelected = () => Promise.all([groupRow(window, ALPHA), groupRow(window, BETA), songRow(window, S4)]
+      .map((row) => expect(row).toHaveClass(/selected/)));
+
+    await songRow(window, S4).click();
+    await groupRow(window, ALPHA).locator('.col-album').click({ modifiers: ['Shift'] });
+    await allSelected();
+
+    await window.keyboard.press('Escape');
+    await expect(window.locator('.tree-item-content.selected')).toHaveCount(0);
+    await window.keyboard.press('Meta+a');
+    await allSelected();
+  });
+
   test('a collapsed group previews its songs in each column, lined up under the headings', async ({ window }) => {
     await openPlaylist(window);
     await chooseGroup(window, 'album');

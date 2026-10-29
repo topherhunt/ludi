@@ -1,5 +1,5 @@
 import { For, Show, Switch, Match, createMemo, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
-import { currentListId, selectedItems, lastSelectedItemId, selectOnly, toggleSelection, toggleItemsSelection, rangeSelect, setLastSelectedItemId, clearSelection, selectAll, MAIN_LIBRARY_ID } from '../stores/navigation.js';
+import { currentListId, selectedItems, clearSelection, MAIN_LIBRARY_ID } from '../stores/navigation.js';
 import { currentPlayingItemId, isPlaying } from '../stores/playback.js';
 import { COLUMNS, columnVisibility, gridTemplateColumns } from '../stores/columns.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
@@ -8,7 +8,7 @@ import { isSearching, searchError } from '../stores/search.js';
 import { isShowingSimilar, similarResults, similarTotal, similarLoading, similarNotice, hasMoreSimilar, showMoreSimilar, PAGE_SIZE } from '../stores/similar.js';
 import { isShowingCluster } from '../stores/clusters.js';
 import { isReorderable, isGroupCollapsed, toggleGroupCollapsed } from '../stores/listView.js';
-import { nodes, visibleRows, visibleSongIds, activeViewKey, collapseKey, isListView, libraryLoaded, itemToReveal, setItemToReveal } from '../stores/songList.js';
+import { nodes, visibleRows, activeViewKey, collapseKey, isListView, libraryLoaded, rowToReveal, setRowToReveal, clickRow } from '../stores/songList.js';
 import { copyIntoPlaylist } from '../stores/playlistCopy.js';
 import { showImportSummary } from '../utils/importSummary.js';
 import { startNativeFileDrag } from '../utils/dragOut.js';
@@ -74,17 +74,7 @@ function SongRow(props) {
   const isSelected = createMemo(() => selectedItems().has(props.song.item_id));
   const isDragged = createMemo(() => dragSource() === 'tree' && draggedItemIds().includes(props.song.item_id));
 
-  // Plain click replaces the selection, CMD toggles, SHIFT extends from the last click.
-  const handleClick = (e) => {
-    if (e.shiftKey && lastSelectedItemId() !== null) {
-      rangeSelect(props.song.item_id, visibleSongIds());
-    } else if (e.metaKey || e.ctrlKey) {
-      toggleSelection(props.song.item_id);
-    } else {
-      selectOnly(props.song.item_id);
-    }
-    setLastSelectedItemId(props.song.item_id);
-  };
+  const handleClick = (e) => clickRow(props.node, { shift: e.shiftKey, cmd: e.metaKey || e.ctrlKey });
 
   const handleContextMenu = (e) => {
     e.preventDefault();
@@ -146,12 +136,10 @@ function GroupRow(props) {
   const isSelected = createMemo(() => songs().length > 0 && songs().every((song) => selectedItems().has(song.item_id)));
 
   // The caret opens and closes the group; anywhere else on the row selects its
-  // songs, ready to edit together, or with CMD adds them to the selection.
+  // songs, ready to edit together, the same as clicking a song row.
   const handleClick = (e) => {
-    const ids = songs().map((song) => song.item_id);
     if (e.target.closest('.tree-item-icon.chevron')) toggleGroupCollapsed(collapseKey(), props.node.key);
-    else if (e.metaKey || e.ctrlKey) toggleItemsSelection(ids);
-    else selectAll(ids);
+    else clickRow(props.node, { shift: e.shiftKey, cmd: e.metaKey || e.ctrlKey });
   };
   const holdsPlayingSong = createMemo(() => songs().some((song) => song.item_id === currentPlayingItemId()));
   // Collapsed, the row previews its songs column by column; expanded, the songs show for themselves.
@@ -261,9 +249,9 @@ export function SongListView(props) {
   const windowRows = createMemo(() => visibleRows().rows.slice(windowRange().start, windowRange().end));
 
   // Nearest-edge, like scrollIntoView({ block: 'nearest' }), for a row that may not be rendered.
-  const scrollItemIntoView = (itemId) => {
-    const index = visibleRows().rows.findIndex((node) => node.type === 'song' && node.data.item_id === itemId);
-    if (index === -1) throw new Error(`Item ${itemId} is not in the list`);
+  const scrollRowIntoView = (key) => {
+    const index = visibleRows().rows.findIndex((node) => node.key === key);
+    if (index === -1) throw new Error(`Row ${key} is not in the list`);
     const rowTop = treeRef.offsetTop + parseFloat(getComputedStyle(treeRef).paddingTop) + index * ROW_HEIGHT;
     const viewTop = containerRef.scrollTop + containerRef.querySelector('.column-headers').offsetHeight;
     const viewBottom = containerRef.scrollTop + containerRef.clientHeight;
@@ -271,14 +259,14 @@ export function SongListView(props) {
     else if (rowTop + ROW_HEIGHT > viewBottom) containerRef.scrollTo({ top: containerRef.scrollTop + (rowTop + ROW_HEIGHT - viewBottom), behavior: 'instant' });
   };
 
-  props.ref({ scrollItemIntoView });
+  props.ref({ scrollRowIntoView });
   onCleanup(() => props.ref(null));
 
   createEffect(() => {
-    const itemId = itemToReveal();
-    if (itemId === null || !visibleSongIds().includes(itemId)) return;
-    setItemToReveal(null);
-    scrollItemIntoView(itemId);
+    const key = rowToReveal();
+    if (key === null || !visibleRows().rows.some((node) => node.key === key)) return;
+    setRowToReveal(null);
+    scrollRowIntoView(key);
   });
 
   // ---- Drag autoscroll ----

@@ -1,12 +1,5 @@
 import { onMount, onCleanup } from 'solid-js';
-import {
-  selectedItems,
-  lastSelectedItemId,
-  clearSelection,
-  selectOnly,
-  selectAll,
-  setLastSelectedItemId,
-} from '../stores/navigation.js';
+import { selectedItems, clearSelection } from '../stores/navigation.js';
 import { isAnyModalOpen, closeAllModals } from '../stores/modals.js';
 import { getItemById } from '../utils/api.js';
 import { rateSelection } from '../stores/ratings.js';
@@ -23,7 +16,8 @@ import { isGroupCollapsed, toggleGroupCollapsed } from '../stores/listView.js';
  * @param {Function} options.onPlaySong - Called when Enter/Space pressed on a song
  * @param {Function} options.onRenameFolder - Called when Enter pressed on a single selected folder
  * @param {Function} options.onSeek - Called when Left/Right pressed with no folder selected
- * @param {Function} options.scrollSelectedIntoView - Called after arrow navigation
+ * @param {Function} options.onSelectAll - Called on Cmd/Ctrl+A
+ * @param {Function} options.onMoveCursor - Called on Up/Down with (step, extendSelection)
  */
 export function useKeyboard(options) {
   const {
@@ -33,7 +27,8 @@ export function useKeyboard(options) {
     onPlaySong,
     onRenameFolder,
     onSeek,
-    scrollSelectedIntoView,
+    onSelectAll,
+    onMoveCursor,
   } = options;
 
   const handleKeyDown = async (e) => {
@@ -78,8 +73,7 @@ export function useKeyboard(options) {
     // Cmd+A to select all
     if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      const visibleItems = getVisibleItemIds?.() || [];
-      selectAll(visibleItems);
+      onSelectAll();
       return;
     }
 
@@ -102,44 +96,10 @@ export function useKeyboard(options) {
       return;
     }
 
-    // Arrow key navigation
+    // Up/Down move over song and group rows alike; with Shift they extend the selection.
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-
-      const visibleItems = getVisibleItemIds?.() || [];
-      if (visibleItems.length === 0) return;
-
-      const selected = selectedItems();
-      if (selected.size === 0) {
-        // Nothing selected, select first or last item
-        const targetId =
-          e.key === 'ArrowDown'
-            ? visibleItems[0]
-            : visibleItems[visibleItems.length - 1];
-        selectOnly(targetId);
-        setLastSelectedItemId(targetId);
-      } else {
-        // Find the first (topmost) selected item
-        let firstSelectedIndex = -1;
-        for (let i = 0; i < visibleItems.length; i++) {
-          if (selected.has(visibleItems[i])) {
-            firstSelectedIndex = i;
-            break;
-          }
-        }
-
-        if (firstSelectedIndex !== -1) {
-          const newIndex =
-            e.key === 'ArrowDown'
-              ? Math.min(firstSelectedIndex + 1, visibleItems.length - 1)
-              : Math.max(firstSelectedIndex - 1, 0);
-
-          selectOnly(visibleItems[newIndex]);
-          setLastSelectedItemId(visibleItems[newIndex]);
-        }
-      }
-
-      scrollSelectedIntoView?.();
+      onMoveCursor(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
       return;
     }
 

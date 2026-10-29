@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createRoot, createEffect, on } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { getAllListItems } from '../utils/api.js';
-import { currentListId, selectItem, selectedItems, MAIN_LIBRARY_ID } from './navigation.js';
+import { currentListId, selectItem, selectedItems, selectAll, toggleItemsSelection, MAIN_LIBRARY_ID } from './navigation.js';
 import { openList } from './viewHistory.js';
 import { libraryVersion } from './tags.js';
 import { isSearching, searchResults, searchRootListId } from './search.js';
@@ -82,10 +82,15 @@ const store = createRoot(() => {
   const visibleSongIds = createMemo(() =>
     visibleRows().rows.filter((node) => node.type === 'song').map((node) => node.data.item_id));
 
+  // The row the arrow keys move from, and the row a SHIFT range stretches from.
+  // Row keys, so either can be a song or a group.
+  const [cursorRowKey, setCursorRowKey] = createSignal(null);
+  const [anchorRowKey, setAnchorRowKey] = createSignal(null);
+
   // A song to find in the Main Library once it has loaded, then the row the
   // list should scroll to once that row is on screen.
   const [songToReveal, setSongToReveal] = createSignal(null);
-  const [itemToReveal, setItemToReveal] = createSignal(null);
+  const [rowToReveal, setRowToReveal] = createSignal(null);
   createEffect(() => {
     const songId = songToReveal();
     if (songId === null || !libraryLoaded() || activeViewKey() !== `list:${MAIN_LIBRARY_ID}`) return;
@@ -97,16 +102,84 @@ const store = createRoot(() => {
       if (isGroupCollapsed(collapseKey(), group.key)) toggleGroupCollapsed(collapseKey(), group.key);
     }
     selectItem(row.data.item_id);
-    setItemToReveal(row.data.item_id);
+    setCursorRowKey(row.key);
+    setAnchorRowKey(row.key);
+    setRowToReveal(row.key);
   });
 
   return {
     libraryLoaded, activeViewKey, collapseKey, isListView, nodes, arranged, displayedSongs, visibleRows, visibleSongIds,
-    setSongToReveal, itemToReveal, setItemToReveal,
+    cursorRowKey, setCursorRowKey, anchorRowKey, setAnchorRowKey, setSongToReveal, rowToReveal, setRowToReveal,
   };
 });
 
-export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs, visibleRows, visibleSongIds, itemToReveal, setItemToReveal } = store;
+export const { libraryLoaded, activeViewKey, collapseKey, isListView, nodes, displayedSongs, visibleRows, visibleSongIds, cursorRowKey, rowToReveal, setRowToReveal } = store;
+
+const rowSongIds = (node) =>
+  (node.type === 'group' ? songsInTreeOrder(node.children).map((song) => song.item_id) : [node.data.item_id]);
+
+// A group row counts as selected when every song in it is, as its highlight shows.
+const isRowSelected = (node, selected) => rowSongIds(node).every((id) => selected.has(id));
+
+const rowIndex = (rows, key) => rows.findIndex((node) => node.key === key);
+
+function selectRowRange(rows, from, to) {
+  const [start, end] = from < to ? [from, to] : [to, from];
+  selectAll(rows.slice(start, end + 1).flatMap(rowSongIds));
+}
+
+/**
+ * A click on a song or group row: selects its songs, with CMD adds or removes
+ * them, with SHIFT selects every row from the last plain or CMD click to it.
+ */
+export function clickRow(node, { shift, cmd }) {
+  const rows = store.visibleRows().rows;
+  const anchor = rowIndex(rows, store.anchorRowKey());
+  if (shift && anchor !== -1) {
+    selectRowRange(rows, anchor, rowIndex(rows, node.key));
+  } else {
+    if (cmd) toggleItemsSelection(rowSongIds(node));
+    else selectAll(rowSongIds(node));
+    store.setAnchorRowKey(node.key);
+  }
+  store.setCursorRowKey(node.key);
+}
+
+/**
+ * Up/Down: moves to the next row up or down (song or group) and selects it, or
+ * with `extend` (SHIFT) stretches the range to it. Returns the row's key, or null
+ * for an empty list.
+ */
+export function moveRowCursor(step, extend) {
+  const rows = store.visibleRows().rows;
+  if (rows.length === 0) return null;
+  const selected = selectedItems();
+  // Selection changed some other way since: carry on from its topmost row.
+  let from = rowIndex(rows, store.cursorRowKey());
+  if (from === -1 || !isRowSelected(rows[from], selected)) from = rows.findIndex((node) => isRowSelected(node, selected));
+
+  const to = from === -1 ? (step > 0 ? 0 : rows.length - 1) : Math.min(Math.max(from + step, 0), rows.length - 1);
+  if (extend && from !== -1) {
+    const anchor = rowIndex(rows, store.anchorRowKey());
+    const start = anchor === -1 ? from : anchor;
+    selectRowRange(rows, start, to);
+    store.setAnchorRowKey(rows[start].key);
+  } else {
+    selectAll(rowSongIds(rows[to]));
+    store.setAnchorRowKey(rows[to].key);
+  }
+  store.setCursorRowKey(rows[to].key);
+  return rows[to].key;
+}
+
+/** CMD+A: every song in the list, in closed groups too. */
+export function selectAllRows() {
+  const rows = store.visibleRows().rows;
+  if (rows.length === 0) return;
+  selectAll(store.displayedSongs().map((song) => song.item_id));
+  store.setAnchorRowKey(rows[0].key);
+  store.setCursorRowKey(rows[rows.length - 1].key);
+}
 
 // The groups a song sits in, outermost first, then the song's own row.
 function pathToSong(nodes, songId) {

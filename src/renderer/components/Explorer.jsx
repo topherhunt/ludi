@@ -19,7 +19,7 @@ import {
 } from '../utils/api.js';
 import { selectedItems, clearSelection, selectItem } from '../stores/navigation.js';
 import { isSearching, runSearch } from '../stores/search.js';
-import { groupSongs, visibleSongIds } from '../stores/songList.js';
+import { groupSongs, visibleSongIds, selectAllRows, moveRowCursor } from '../stores/songList.js';
 import { bumpLibraryVersion } from '../stores/tags.js';
 import { escapeHtml } from '../utils/format.js';
 import { isShowingSimilar, showSimilarTo } from '../stores/similar.js';
@@ -360,10 +360,14 @@ export function Explorer(props) {
   // The song list's songs in on-screen order, rendered or scrolled out of view.
   const getVisibleItemIds = () => (songList ? visibleSongIds() : []);
 
-  const scrollSelectedIntoView = () => {
-    const selected = selectedItems();
-    const topmost = getVisibleItemIds().find((id) => selected.has(id));
-    if (topmost !== undefined) songList.scrollItemIntoView(topmost);
+  const handleSelectAll = () => {
+    if (songList) selectAllRows();
+  };
+
+  const handleMoveCursor = (step, extend) => {
+    if (!songList) return;
+    const key = moveRowCursor(step, extend);
+    if (key !== null) songList.scrollRowIntoView(key);
   };
 
   // Initialize keyboard navigation
@@ -374,7 +378,8 @@ export function Explorer(props) {
     onPlaySong: props.onPlaySong,
     onRenameFolder: handleRename,
     onSeek: props.onSeek,
-    scrollSelectedIntoView,
+    onSelectAll: handleSelectAll,
+    onMoveCursor: handleMoveCursor,
   });
 
   return (
